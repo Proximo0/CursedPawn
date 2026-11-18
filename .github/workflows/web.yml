@@ -24,6 +24,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write  # draft releases (the 2D web engine lives on one) are only visible to a token with write access
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-godot
