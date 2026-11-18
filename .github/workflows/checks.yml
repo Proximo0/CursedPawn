@@ -28,8 +28,6 @@ jobs:
           - { name: unit, cmd: "tools/run_tests.sh" }
           - { name: lint, cmd: "tools/lint.sh" }
           - { name: sims, cmd: "tools/run_sims.sh" }
-          # The sellable zip: package, scaffold a project from it, run that project's check_all.
-          - { name: package, cmd: "tools/package_kit.sh --smoke ci" }
           # Play-bot / sweep fan-out: once tests/bot/bot.tscn exists, uncomment one row per shard and keep
           # --nshards equal to the number of rows. Each shard gets its own runner, so scale it as high as you like.
           # - { name: bot-0, cmd: "timeout 300 godot --headless --fixed-fps 60 --path . res://tests/bot/bot.tscn -- --shard=0 --nshards=3 | tee out.log; grep -q '^BOT score=' out.log && ! grep -q '^BOT .* FAIL ' out.log" }

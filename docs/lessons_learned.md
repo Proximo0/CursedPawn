@@ -49,6 +49,7 @@ have them) and the rule that prevents it. At the end of the project, copy the ge
 | The Windows core gate printed PASS on a build that did not compile (exit code 1 accepted, stale test binary found) | A build gate accepts exit 0 only and deletes or timestamps the test binary; prove a gate fix by injecting a compile error and seeing FAIL. |
 | A worker's new test, written to match its own hypothesis, still passed with the fix switched off | Every new test is shown red without the fix, then green with it; the lead reruns the red build, not just the green one. |
 | A chat-driven watcher on the owner's PC died between turns, so stalled lanes went unnoticed | Liveness is checked from outside: the cloud lead checks hourly that the newest PC push is under 45 min old, and restarts the lanes if not. |
+| A freshly scaffolded game's CI failed on day one: the `package` job calls `tools/package_kit.sh`, which `new_project.sh` leaves out | Delete the `package` matrix row from a scaffolded project's `checks.yml` (kit fix: have `new_project.sh` strip it). Confirm the first CI run is green, not just `check_all.sh`. |
 | A blacked-out-planet bug took hours of guessing until env-var debug traces (why a body is resident, probes of big bodies) named the missed call in minutes | Build cheap env-var-gated traces for each subsystem's "why" (why resident, why culled, why rejected) before the second guess. |
 ## Dashboards
 
