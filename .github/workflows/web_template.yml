@@ -5,6 +5,9 @@ name: web-template-2d
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   GODOT_TAG: 4.7.2-stable
   EM_VERSION: 4.0.11  # what Godot 4.7.2's own web_builds.yml uses
@@ -41,3 +44,12 @@ jobs:
         with:
           name: web_nothreads_release_2d
           path: web_nothreads_release_2d.zip
+      # Also attach it to a DRAFT release (not public; Curtis approved 18 Nov) so tools can fetch it.
+      - name: Attach to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view web-template-2d -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create web-template-2d -R "$GITHUB_REPOSITORY" --draft --title "2D web template (internal)" \
+              --notes "Built by the web-template-2d workflow. Draft, not public."
+          gh release upload web-template-2d web_nothreads_release_2d.zip -R "$GITHUB_REPOSITORY" --clobber

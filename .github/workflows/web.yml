@@ -26,11 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-godot
-      - uses: actions/cache@v4
-        with:
-          path: ~/.local/share/godot/export_templates
-          key: godot-templates-web-${{ env.GODOT_VERSION }}
       - name: Export
+        env:
+          GH_TOKEN: ${{ github.token }}  # tools/fetch_web_template.sh reads the 2D engine from the draft release
         run: tools/export_web.sh
       - uses: actions/upload-pages-artifact@v3
         with:

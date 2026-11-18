@@ -14,9 +14,10 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
 - `tools/lint.sh`: parse and static checks for every script. Ends with `LINT problems=<n>`.
 - `tools/run_sims.sh`: regression sims (`tests/sim/sim_*.gd`, listed in `tests/sim/sim_suite.gd`).
 - `tools/check_all.sh`: everything at once (unit, sims, lint, plus the bot and lab if their scenes exist).
-- `tools/export_web.sh`: web build in `build/web/` plus its size check. `tools/export_windows.sh`: Windows build zip in
-  `build/`. `tools/export_android.sh`: debug APK in `build/`. Templates come from `tools/fetch_templates.py`, which
-  range-reads only the ones needed (web 9 MB) out of the 1.28 GB template file.
+- `tools/export_web.sh`: web build in `build/web/` plus its size check. Release uses the 2D-only engine, fetched on
+  first use by `tools/fetch_web_template.sh` (7.3 MB download vs 9.9 MB); `--debug` uses the stock debug template.
+- `tools/export_windows.sh`: Windows build zip in `build/`. `tools/export_android.sh`: debug APK in `build/`. Stock
+  templates come from `tools/fetch_templates.py`, which range-reads only the ones needed out of the 1.28 GB file.
 - `tools/import.sh`: the shared import step; skipped when no file changed (`FORCE_IMPORT=1` to force). Every tool calls it.
 - CI: `checks` (unit, lint, sims, lab) and `web` (playable build; main deploys to GitHub Pages). Doc-only pushes skip both.
 - Run the game: `godot --path .` (add `-- --dev` for dev entries, `-- --stamp` to show the frame stamp). In the debug

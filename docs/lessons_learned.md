@@ -63,6 +63,7 @@ have them) and the rule that prevents it. At the end of the project, copy the ge
 
 | What happened | Rule |
 | --- | --- |
+| The 2D-only web engine (built with `deprecated=no`) failed in the browser on `Image.create()` while desktop and tests passed | Use `Image.create_empty`; lint rule `no-deprecated` catches it; after a template change, load the web build in headless Chromium before shipping. |
 | A GPU glitch was blamed on a guess | Sample screenshot pixels and reproduce first. If it can't be reproduced, ship toggles. |
 | A `-s` render script couldn't see autoloads | `load()` game classes inside a deferred call. |
 | Shader compile failed: `MODELVIEW_MATRIX` used in a fragment shader; a disc rendered culled | `MODELVIEW_MATRIX` is vertex-only (use `VIEW_MATRIX * MODEL_MATRIX` in fragment); Godot front faces wind clockwise. |

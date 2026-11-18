@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Export the "Web" preset (Compatibility, single-threaded) to build/web/ and check its download size.
-# Fetches only web_nothreads_release.zip (9 MB) on first use via tools/fetch_templates.py.
+# Release uses the Web preset's 2D-only engine (tools/fetch_web_template.sh); --debug the stock debug template
+# (tools/fetch_templates.py). Both are fetched on first use.
 # Usage: tools/export_web.sh [--debug]. Quiet: prints errors and the WEB size line. Exit 1 on failure.
 set -euo pipefail
 
@@ -9,8 +10,8 @@ GODOT="${GODOT:-godot}"
 GODOT_VERSION="4.7.2"
 TEMPLATE_DIR="${HOME}/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
 OUT="build/web/index.html"
-MODE="--export-release"; TEMPLATE="web_nothreads_release.zip"
-if [[ "${1:-}" == "--debug" ]]; then MODE="--export-debug"; TEMPLATE="web_nothreads_debug.zip"; fi
+MODE="--export-release"
+if [[ "${1:-}" == "--debug" ]]; then MODE="--export-debug"; fi
 
 fail() {
 	echo "export_web: $1" >&2
@@ -18,8 +19,12 @@ fail() {
 }
 
 cd "${ROOT}"
-if [[ ! -f "${TEMPLATE_DIR}/${TEMPLATE}" ]]; then
-	python3 -I tools/fetch_templates.py "${GODOT_VERSION}" "${TEMPLATE_DIR}" "${TEMPLATE}" >/dev/null \
+if [[ "${MODE}" == "--export-release" ]]; then
+	# The Web preset's custom release template: the 2D-only engine from the web-template-2d draft release.
+	[[ -f build/templates/web_nothreads_release_2d.zip ]] || tools/fetch_web_template.sh >/dev/null \
+		|| fail "2D web template fetch failed (needs gh with access to the repo)"
+elif [[ ! -f "${TEMPLATE_DIR}/web_nothreads_debug.zip" ]]; then
+	python3 -I tools/fetch_templates.py "${GODOT_VERSION}" "${TEMPLATE_DIR}" web_nothreads_debug.zip >/dev/null \
 		|| fail "template download failed"
 fi
 tools/import.sh || fail "import failed"
