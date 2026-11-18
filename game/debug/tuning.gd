@@ -11,11 +11,11 @@ signal changed(field: String, value: float)
 ## [field, default, min, max, step, group, doc]. The order here is the order a tuning panel shows.
 const FIELDS: Array = [
 	["nights", 5.0, 1.0, 10.0, 1.0, "Run", "Nights in one run; survive them all to win."],
-	["start_cash", 150.0, 0.0, 1000.0, 5.0, "Run", "Cash at the start of a run."],
+	["start_cash", 190.0, 0.0, 1000.0, 5.0, "Run", "Cash at the start of a run."],
 	["rent_base", 40.0, 0.0, 500.0, 5.0, "Run", "Rent due at the end of night 1."],
-	["rent_growth", 1.4, 1.0, 3.0, 0.05, "Run", "Rent multiplier per night (night n pays base * growth^(n-1))."],
-	["day_minutes", 240.0, 60.0, 720.0, 10.0, "Clock", "Shop minutes per day on the day clock."],
-	["customer_minutes", 30.0, 5.0, 120.0, 5.0, "Clock", "Day-clock minutes each customer takes before any tool or haggle."],
+	["rent_growth", 1.45, 1.0, 3.0, 0.05, "Run", "Rent multiplier per night (night n pays base * growth^(n-1))."],
+	["day_minutes", 280.0, 60.0, 720.0, 10.0, "Clock", "Shop minutes per day on the day clock."],
+	["customer_minutes", 25.0, 5.0, 120.0, 5.0, "Clock", "Day-clock minutes each customer takes before any tool or haggle."],
 	["inspect_minutes", 10.0, 0.0, 60.0, 1.0, "Clock", "Day-clock minutes per tool use (UV lamp, scale, listen, touch)."],
 	["haggle_minutes", 5.0, 0.0, 30.0, 1.0, "Clock", "Day-clock minutes per offer."],
 	["seller_share", 0.5, 0.0, 1.0, 0.05, "Customers", "Chance a customer is selling (when you hold stock); otherwise buying."],
@@ -26,14 +26,16 @@ const FIELDS: Array = [
 	["seller_ask_markup", 1.4, 1.0, 3.0, 0.05, "Customers", "A seller's opening ask over their lowest price."],
 	["buyer_pay_frac", 1.5, 0.5, 3.0, 0.05, "Customers", "What a buyer pays, as a fraction of the item's true value."],
 	["value_noise", 0.5, 0.0, 1.0, 0.05, "Inspect", "Error of the uninspected value estimate (fraction of value)."],
+	["tell_chance", 0.6, 0.0, 1.0, 0.05, "Inspect", "Chance the right tool shows a cursed object's tell; below 1, careful players can miss curses."],
 	["inspect_noise_cut", 0.6, 0.1, 1.0, 0.05, "Inspect", "Each tool used multiplies the estimate error by this."],
-	["cursed_share", 0.3, 0.0, 1.0, 0.05, "Curses", "Chance a seller's object is cursed."],
+	["cursed_share", 0.35, 0.0, 1.0, 0.05, "Curses", "Chance a seller's object is cursed."],
 	["cursed_value_mult", 1.8, 1.0, 5.0, 0.1, "Curses", "True-value multiplier for cursed objects (they pay best)."],
 	["dread_on_buy", 1.5, 0.0, 5.0, 0.1, "Curses", "Dread gained when buying a cursed object, times the curse's dread."],
 	["dread_per_night", 2.0, 0.0, 5.0, 0.1, "Curses", "Dread per held cursed object each night, times the curse's dread."],
-	["wake_threshold", 3.0, 1.0, 20.0, 0.5, "Curses", "Dread at which something wakes."],
+	["wake_threshold", 1.5, 1.0, 20.0, 0.5, "Curses", "Dread at which something wakes."],
 	["wake_dread_keep", 0.5, 0.0, 1.0, 0.05, "Curses", "Fraction of Dread left after a wake."],
-	["wake_close_chance", 0.8, 0.0, 1.0, 0.05, "Curses", "Chance a wake locks the door and ends the day early."],
+	["wake_break_chance", 0.5, 0.0, 1.0, 0.05, "Curses", "Chance a wake breaks one held object."],
+	["wake_close_chance", 0.6, 0.0, 1.0, 0.05, "Curses", "Chance a wake locks the door and ends the day early."],
 	["secs_per_customer", 25.0, 1.0, 120.0, 1.0, "Pacing", "Estimated real seconds a player spends per customer (lab run length)."],
 	["secs_per_inspect", 5.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per tool use."],
 	["secs_per_haggle", 4.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per offer."],
@@ -59,6 +61,7 @@ var seller_ask_markup: float
 var buyer_pay_frac: float
 var value_noise: float
 var inspect_noise_cut: float
+var tell_chance: float
 var cursed_share: float
 var cursed_value_mult: float
 var dread_on_buy: float
@@ -66,6 +69,7 @@ var dread_per_night: float
 var wake_threshold: float
 var wake_dread_keep: float
 var wake_close_chance: float
+var wake_break_chance: float
 var secs_per_customer: float
 var secs_per_inspect: float
 var secs_per_haggle: float

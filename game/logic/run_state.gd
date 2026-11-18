@@ -153,7 +153,7 @@ func _inspect(tool: String, ev: Array[Dictionary]) -> void:
 	play_secs += tuning.secs_per_inspect
 	var tell: String = ""
 	var cid: String = customer["item"]["curse"]
-	if cid != "":
+	if cid != "" and rng.randf() < tuning.tell_chance:
 		tell = str(catalog.curse(cid).get("tells", {}).get(tool, ""))
 	if tell != "":
 		(customer["tells"] as Array).append(tool)
@@ -267,7 +267,7 @@ func _check_wake(ev: Array[Dictionary]) -> void:
 	if dread < tuning.wake_threshold:
 		return
 	var w: Dictionary = {"e": "wake", "night": night, "dread": dread, "broke": "", "closed": false}
-	if not inventory.is_empty():
+	if not inventory.is_empty() and rng.randf() < tuning.wake_break_chance:
 		var i: int = rng.randi_range(0, inventory.size() - 1)
 		w["broke"] = inventory[i]["name"]
 		inventory.remove_at(i)

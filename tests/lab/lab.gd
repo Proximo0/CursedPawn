@@ -40,8 +40,9 @@ func _ready() -> void:
 	_lab_target("greedy_cash_ratio", ratio, 1.5, 1000.0, "x cautious (survivors' final cash)")
 	for style: String in ShopBot.STYLES:
 		var s: Dictionary = stats[style]
-		print("LAB %s_info INFO won=%d/%d cash_mean=%.0f wakes_mean=%.2f lost_by_night=%s" % [
-			style, s["won"], runs, _lab_mean(s["won_cash"]), _lab_mean(s["wakes"]), s["lost_night"]])
+		print("LAB %s_info INFO won=%d/%d cash_mean=%.0f wakes_mean=%.2f wake_by_n3=%.2f lost_by_night=%s" % [
+			style, s["won"], runs, _lab_mean(s["won_cash"]), _lab_mean(s["wakes"]), _lab_rate(s["woke3"], runs),
+			s["lost_night"]])
 	print("LAB done runs=%d warn=%d fail=%d" % [runs, warns, fails])
 	var json_path: String = _lab_arg("json", "")
 	if json_path != "":

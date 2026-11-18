@@ -19,10 +19,10 @@ func rs_to_seller(run: RunState) -> void:
 func test_start_state() -> void:
 	var run := rs_run()
 	assert_eq(run.night, 1)
-	assert_eq(run.cash, 150)
+	assert_eq(run.cash, int(run.tuning.start_cash))
 	assert_eq(run.customer["kind"], RunState.SELLER, "empty shop gets a seller first")
-	assert_eq(run.rent_for(1), 40)
-	assert_eq(run.rent_for(3), 78)
+	assert_eq(run.rent_for(1), int(run.tuning.rent_base))
+	assert_eq(run.rent_for(3), int(round(run.tuning.rent_base * pow(run.tuning.rent_growth, 2))))
 
 
 func test_same_seed_same_run() -> void:
@@ -48,6 +48,7 @@ func test_inspect_costs_time_and_narrows_estimate() -> void:
 func test_cursed_object_shows_its_tell() -> void:
 	var tun := Tuning.new()
 	tun.set_value("cursed_share", 1.0)
+	tun.set_value("tell_chance", 1.0)
 	var run := rs_run(3, tun)
 	var cid: String = run.customer["item"]["curse"]
 	assert_true(cid != "", "cursed")
@@ -60,9 +61,10 @@ func test_cursed_object_shows_its_tell() -> void:
 func test_buy_takes_cash_and_adds_item() -> void:
 	var run := rs_run()
 	var ask: int = int(run.customer["ask"])
+	var cash: int = run.cash
 	var ev: Array[Dictionary] = run.apply({"t": "buy"})
 	assert_eq(ev[0]["e"], "bought")
-	assert_eq(run.cash, 150 - ask)
+	assert_eq(run.cash, cash - ask)
 	assert_eq(run.inventory.size(), 1)
 
 
@@ -182,3 +184,25 @@ func test_imposter_offers_but_never_pays() -> void:
 	var ev: Array[Dictionary] = run.apply({"t": "sell", "uid": item["uid"]})
 	assert_eq(ev[0]["price"], 0)
 	assert_eq(run.cash, cash)
+
+
+func test_tell_can_be_missed() -> void:
+	var tun := Tuning.new()
+	tun.set_value("cursed_share", 1.0)
+	tun.set_value("tell_chance", 0.0)
+	var run := rs_run(3, tun)
+	for tool: String in Catalog.TOOLS:
+		assert_eq(run.apply({"t": "inspect", "tool": tool})[0]["tell"], "", tool)
+
+
+func test_wake_without_break_keeps_stock() -> void:
+	var tun := Tuning.new()
+	tun.set_value("cursed_share", 1.0)
+	tun.set_value("wake_threshold", 1.0)
+	tun.set_value("wake_break_chance", 0.0)
+	tun.set_value("wake_close_chance", 0.0)
+	tun.set_value("start_cash", 1000.0)
+	var run := rs_run(9, tun)
+	run.apply({"t": "buy"})
+	assert_eq(run.wake_nights.size(), 1)
+	assert_eq(run.inventory.size(), 1)
