@@ -3,6 +3,7 @@
 /build/
 /out/
 __pycache__/
+node_modules/
 *.pyc
 
 # Credentials for online services and signing (docs/online.md): never commit them

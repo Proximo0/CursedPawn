@@ -16,6 +16,7 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
 - `tools/check_all.sh`: everything at once (unit, sims, lint, plus the bot and lab if their scenes exist).
 - `tools/export_web.sh`: web build in `build/web/` plus its size check. Release uses the 2D-only engine, fetched on
   first use by `tools/fetch_web_template.sh` (7.3 MB download vs 9.9 MB); `--debug` uses the stock debug template.
+  `node tools/web_smoke.mjs`: boots `build/web` in headless Chromium (no errors, a full screen within 30 s).
 - `tools/export_windows.sh`: Windows build zip in `build/`. `tools/export_android.sh`: debug APK in `build/`. Stock
   templates come from `tools/fetch_templates.py`, which range-reads only the ones needed out of the 1.28 GB file.
 - `tools/import.sh`: the shared import step; skipped when no file changed (`FORCE_IMPORT=1` to force). Every tool calls it.

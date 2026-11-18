@@ -1,5 +1,6 @@
-# Playable web build. Every PR and push exports the Web preset (Compatibility, single-threaded) and keeps it as a
-# `web` artifact; pushes to main also deploy it to GitHub Pages, so the newest main is one tap away on a phone.
+# Playable web build. Every PR and push exports the Web preset (Compatibility, single-threaded), boots it in headless
+# Chrome (tools/web_smoke.mjs: engine starts, no errors, a full screen draws) and keeps it as a `web` artifact;
+# pushes to main also deploy it to GitHub Pages, so the newest main is one tap away on a phone.
 # One-time setup by the repo owner: Settings > Pages > Build and deployment > Source: "GitHub Actions".
 # Until then the deploy job fails and the artifact still works.
 name: web
@@ -30,6 +31,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}  # tools/fetch_web_template.sh reads the 2D engine from the draft release
         run: tools/export_web.sh
+      - name: Boot in headless Chrome
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.49.1 >/dev/null
+          node tools/web_smoke.mjs build/web --chrome
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-smoke
+          path: build/web_smoke.png
+          if-no-files-found: ignore
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build/web
