@@ -104,7 +104,9 @@ func _ready() -> void:
 	_overlay.run = run
 	add_child(_overlay)
 	add_child(FrameStamp.new())
-	add_child(RenderToggles.new())
+	var toggles := RenderToggles.new()
+	toggles.visible = Flags.dev_menu()  # the F-key line is for us; players see it only after pressing F4
+	add_child(toggles)
 	room = ShopRoom2D.new()
 	add_child(room)
 	_relics = RelicShopPanel.new()
