@@ -38,9 +38,10 @@ func _bot_greedy_buy(run: RunState) -> Dictionary:
 	var c: Dictionary = run.customer
 	var mid: int = int(run.estimate()["mid"])
 	var ask: int = int(c["ask"])
-	if ask <= mid and ask <= run.cash:
+	var spendable: int = run.cash - _bot_reserve(run, 0.0)
+	if ask <= mid and ask <= spendable:
 		return {"t": "buy"}
-	var offer: int = mini(run.cash, int(mid * 0.6))
+	var offer: int = mini(spendable, int(mid * 0.6))
 	if int(c["patience"]) > 1 and offer > 0 and offer < ask:
 		return {"t": "offer", "amount": offer}
 	return {"t": "pass"}
@@ -50,18 +51,26 @@ func _bot_cautious_buy(run: RunState) -> Dictionary:
 	var c: Dictionary = run.customer
 	if not (c["tells"] as Array).is_empty():
 		return {"t": "pass"}
-	for tool: String in ["uv", "listen", "touch"]:
+	for tool: String in ["uv", "listen"]:
 		if not (c["tools"] as Array).has(tool) and run.clock >= run.tuning.inspect_minutes:
 			return {"t": "inspect", "tool": tool}
 	var mid: int = int(run.estimate()["mid"])
 	var ask: int = int(c["ask"])
-	var spendable: int = run.cash - int(run.rent_for(run.night) * 0.5)
+	var spendable: int = run.cash - _bot_reserve(run, 1.0)
 	if ask <= int(mid * 0.8) and ask <= spendable:
 		return {"t": "buy"}
 	var offer: int = mini(spendable, int(mid * 0.55))
 	if int(c["patience"]) > 1 and offer > 0 and offer < ask:
 		return {"t": "offer", "amount": offer}
 	return {"t": "pass"}
+
+
+## Cash kept back for tonight's rent: `share` of it all day, and all of it once the day is nearly over.
+func _bot_reserve(run: RunState, share: float) -> int:
+	var rent: int = run.rent_for(run.night)
+	if run.clock < run.tuning.customer_minutes * 3.0:
+		return rent
+	return int(rent * share)
 
 
 ## Plays a whole run. Returns false if it hit RunState.MAX_COMMANDS (stuck).

@@ -19,10 +19,10 @@ func rs_to_seller(run: RunState) -> void:
 func test_start_state() -> void:
 	var run := rs_run()
 	assert_eq(run.night, 1)
-	assert_eq(run.cash, 100)
+	assert_eq(run.cash, 150)
 	assert_eq(run.customer["kind"], RunState.SELLER, "empty shop gets a seller first")
 	assert_eq(run.rent_for(1), 40)
-	assert_eq(run.rent_for(3), 90)
+	assert_eq(run.rent_for(3), 78)
 
 
 func test_same_seed_same_run() -> void:
@@ -40,7 +40,7 @@ func test_inspect_costs_time_and_narrows_estimate() -> void:
 	var spread0: float = float(run.estimate()["spread"])
 	var ev: Array[Dictionary] = run.apply({"t": "inspect", "tool": "uv"})
 	assert_eq(ev[0]["e"], "inspected")
-	assert_near(run.clock, before - 15.0)
+	assert_near(run.clock, before - 10.0)
 	assert_true(float(run.estimate()["spread"]) < spread0, "spread shrinks")
 	assert_eq(run.apply({"t": "inspect", "tool": "uv"})[0]["e"], "invalid", "same tool twice")
 
@@ -62,7 +62,7 @@ func test_buy_takes_cash_and_adds_item() -> void:
 	var ask: int = int(run.customer["ask"])
 	var ev: Array[Dictionary] = run.apply({"t": "buy"})
 	assert_eq(ev[0]["e"], "bought")
-	assert_eq(run.cash, 100 - ask)
+	assert_eq(run.cash, 150 - ask)
 	assert_eq(run.inventory.size(), 1)
 
 

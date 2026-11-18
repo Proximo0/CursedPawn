@@ -3,7 +3,8 @@ extends Node
 ## docs/handoff.md. Prints "LAB <metric> PASS|WARN|FAIL <detail>" and a summary line.
 ## FAIL only for broken invariants (stuck runs, replay or restore divergence, cursed objects without a tell).
 ## Balance targets print WARN when missed: check them against the design before tuning them away.
-## Run: godot --headless --path . res://tests/lab/lab.tscn [-- --runs=300 --json=/tmp/lab.json]
+## Run: godot --headless --path . res://tests/lab/lab.tscn [-- --runs=300 --json=/tmp/lab.json --set=field:value,...]
+## --set overrides Tuning fields for a sweep; --preset=path loads a tuning preset first.
 
 var fails: int = 0
 var warns: int = 0
@@ -12,6 +13,12 @@ var report: Dictionary = {}
 
 func _ready() -> void:
 	var runs: int = int(_lab_arg("runs", "300"))
+	if _lab_arg("preset", "") != "":
+		Tuning.shared().load_json(_lab_arg("preset", ""))
+	for pair: String in _lab_arg("set", "").split(",", false):
+		var kv: PackedStringArray = pair.split(":")
+		if kv.size() != 2 or not Tuning.shared().set_value(kv[0], float(kv[1])):
+			_lab_line("set_%s" % pair, false, true, "unknown tuning field or bad value")
 	var cat := Catalog.load_default()
 	var problems: PackedStringArray = cat.problems()
 	_lab_line("catalog", problems.is_empty(), true, "problems=%d %s" % [problems.size(), "; ".join(problems)])
