@@ -36,6 +36,7 @@ var hover_id: String = ""
 var down_id: String = ""
 var room: ShopRoom2D
 var hud: UiHud
+var sfx: SfxPlayer  ## procedural sound (game/audio)
 
 var _overlay: DebugOverlay
 var _relics: RelicShopPanel
@@ -99,6 +100,9 @@ static func ui_clock_text(minutes_left: float) -> String:
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sfx = SfxPlayer.new()
+	add_child(sfx)
+	sfx.start_ambient()
 	add_child(TuningPanel.new())
 	_overlay = DebugOverlay.new()
 	_overlay.run = run
@@ -229,6 +233,8 @@ func push_card(title: String, sub: String, tone: int) -> void:
 func _on_events(events: Array[Dictionary]) -> void:
 	if room != null:
 		room.apply_events(events)
+	if sfx != null:
+		sfx.on_events(events)
 	for e: Dictionary in events:
 		match str(e["e"]):
 			"customer":
@@ -264,6 +270,8 @@ func _refresh() -> void:
 	var r: RunState = view_run()
 	if room != null:
 		room.set_dread(r.dread)
+	if sfx != null:
+		sfx.set_dread(clampf(r.dread / maxf(r.tuning.wake_threshold, 0.1), 0.0, 1.0))
 	var cap: int = r.max_wager()
 	stake_amount = clampi(stake_amount, 1, maxi(1, cap))
 	if cap < 1 or r.customer.is_empty():
@@ -314,6 +322,8 @@ func shelf_rects() -> Dictionary:
 
 ## One UI widget was activated (clicked or its repeat fired).
 func activate(id: String) -> void:
+	if sfx != null:
+		sfx.ui("click")
 	if end_panel_visible():
 		_activate_end(id)
 		return
@@ -497,9 +507,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var mm := event as InputEventMouseMotion
 	if mm != null:
+		var was: String = hover_id
 		hover_id = hud.widget_at(_view_pos(mm.position)) if hud != null else ""
+		if hover_id != "" and hover_id != was and sfx != null:
+			sfx.ui("hover")
 		return
 	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_M and sfx != null and not end_panel_visible():
+		sfx.set_muted(not sfx.muted)
+		get_viewport().set_input_as_handled()
+		return
 	if key != null and key.pressed:
 		_on_key(key)
 
