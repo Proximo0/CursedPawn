@@ -166,3 +166,19 @@ func test_gift_starts_in_inventory() -> void:
 	run.start(2, Catalog.load_default(), Tuning.new(), gift)
 	assert_eq(run.inventory.size(), 1)
 	assert_near(run.sale_mult(), 1.5)
+
+
+func test_imposter_offers_but_never_pays() -> void:
+	var tun := Tuning.new()
+	tun.set_value("start_cash", 1000.0)
+	tun.set_value("seller_share", 0.0)
+	tun.set_value("buyer_match_chance", 1.0)
+	var run := rs_run(4, tun)
+	run.apply({"t": "buy"})
+	run.customer["imposter"] = true
+	var item: Dictionary = run.sellable()[0]
+	assert_true(run.sale_price(item) > 0, "offer looks real")
+	var cash: int = run.cash
+	var ev: Array[Dictionary] = run.apply({"t": "sell", "uid": item["uid"]})
+	assert_eq(ev[0]["price"], 0)
+	assert_eq(run.cash, cash)

@@ -1,0 +1,400 @@
+class_name ShopDebug
+extends Control
+## Playable debug shop: plain Control UI over RunState. Every action goes through RunRecording.drive.
+## Keys: F1 tuning panel, F2 debug overlay, F5 save the recording to user://last_run.json.
+
+const LOG_LINES: int = 12
+const WAKE_SECS: float = 2.0
+const RECORDING_PATH: String = "user://last_run.json"
+const DREAD_BAR_MAX: float = 8.0
+
+var run: RunState = RunState.new()
+var rec: RunRecording
+var catalog: Catalog
+var seed_now: int = 1
+var log_lines: Array[String] = []
+var tell_texts: Dictionary = {}  ## tool -> tell text for the current seller
+var wake_left: float = 0.0
+
+var _overlay: DebugOverlay
+var _night_label: Label
+var _clock_label: Label
+var _cash_label: Label
+var _rent_label: Label
+var _dread_bar: ProgressBar
+var _dread_label: Label
+var _inventory_label: Label
+var _customer_box: VBoxContainer
+var _log_label: Label
+var _wake_label: Label
+var _end_box: VBoxContainer
+var _end_label: Label
+var _offer_spin: SpinBox
+
+
+## One event Dictionary as a readable log line.
+static func sd_event_text(e: Dictionary) -> String:
+	match str(e.get("e", "")):
+		"night_start":
+			return "Night %d begins. Rent due tonight: %d." % [int(e["night"]), int(e["rent"])]
+		"customer":
+			if str(e.get("kind", "")) == "seller":
+				return "Seller arrives with %s, asking %d." % [str(e["name"]), int(e["ask"])]
+			return "Buyer arrives, wants %s." % str(e.get("category", "?"))
+		"inspected":
+			var tell: String = str(e.get("tell", ""))
+			var est: Dictionary = e.get("estimate", {})
+			var shown: String = tell if tell != "" else "nothing odd"
+			return "%s: %s. Estimate now %s." % [sd_tool_name(str(e["tool"])), shown, sd_estimate_text(est)]
+		"counter":
+			return "You offered %d. Counter: %d (patience %d)." % [int(e["offer"]), int(e["ask"]), int(e["patience"])]
+		"left":
+			return "Your offer of %d insulted them. They left." % int(e["offer"])
+		"bought":
+			return "Bought %s for %d." % [str(e["name"]), int(e["price"])]
+		"sold":
+			var extra: String = " (it was an imposter, no pay)" if bool(e.get("imposter", false)) else ""
+			return "Sold %s for %d.%s" % [str(e["name"]), int(e["price"]), extra]
+		"passed":
+			return "You passed on the %s." % str(e.get("kind", "customer"))
+		"wake":
+			var broke: String = str(e.get("broke", ""))
+			var what: String = "%s shattered" % broke if broke != "" else "nothing left to break"
+			var closed: String = " The door locks, the day is over." if bool(e.get("closed", false)) else ""
+			return "SOMETHING WOKE on night %d (dread %.1f): %s.%s" % [int(e["night"]), float(e["dread"]), what, closed]
+		"night_end":
+			return "Night %d ends. Rent %d, cash %d." % [int(e["night"]), int(e["rent"]), int(e["cash"])]
+		"run_lost":
+			return "RUN LOST on night %d: cash %d, rent %d." % [int(e["night"]), int(e["cash"]), int(e["rent"])]
+		"run_won":
+			return "RUN WON with %d cash." % int(e["cash"])
+		"invalid":
+			return "Can't do that: %s." % str(e.get("why", "?"))
+	return "Unknown event %s" % str(e.get("e", "?"))
+
+
+static func sd_tool_name(tool: String) -> String:
+	match tool:
+		"uv":
+			return "UV lamp"
+		"scale":
+			return "Scale"
+		"listen":
+			return "Listen"
+		"touch":
+			return "Touch"
+	return tool
+
+
+## "mid +- spread%" for an estimate dictionary ({} gives "?").
+static func sd_estimate_text(est: Dictionary) -> String:
+	if est.is_empty():
+		return "?"
+	return "%d +- %d%%" % [int(est["mid"]), int(round(float(est["spread"]) * 100.0))]
+
+
+func _ready() -> void:
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_build_ui()
+	add_child(TuningPanel.new())
+	_overlay = DebugOverlay.new()
+	_overlay.run = run
+	add_child(_overlay)
+	add_child(FrameStamp.new())
+	add_child(RenderToggles.new())
+	catalog = Catalog.load_default()
+	new_run(Flags.seed_value())
+
+
+func _process(delta: float) -> void:
+	if wake_left > 0.0:
+		wake_left -= delta
+		_wake_label.visible = wake_left > 0.0
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_F5:
+		if not Flags.is_scripted_run():
+			rec.save_json(RECORDING_PATH)
+			_log("Recording saved to %s" % RECORDING_PATH)
+			_refresh()
+		get_viewport().set_input_as_handled()
+
+
+func new_run(seed_in: int) -> void:
+	seed_now = seed_in
+	run = RunState.new()
+	_overlay.run = run
+	rec = RunRecording.begin(run, seed_in, catalog, Tuning.shared())
+	log_lines.clear()
+	_end_box.visible = false
+	_wake_label.visible = false
+	wake_left = 0.0
+	_on_events(run.last_events)
+	_refresh()
+
+
+## Sends a command through the recorder and shows what happened.
+func act(cmd: Dictionary) -> void:
+	if run.is_over():
+		return
+	_on_events(rec.drive(run, cmd))
+	_refresh()
+
+
+func _on_events(events: Array[Dictionary]) -> void:
+	for e: Dictionary in events:
+		var en: String = str(e["e"])
+		if en == "customer":
+			tell_texts.clear()
+		elif en == "inspected" and str(e["tell"]) != "":
+			tell_texts[str(e["tool"])] = str(e["tell"])
+		elif en == "wake":
+			wake_left = WAKE_SECS
+			_wake_label.text = "SOMETHING WOKE\n%s" % sd_event_text(e)
+			_wake_label.visible = true
+		_log(sd_event_text(e))
+
+
+func _log(line: String) -> void:
+	log_lines.append(line)
+	while log_lines.size() > LOG_LINES:
+		log_lines.pop_front()
+	_log_label.text = "\n".join(log_lines)
+
+
+func _refresh() -> void:
+	_night_label.text = "Night %d / %d" % [run.night, int(run.tuning.nights)]
+	_clock_label.text = "Clock %d min" % int(run.clock)
+	_cash_label.text = "Cash %d" % run.cash
+	_rent_label.text = "Rent due %d" % run.rent_for(run.night)
+	_dread_bar.value = run.dread
+	_dread_label.text = "Dread %.1f / %.1f" % [run.dread, run.tuning.wake_threshold]
+	_dread_bar.max_value = maxf(DREAD_BAR_MAX, run.tuning.wake_threshold)
+	var lines: PackedStringArray = []
+	for item: Dictionary in run.inventory:
+		lines.append("%s  est %d  tells %d" % [item["name"], int(item["est"]), int(item["tells"])])
+	_inventory_label.text = "\n".join(lines) if not lines.is_empty() else "(empty)"
+	_rebuild_customer()
+	if run.is_over():
+		_end_box.visible = true
+		_end_label.text = "RUN WON, cash %d" % run.cash if run.won else "RUN LOST on night %d" % run.night
+		_end_label.add_theme_color_override("font_color", Color(0.5, 0.9, 0.5) if run.won else Color(1.0, 0.35, 0.35))
+
+
+func _rebuild_customer() -> void:
+	for c: Node in _customer_box.get_children():
+		_customer_box.remove_child(c)
+		c.queue_free()
+	var cust: Dictionary = run.customer
+	if cust.is_empty():
+		_customer_box.add_child(_label_of("No customer."))
+		return
+	if str(cust["kind"]) == RunState.SELLER:
+		_build_seller(cust)
+	else:
+		_build_buyer(cust)
+
+
+func _build_seller(cust: Dictionary) -> void:
+	var tools: Array = cust["tools"]
+	_customer_box.add_child(_label_of("SELLER: %s" % str(cust["item"]["name"]), 20))
+	_customer_box.add_child(_label_of("Ask: %d     Patience: %d" % [int(cust["ask"]), int(cust["patience"])]))
+	_customer_box.add_child(_label_of("Estimate: %s" % sd_estimate_text(run.estimate())))
+	var found: PackedStringArray = []
+	for tool: String in tools:
+		if tell_texts.has(tool):
+			found.append("%s: %s" % [sd_tool_name(tool), tell_texts[tool]])
+	var tells: Label = _label_of("Tells found: %s" % ("\n  ".join(found) if not found.is_empty() else "none yet"), 16, 480.0)
+	_customer_box.add_child(tells)
+	var tool_row := HBoxContainer.new()
+	_customer_box.add_child(tool_row)
+	for tool: String in Catalog.TOOLS:
+		var b := Button.new()
+		b.text = sd_tool_name(tool)
+		b.disabled = tools.has(tool)
+		b.pressed.connect(act.bind({"t": "inspect", "tool": tool}))
+		tool_row.add_child(b)
+	var offer_row := HBoxContainer.new()
+	_customer_box.add_child(offer_row)
+	_offer_spin = SpinBox.new()
+	_offer_spin.min_value = 1
+	_offer_spin.max_value = maxi(1, run.cash)
+	_offer_spin.value = mini(maxi(1, run.cash), int(cust["ask"]) / 2)
+	offer_row.add_child(_offer_spin)
+	var offer := Button.new()
+	offer.text = "Offer"
+	offer.pressed.connect(_on_offer)
+	offer_row.add_child(offer)
+	var buy := Button.new()
+	buy.text = "Buy at %d" % int(cust["ask"])
+	buy.disabled = int(cust["ask"]) > run.cash
+	buy.pressed.connect(act.bind({"t": "buy"}))
+	offer_row.add_child(buy)
+	var pass_btn := Button.new()
+	pass_btn.text = "Pass"
+	pass_btn.pressed.connect(act.bind({"t": "pass"}))
+	offer_row.add_child(pass_btn)
+
+
+func _build_buyer(cust: Dictionary) -> void:
+	_customer_box.add_child(_label_of("BUYER wants: %s" % str(cust["category"]), 20))
+	var items: Array[Dictionary] = run.sellable()
+	if items.is_empty():
+		_customer_box.add_child(_label_of("You hold nothing they want."))
+	for item: Dictionary in items:
+		var row := HBoxContainer.new()
+		_customer_box.add_child(row)
+		row.add_child(_label_of("%s (est %d)" % [item["name"], int(item["est"])]))
+		var b := Button.new()
+		b.text = "Sell for %d" % run.sale_price(item)
+		b.pressed.connect(act.bind({"t": "sell", "uid": int(item["uid"])}))
+		row.add_child(b)
+	var decline := Button.new()
+	decline.text = "Decline"
+	decline.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	decline.pressed.connect(act.bind({"t": "pass"}))
+	_customer_box.add_child(decline)
+
+
+func _on_offer() -> void:
+	act({"t": "offer", "amount": int(_offer_spin.value)})
+
+
+func _label_of(text: String, size: int = 16, wrap_width: float = 0.0) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", size)
+	if wrap_width > 0.0:
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size = Vector2(wrap_width, 0)
+	return l
+
+
+func _make_theme() -> Theme:
+	var th := Theme.new()
+	th.default_font_size = 18
+	var states: Dictionary = {
+		"normal": Color(0.28, 0.26, 0.36), "hover": Color(0.38, 0.35, 0.5),
+		"pressed": Color(0.5, 0.3, 0.3), "disabled": Color(0.18, 0.17, 0.2),
+	}
+	for st: String in states:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = states[st]
+		sb.set_corner_radius_all(4)
+		sb.content_margin_left = 12.0
+		sb.content_margin_right = 12.0
+		sb.content_margin_top = 6.0
+		sb.content_margin_bottom = 6.0
+		th.set_stylebox(st, "Button", sb)
+	th.set_color("font_disabled_color", "Button", Color(0.5, 0.5, 0.55))
+	var panel := StyleBoxFlat.new()
+	panel.bg_color = Color(0.18, 0.16, 0.22)
+	panel.set_content_margin_all(10.0)
+	th.set_stylebox("panel", "PanelContainer", panel)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(0.8, 0.2, 0.25)
+	var back := StyleBoxFlat.new()
+	back.bg_color = Color(0.3, 0.3, 0.34)
+	th.set_stylebox("fill", "ProgressBar", fill)
+	th.set_stylebox("background", "ProgressBar", back)
+	return th
+
+
+func _build_ui() -> void:
+	theme = _make_theme()
+	var bg := ColorRect.new()
+	bg.color = Color(0.12, 0.1, 0.14)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(bg)
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side: String in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 10)
+	add_child(margin)
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 12)
+	margin.add_child(cols)
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cols.add_child(left)
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 24)
+	left.add_child(bar)
+	_night_label = _label_of("", 20)
+	_clock_label = _label_of("", 20)
+	_cash_label = _label_of("", 20)
+	_rent_label = _label_of("", 20)
+	for l: Label in [_night_label, _clock_label, _cash_label, _rent_label]:
+		bar.add_child(l)
+	var dread_row := HBoxContainer.new()
+	left.add_child(dread_row)
+	_dread_label = _label_of("")
+	_dread_label.custom_minimum_size = Vector2(170, 0)
+	dread_row.add_child(_dread_label)
+	_dread_bar = ProgressBar.new()
+	_dread_bar.show_percentage = false
+	_dread_bar.min_value = 0.0
+	_dread_bar.max_value = DREAD_BAR_MAX
+	_dread_bar.custom_minimum_size = Vector2(300, 22)
+	_dread_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	dread_row.add_child(_dread_bar)
+	var mid := HBoxContainer.new()
+	mid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mid.add_theme_constant_override("separation", 12)
+	left.add_child(mid)
+	var inv_panel := PanelContainer.new()
+	inv_panel.custom_minimum_size = Vector2(300, 0)
+	mid.add_child(inv_panel)
+	var inv_box := VBoxContainer.new()
+	inv_panel.add_child(inv_box)
+	inv_box.add_child(_label_of("Inventory"))
+	_inventory_label = _label_of("")
+	inv_box.add_child(_inventory_label)
+	var cust_panel := PanelContainer.new()
+	cust_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_child(cust_panel)
+	_customer_box = VBoxContainer.new()
+	cust_panel.add_child(_customer_box)
+	var right := VBoxContainer.new()
+	right.custom_minimum_size = Vector2(380, 0)
+	cols.add_child(right)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 190)
+	right.add_child(spacer)
+	var log_panel := PanelContainer.new()
+	log_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.add_child(log_panel)
+	var log_box := VBoxContainer.new()
+	log_panel.add_child(log_box)
+	log_box.add_child(_label_of("Events"))
+	_log_label = _label_of("", 15, 360.0)
+	log_box.add_child(_log_label)
+	_wake_label = _label_of("", 44)
+	_wake_label.add_theme_color_override("font_color", Color(1.0, 0.15, 0.15))
+	_wake_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_wake_label.add_theme_constant_override("outline_size", 8)
+	_wake_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_wake_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_wake_label.set_anchors_preset(Control.PRESET_CENTER)
+	_wake_label.custom_minimum_size = Vector2(700, 200)
+	_wake_label.position = Vector2(-350, -100)
+	_wake_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wake_label.visible = false
+	add_child(_wake_label)
+	_end_box = VBoxContainer.new()
+	_end_box.set_anchors_preset(Control.PRESET_CENTER)
+	_end_box.position = Vector2(-120, -60)
+	_end_label = _label_of("", 32)
+	_end_box.add_child(_end_label)
+	var again := Button.new()
+	again.text = "New run"
+	again.pressed.connect(_on_new_run)
+	_end_box.add_child(again)
+	_end_box.visible = false
+	add_child(_end_box)
+
+
+func _on_new_run() -> void:
+	new_run(seed_now + 1)

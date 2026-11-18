@@ -34,7 +34,8 @@ Money is whole coins (int). Time in the logic is day-clock minutes (`RunState.cl
 
 ## Contracts
 - The shop run (`Catalog`, `RunState`, `RunRecording`, `ShopBot`): `docs/core_brief.md`.
-- Taken input keys: F10 frame stamp, F4 and F6-F9 render toggles, Escape pause.
+- Taken input keys: F1 tuning panel, F2 debug overlay, F5 save run recording, F10 frame stamp, F4 and F6-F9 render
+  toggles, Escape pause.
 
 ## Debug layer already provided
 - `Flags` (`game/autoload/flags.gd`): `Flags.args` (user args after `--`), `frame`, `commands`, `is_scripted_run()`,

@@ -92,9 +92,9 @@ func sellable() -> Array[Dictionary]:
 	return out
 
 
-## The price the current buyer pays for a held item.
+## The price the current buyer offers for a held item. An imposter offers it too but never pays (see _sell).
 func sale_price(item: Dictionary) -> int:
-	if customer.get("kind", "") != BUYER or customer["imposter"]:
+	if customer.get("kind", "") != BUYER:
 		return 0
 	return int(round(float(item["value"]) * tuning.buyer_pay_frac * float(customer["pay_mult"]) * sale_mult()))
 
@@ -202,7 +202,7 @@ func _sell(uid: int, ev: Array[Dictionary]) -> void:
 			continue
 		if item["category"] != customer["category"]:
 			break
-		var price: int = sale_price(item)
+		var price: int = 0 if customer["imposter"] else sale_price(item)
 		cash += price
 		inventory.remove_at(i)
 		ev.append({"e": "sold", "uid": uid, "name": item["name"], "price": price, "imposter": customer["imposter"]})
