@@ -46,6 +46,7 @@ try {
   first = Date.now() - t0;
 } catch { /* reported below */ }
 await page.waitForTimeout(2000);  // errors that follow the first frame
+const jpeg = process.env.SMOKE_SHOT_B64 ? await page.screenshot({ type: 'jpeg', quality: 40 }) : null;
 const pageText = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 300)).catch(() => 'n/a');
 const webgl2 = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2')).catch(() => 'n/a');
 const shot = await page.screenshot({ path: join(dir, '..', 'web_smoke.png') });
@@ -57,7 +58,10 @@ if (first < 0) problems.push(`game not ready within ${BOOT_LIMIT_MS / 1000} s`);
 for (const p of problems) console.log(p);
 if (problems.length) {
   console.log(`webgl2=${webgl2} page text: ${pageText}`);
-  if (process.env.SMOKE_SHOT_B64) console.log(`SHOT_B64 ${shot.toString('base64')}`);  // CI: artifacts may be unreachable
+  if (process.env.SMOKE_SHOT_B64) {  // CI: artifacts may be unreachable; a small JPEG in 1000-character log lines
+    const b64 = jpeg.toString('base64');
+    for (let i = 0; i < b64.length; i += 1000) console.log(`SHOT_B64 ${b64.slice(i, i + 1000)}`);
+  }
   console.log('last console lines:');
   for (const l of log.slice(-15)) console.log(`  ${l}`);
 }
