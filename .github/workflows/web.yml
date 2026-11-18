@@ -35,8 +35,10 @@ jobs:
         run: tools/export_web.sh
       - name: Boot in headless Chrome
         run: |
-          npm install --no-save --no-audit --no-fund playwright@1.49.1 >/dev/null
-          SMOKE_TIMEOUT_MS=120000 node tools/web_smoke.mjs build/web --chrome
+          # Same Playwright and bundled Chromium as the cloud sessions (the runner's own Chrome hung after engine start).
+          npm install --no-save --no-audit --no-fund playwright@1.63.0 >/dev/null
+          npx playwright install --only-shell chromium >/dev/null
+          SMOKE_TIMEOUT_MS=60000 node tools/web_smoke.mjs build/web
       - uses: actions/upload-artifact@v4
         if: always()
         with:
