@@ -41,6 +41,8 @@ curse with no tell. WARN on the balance targets in `docs/handoff.md`.
 `CurioCollection` (`game/logic/curio_collection.gd`): `create(seed, tuning)`, `odds() -> {common, rare, legendary}`
 (show before every purchase), `pity_left()`, `add_boxes(n)` (purchase or reward), `reward_run(run)`, `open_box() ->
 {id, name, rarity, new, pity}`, `to_dict()`/`from_dict()`. Curios (`game/data/curios.json`, placeholder) are cosmetic:
-shop decor and a collection book. Never tradeable, sellable or convertible to money, and they never change run
-numbers. New curios come before duplicates. Payments: Steam microtransactions; the web store needs a payment
+shop decor and a collection book, and they never change run numbers (Washington "extension of play").
+Trading (pending Curtis's pick, 18 Nov): curios from PAID boxes are never tradeable; curios from free boxes, run
+drops or fixed-price purchases (`grant(id)`) are, via `tradeable` and `take_tradeable(id)`. `add_boxes(n, paid)`;
+free boxes open first. New curios come before duplicates. Payments: Steam microtransactions; the web store needs a payment
 provider that allows paid random items (Paddle's AUP bans "games of chance").

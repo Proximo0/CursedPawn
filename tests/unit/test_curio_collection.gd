@@ -69,3 +69,30 @@ func test_round_trip() -> void:
 	var d := cc_make(9)
 	d.from_dict(c.to_dict())
 	assert_eq(d.open_box(), c.open_box())
+
+
+func test_paid_box_curios_are_never_tradeable() -> void:
+	var c := cc_make(11)
+	c.add_boxes(3, true)
+	for i: int in range(3):
+		var r: Dictionary = c.open_box()
+		assert_false(r["tradeable"], "paid box %d" % i)
+	assert_true(c.tradeable.is_empty())
+	assert_false(c.take_tradeable(str(c.owned.keys()[0])))
+
+
+func test_free_boxes_open_first_and_trade() -> void:
+	var c := cc_make(12)
+	c.add_boxes(1, true)
+	c.add_boxes(1)
+	assert_true(c.open_box()["tradeable"], "free first")
+	assert_false(c.open_box()["tradeable"], "then paid")
+	assert_eq(c.paid_boxes, 0)
+
+
+func test_granted_curio_trades_once() -> void:
+	var c := cc_make()
+	assert_true(c.grant("curio_01"))
+	assert_true(c.take_tradeable("curio_01"))
+	assert_false(c.take_tradeable("curio_01"))
+	assert_false(c.owned.has("curio_01"))

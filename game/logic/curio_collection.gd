@@ -4,6 +4,9 @@ extends RefCounted
 ## A box rolls a rarity with the published odds, then a curio of that rarity, preferring ones not yet owned.
 ## Pity: a legendary is guaranteed once `tuning.box_pity` boxes in a row had none.
 ## Paid and earned boxes open the same way; `boxes` counts unopened ones. Pure logic, seeded RNG.
+## Trading (Washington law): a curio from a PAID box is never tradeable, so paying never buys a chance at
+## something sellable. Curios from free boxes (earned in runs) or bought at a fixed price are tradeable.
+## Free boxes open before paid ones.
 
 const COMMON: String = "common"
 const RARE: String = "rare"
@@ -13,6 +16,8 @@ const CURIOS_PATH: String = "res://game/data/curios.json"
 var curios: Array[Dictionary] = []  ## {id, name, rarity}
 var owned: Dictionary = {}  ## id -> count
 var boxes: int = 0
+var paid_boxes: int = 0  ## of `boxes`, how many were bought; their curios stay locked
+var tradeable: Dictionary = {}	## id -> count of copies that may be traded
 var since_legendary: int = 0
 var opened: int = 0
 var tuning: Tuning
@@ -43,8 +48,33 @@ func pity_left() -> int:
 	return maxi(1, int(tuning.box_pity) - since_legendary)
 
 
-func add_boxes(n: int) -> void:
+func add_boxes(n: int, paid: bool = false) -> void:
 	boxes += maxi(0, n)
+	if paid:
+		paid_boxes += maxi(0, n)
+
+
+## A curio bought at a fixed price or earned directly (no chance involved): always tradeable.
+func grant(id: String) -> bool:
+	for c: Dictionary in curios:
+		if c["id"] == id:
+			owned[id] = int(owned.get(id, 0)) + 1
+			tradeable[id] = int(tradeable.get(id, 0)) + 1
+			return true
+	return false
+
+
+## Removes one tradeable copy (the trade itself happens on the store side). False if none may be traded.
+func take_tradeable(id: String) -> bool:
+	if int(tradeable.get(id, 0)) <= 0:
+		return false
+	tradeable[id] = int(tradeable[id]) - 1
+	owned[id] = int(owned[id]) - 1
+	if int(owned[id]) <= 0:
+		owned.erase(id)
+	if int(tradeable[id]) <= 0:
+		tradeable.erase(id)
+	return true
 
 
 ## Boxes a finished run earns.
@@ -54,20 +84,25 @@ func reward_run(run: RunState) -> int:
 	return n
 
 
-## Opens one box. Returns {id, name, rarity, new, pity} or {} when there is no box to open.
+## Opens one box. Returns {id, name, rarity, new, pity, tradeable} or {} when there is no box to open.
 func open_box() -> Dictionary:
 	if boxes <= 0 or curios.is_empty():
 		return {}
+	var from_paid: bool = paid_boxes >= boxes
 	boxes -= 1
+	if from_paid:
+		paid_boxes -= 1
 	opened += 1
 	var rarity: String = _curio_roll_rarity()
 	var pool: Array[Dictionary] = _curio_pool(rarity)
 	var pick: Dictionary = pool[rng.randi_range(0, pool.size() - 1)]
 	var is_new: bool = not owned.has(pick["id"])
 	owned[pick["id"]] = int(owned.get(pick["id"], 0)) + 1
+	if not from_paid:
+		tradeable[pick["id"]] = int(tradeable.get(pick["id"], 0)) + 1
 	var pity: bool = rarity == LEGENDARY and since_legendary + 1 >= int(tuning.box_pity)
 	since_legendary = 0 if rarity == LEGENDARY else since_legendary + 1
-	return {"id": pick["id"], "name": pick["name"], "rarity": rarity, "new": is_new, "pity": pity}
+	return {"id": pick["id"], "name": pick["name"], "rarity": rarity, "new": is_new, "pity": pity, "tradeable": not from_paid}
 
 
 func complete_count() -> int:
@@ -108,13 +143,15 @@ func _curio_pool(rarity: String) -> Array[Dictionary]:
 
 
 func to_dict() -> Dictionary:
-	return {"owned": owned.duplicate(), "boxes": boxes, "since_legendary": since_legendary, "opened": opened,
+	return {"owned": owned.duplicate(), "tradeable": tradeable.duplicate(), "paid_boxes": paid_boxes, "boxes": boxes, "since_legendary": since_legendary, "opened": opened,
 		"rng_state": rng.state}
 
 
 func from_dict(d: Dictionary) -> void:
 	owned = (d.get("owned", {}) as Dictionary).duplicate()
+	tradeable = (d.get("tradeable", {}) as Dictionary).duplicate()
 	boxes = int(d.get("boxes", 0))
+	paid_boxes = int(d.get("paid_boxes", 0))
 	since_legendary = int(d.get("since_legendary", 0))
 	opened = int(d.get("opened", 0))
 	rng.state = int(d.get("rng_state", rng.state))
