@@ -1287,3 +1287,31 @@ static func _sk_o_fallback(g: Image, category: String, id: String) -> void:
 			_sk_e(g, 16, 16, 9.0, 9.0, tint)
 			_sk_r(g, 15, 12, 2, 8, 15)
 	_sk_outline(g)
+
+
+# ---------------------------------------------------------------- horror additions (docs/horror_polish_brief.md)
+# STUBS until the sprite worker fills them; signatures are the contract.
+
+## Idle animation frames for a customer (breathe, blink, head tilt). Always at least one frame.
+static func customer_frames(look: Dictionary) -> Array[ImageTexture]:
+	var out: Array[ImageTexture] = [customer_texture(look)]
+	return out
+
+
+## A faint "wrongness" overlay for a cursed object, same size as object_texture(id), shown once a tell is found.
+static func object_cursed_overlay(id: String) -> ImageTexture:
+	var g: Image = Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
+	g.fill(Color(0, 0, 0, 0))
+	g.set_pixel(16 + hash(id) % 8, 12, _sk_col(13))
+	return ImageTexture.create_from_image(g)
+
+
+## Room horror props: "eyes" (16x6), "portrait" (24x32), "silhouette" (40x96), "hand" (16x12), "moth" (6x5),
+## "clock" (24x48, pendulum drawn separately by the room).
+static func horror_texture(kind: String) -> ImageTexture:
+	var sizes: Dictionary = {"eyes": Vector2i(16, 6), "portrait": Vector2i(24, 32), "silhouette": Vector2i(40, 96),
+		"hand": Vector2i(16, 12), "moth": Vector2i(6, 5), "clock": Vector2i(24, 48)}
+	var sz: Vector2i = sizes.get(kind, Vector2i(8, 8))
+	var g: Image = Image.create_empty(sz.x, sz.y, false, Image.FORMAT_RGBA8)
+	g.fill(_sk_col(0))
+	return ImageTexture.create_from_image(g)
