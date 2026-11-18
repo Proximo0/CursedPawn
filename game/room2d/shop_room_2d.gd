@@ -151,7 +151,7 @@ func _build_view() -> void:
 	_screen.texture = _vp.get_texture()
 	_screen.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_screen.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_screen.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_screen.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_shader_mat = ShaderMaterial.new()

@@ -51,9 +51,9 @@ var _last_serial: int = -1
 
 # ---------------------------------------------------------------- pure helpers (unit-tested)
 
-## Window pixel position -> 480x270 UI grid position, matching the room's keep-aspect-covered scaling.
+## Window pixel position -> 480x270 UI grid position, matching the room's keep-aspect (letterboxed, never cropped) scaling.
 static func ui_to_view(p: Vector2, win: Vector2) -> Vector2:
-	var s: float = maxf(win.x / VIEW.x, win.y / VIEW.y)
+	var s: float = minf(win.x / VIEW.x, win.y / VIEW.y)
 	var off: Vector2 = (win - VIEW * s) * 0.5
 	return (p - off) / s
 
@@ -139,7 +139,7 @@ func _build_hud() -> void:
 	_hud_view.texture = _hud_vp.get_texture()
 	_hud_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_hud_view.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_hud_view.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_hud_view.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_hud_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_view.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(_hud_view)
