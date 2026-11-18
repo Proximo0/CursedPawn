@@ -51,3 +51,16 @@ sprite_kit.gd; `tests/unit/test_room2d_*.gd`; `tests/sim/sim_room2d_wake.gd`; `t
   a ledger.
 - Settings: add "Scares: full / gentle" (persisted) and pass it to the room as `room.scare_level`.
 - Sheet cells for the new frames, title sequence, title card reveal, and the settings row.
+
+## Overall 2D quality (Curtis, same round: "just better 2d quality overall as well")
+- Canvas goes from 480x270 to 640x360: it scales by exact whole numbers to 1280x720 (2x) and 1920x1080 (3x), so
+  pixels stay even (480x270 needed 2.67x). Room worker sets `ShopRoom2D.VIEW_SIZE = Vector2i(640, 360)` and
+  re-lays the room for the extra space (more shelf slots, a deeper back wall, the window and a hallway glimpse);
+  UI worker sets `ShopGame.VIEW = Vector2(640, 360)` and re-lays the HUD. Both read the other's constant only
+  through those names. Integer scale with letterbox when the window allows a whole-number scale.
+- Sprites: proper pixel-art shading on everything: a light direction (top-left candle), 3-4 tone ramps per
+  material (wood, brass, cloth, porcelain, paper), selective outlines (dark outline outside, lighter inside edges),
+  hand-placed highlights, no pillow shading, dithered transitions only where they help. Objects may grow to 40x40
+  where it helps; customers to about 64x96. Keep everything palette-locked.
+- Motion: idle animation at 6-8 fps for customers and candles; ease in/out on all UI and room motion; 2-frame
+  squash on impacts in the wake.
