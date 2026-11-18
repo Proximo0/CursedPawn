@@ -314,11 +314,15 @@ func _check_wake(ev: Array[Dictionary]) -> void:
 
 
 func _end_night(ev: Array[Dictionary]) -> void:
+	var curse_cash: int = 0
 	for item: Dictionary in inventory:
 		if item["curse"] != "":
-			dread += tuning.dread_per_night * float(catalog.curse(item["curse"]).get("dread", 1.0))
+			var c: Dictionary = catalog.curse(item["curse"])
+			dread += tuning.dread_per_night * float(c.get("dread", 1.0))
+			curse_cash += int(c.get("night_cash", 0))
+	cash = maxi(0, cash + curse_cash)
 	var rent: int = rent_for(night)
-	ev.append({"e": "night_end", "night": night, "rent": rent, "cash": cash})
+	ev.append({"e": "night_end", "night": night, "rent": rent, "cash": cash, "curse_cash": curse_cash})
 	if cash < rent:
 		phase = PHASE_OVER
 		ev.append({"e": "run_lost", "night": night, "cash": cash, "rent": rent})

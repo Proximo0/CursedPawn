@@ -23,7 +23,7 @@ Pure logic in `game/logic/`, no Node, no clock, seeded RNG. Workers code against
 `night_start {night, rent}` · `customer {kind: seller|buyer, name, ask | category}` ·
 `inspected {tool, tell, estimate}` · `counter {offer, ask, patience}` · `left {offer}` · `bought {uid, name, price}` ·
 `sold {uid, name, price, imposter}` · `passed {kind}` · `wake {night, dread, broke, closed}` ·
-`night_end {night, rent, cash}` · `run_lost {night, cash, rent}` · `run_won {cash}` · `invalid {why}`.
+`night_end {night, rent, cash, curse_cash}` (curse_cash: sum of held curses' `night_cash`, added before rent) · `run_lost {night, cash, rent}` · `run_won {cash}` · `invalid {why}`.
 
 ## Customer dictionaries
 Seller: `{kind, item {id, name, category, value, curse}, reserve, ask, patience, noise_u, tools, tells, imposter}`.

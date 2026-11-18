@@ -239,3 +239,17 @@ func test_tarot_house_edge() -> void:
 		staked += 10
 		won += int(ev[0]["payout"])
 	assert_near(float(won) / staked, cat.tarot_return(), 0.06, "measured return")
+
+
+func test_night_cash_curses_pay_or_eat_at_night_end() -> void:
+	var run := rs_run(3)
+	run.inventory.assign([
+		{"uid": 90, "id": "x", "name": "A", "category": "toy", "value": 10, "curse": "whispering_debt", "est": 0, "tells": 0},
+		{"uid": 91, "id": "y", "name": "B", "category": "toy", "value": 10, "curse": "hungry_mouth", "est": 0, "tells": 0}])
+	run.cash = 1000
+	var expect: int = int(run.catalog.curse("whispering_debt")["night_cash"]) + int(run.catalog.curse("hungry_mouth")["night_cash"])
+	var ev: Array[Dictionary] = []
+	run._end_night(ev)
+	assert_eq(ev[0]["e"], "night_end")
+	assert_eq(int(ev[0]["curse_cash"]), expect)
+	assert_eq(int(ev[0]["cash"]), 1000 + expect)

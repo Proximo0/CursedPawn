@@ -81,7 +81,10 @@ static func sd_event_text(e: Dictionary) -> String:
 			var closed: String = " The door locks, the day is over." if bool(e.get("closed", false)) else ""
 			return "SOMETHING WOKE on night %d (dread %.1f): %s.%s" % [int(e["night"]), float(e["dread"]), what, closed]
 		"night_end":
-			return "Night %d ends. Rent %d, cash %d." % [int(e["night"]), int(e["rent"]), int(e["cash"])]
+			var cc: int = int(e.get("curse_cash", 0))
+			var extra: String = "" if cc == 0 else (" Something left %d coins on the counter." % cc if cc > 0
+				else " Something ate %d coins from the till." % -cc)
+			return "Night %d ends. Rent %d, cash %d.%s" % [int(e["night"]), int(e["rent"]), int(e["cash"]), extra]
 		"run_lost":
 			return "RUN LOST on night %d: cash %d, rent %d." % [int(e["night"]), int(e["cash"]), int(e["rent"])]
 		"run_won":

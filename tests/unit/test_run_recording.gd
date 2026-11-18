@@ -28,6 +28,7 @@ func test_wake_clip() -> void:
 	var tun := Tuning.new()
 	tun.set_value("cursed_share", 1.0)
 	tun.set_value("wake_threshold", 1.0)
+	tun.set_value("dread_on_buy", 2.0)  # even the mildest curse (dread 0.6) wakes on buying
 	tun.set_value("start_cash", 1000.0)
 	var run := RunState.new()
 	var rec := RunRecording.begin(run, 9, cat, tun)
