@@ -72,6 +72,7 @@ The full story is in `docs/lessons/ops_board.md` (VoxelSpace ops board: 20 commi
 
 | What happened | Rule |
 | --- | --- |
+| Sims ran in real time: `run_sims.sh` launched the scene without `--fixed-fps`, so 1,500 physics ticks of room wake took 30 s of wall clock (0.8 s CPU) and were the long pole of `check_all` (41 s) and CI | Every headless scene that steps physics runs with `--fixed-fps 60` (disables real-time sync). Same results, sims 30 s -> 0.4 s, `check_all` 41 s -> 10 s. |
 | Feel bugs were found by the player, not by us | Build the debug layer and the bot before content: tunables, debug frame, snapshot/replay, recorder, overlay, lab, bot. |
 | A fix looked plausible but the bug predated the changed code | Check git history for when a bug first appeared. |
 | A lab WARN almost undid a design choice the player wanted | Check a WARN against the player's stated wishes before tuning it away. |

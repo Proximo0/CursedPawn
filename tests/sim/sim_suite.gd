@@ -1,7 +1,7 @@
 extends Node
 ## Runs the regression sims listed in SIM_FILES (each tests/sim/sim_<name>.gd extends sim_base.gd and returns
 ## [[name, ok, detail], ...] from run()). Prints "SIM <name> PASS|FAIL <detail>" and "SIMS passed=N failed=M".
-## Part of tools/run_sims.sh. Run alone: godot --headless --path . res://tests/sim/sim_suite.tscn [-- name ...]
+## Part of tools/run_sims.sh. Run alone: godot --headless --fixed-fps 60 --path . res://tests/sim/sim_suite.tscn [-- name ...]
 
 const SIM_FILES: Array = [
 	"sim_example",
