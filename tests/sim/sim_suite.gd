@@ -5,6 +5,7 @@ extends Node
 
 const SIM_FILES: Array = [
 	"sim_example",
+	"sim_room_wake",
 ]
 
 

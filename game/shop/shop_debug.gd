@@ -1,7 +1,8 @@
 class_name ShopDebug
 extends Control
 ## Playable debug shop: plain Control UI over RunState. Every action goes through RunRecording.drive.
-## Keys: F1 tuning panel, F2 debug overlay, F5 save the recording to user://last_run.json.
+## Keys: F1 tuning panel, F2 debug overlay, F5 save the recording to user://last_run.json, F11 room dither.
+## The 3D shop room (ShopRoom) draws behind the UI and follows the run's events.
 ## The run in progress is saved after every action and resumed on launch; the end screen makes a pass-on link,
 ## and a gift link (in the web page URL or pasted) starts the next run with a friend's object.
 
@@ -36,6 +37,7 @@ var _wager_spin: SpinBox
 var _wager_btn: Button
 var _relics: RelicShopPanel
 var _rewarded: bool = false
+var _room: ShopRoom
 var _pass_edit: LineEdit
 var _handle_edit: LineEdit
 var _gift_edit: LineEdit
@@ -114,6 +116,8 @@ func _ready() -> void:
 	add_child(_overlay)
 	add_child(FrameStamp.new())
 	add_child(RenderToggles.new())
+	_room = ShopRoom.new()
+	add_child(_room)
 	_relics = RelicShopPanel.new()
 	add_child(_relics)
 	catalog = Catalog.load_default()
@@ -145,6 +149,7 @@ func _resume(saved_run: RunState, saved_rec: RunRecording) -> void:
 	rec = saved_rec
 	seed_now = run.seed_used
 	_overlay.run = run
+	_room.setup(run)
 	log_lines.clear()
 	_end_box.visible = false
 	_rewarded = false
@@ -160,6 +165,10 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_F11:
+		_room.dither_enabled = not _room.dither_enabled
+		get_viewport().set_input_as_handled()
+		return
 	if key != null and key.pressed and not key.echo and key.keycode == KEY_F5:
 		if not Flags.is_scripted_run():
 			rec.save_json(RECORDING_PATH)
@@ -173,6 +182,7 @@ func new_run(seed_in: int, gift: Dictionary = {}) -> void:
 	run = RunState.new()
 	_overlay.run = run
 	rec = RunRecording.begin(run, seed_in, catalog, Tuning.shared(), gift)
+	_room.setup(run)
 	log_lines.clear()
 	_end_box.visible = false
 	_rewarded = false
@@ -193,6 +203,7 @@ func act(cmd: Dictionary) -> void:
 
 
 func _on_events(events: Array[Dictionary]) -> void:
+	_room.apply_events(events)
 	for e: Dictionary in events:
 		var en: String = str(e["e"])
 		if en == "customer":
@@ -219,6 +230,7 @@ func _refresh() -> void:
 	_cash_label.text = "Cash %d" % run.cash
 	_rent_label.text = "Rent due %d" % run.rent_for(run.night)
 	_dread_bar.value = run.dread
+	_room.set_dread(run.dread)
 	_dread_label.text = "Dread %.1f / %.1f" % [run.dread, run.tuning.wake_threshold]
 	_dread_bar.max_value = maxf(DREAD_BAR_MAX, run.tuning.wake_threshold)
 	var lines: PackedStringArray = []
@@ -367,7 +379,7 @@ func _make_theme() -> Theme:
 		th.set_stylebox(st, "Button", sb)
 	th.set_color("font_disabled_color", "Button", Color(0.5, 0.5, 0.55))
 	var panel := StyleBoxFlat.new()
-	panel.bg_color = Color(0.18, 0.16, 0.22)
+	panel.bg_color = Color(0.18, 0.16, 0.22, 0.82)  ## the 3D shop room shows through
 	panel.set_content_margin_all(10.0)
 	th.set_stylebox("panel", "PanelContainer", panel)
 	var fill := StyleBoxFlat.new()
@@ -381,10 +393,6 @@ func _make_theme() -> Theme:
 
 func _build_ui() -> void:
 	theme = _make_theme()
-	var bg := ColorRect.new()
-	bg.color = Color(0.12, 0.1, 0.14)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left", "right", "top", "bottom"]:
@@ -423,6 +431,7 @@ func _build_ui() -> void:
 	left.add_child(mid)
 	var inv_panel := PanelContainer.new()
 	inv_panel.custom_minimum_size = Vector2(300, 0)
+	inv_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	mid.add_child(inv_panel)
 	var inv_box := VBoxContainer.new()
 	inv_panel.add_child(inv_box)
@@ -431,6 +440,7 @@ func _build_ui() -> void:
 	inv_box.add_child(_inventory_label)
 	var cust_panel := PanelContainer.new()
 	cust_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cust_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	mid.add_child(cust_panel)
 	_customer_box = VBoxContainer.new()
 	cust_panel.add_child(_customer_box)
