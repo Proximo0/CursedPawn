@@ -2,18 +2,21 @@ class_name RelicStore
 extends RefCounted
 ## The real-money shop for reliquaries (estate boxes) and bound relics, as pure logic. Payment itself happens
 ## outside (Steam in-game purchase, or a web provider that allows paid random items); this class owns the rules
-## around it: dollar prices on every product, odds shown on every sealed reliquary, a confirm step, an age gate,
+## around it: dollar prices on every product, odds shown on every sealed reliquary, a confirm step, an 18+ gate
+## with acceptance of the Terms of Sale (binding individual arbitration, class-action waiver: docs/legal/terms_of_sale.md),
 ## a purchase log, and refunds that never lock the account.
 ## Flow: quote(id) -> show it -> player confirms -> take payment -> fulfill(id, payment_ref).
 ## Products: game/data/store.json {id, kind: sealed|scried|featured, count, price_cents, label, blurb}.
 
 const STORE_PATH: String = "res://game/data/store.json"
-const MIN_AGE: int = 16
+const MIN_AGE: int = 18
+const TERMS_VERSION: String = "2026-11-18"
 
 var products: Array[Dictionary] = []
 var collection: CurioCollection
 var age_checked: bool = false
 var age_ok: bool = false
+var terms_accepted: String = ""  ## the TERMS_VERSION the player accepted, "" if none
 var log: Array[Dictionary] = []  ## {n, id, price_cents, payment_ref, delivered, refunded}
 
 
@@ -28,14 +31,15 @@ static func create(coll: CurioCollection) -> RelicStore:
 	return s
 
 
-## The age question, asked once before the shop opens. Under 16 needs a parent's consent.
-func set_age(years: int, parental_consent: bool = false) -> void:
+## The gate, asked once before the shop opens: age (18+ only) and acceptance of the current Terms of Sale.
+func set_age(years: int, accepts_terms: bool = false) -> void:
 	age_checked = true
-	age_ok = years >= MIN_AGE or parental_consent
+	age_ok = years >= MIN_AGE
+	terms_accepted = TERMS_VERSION if accepts_terms and age_ok else ""
 
 
 func is_open() -> bool:
-	return age_checked and age_ok
+	return age_checked and age_ok and terms_accepted == TERMS_VERSION
 
 
 func product(id: String) -> Dictionary:

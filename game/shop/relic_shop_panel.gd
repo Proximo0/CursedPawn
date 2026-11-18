@@ -18,7 +18,7 @@ var reveal_left: float = 0.0
 var _root: Control
 var _age_box: VBoxContainer
 var _age_spin: SpinBox
-var _consent: CheckBox
+var _terms_check: CheckBox
 var _closed_label: Label
 var _shop_box: VBoxContainer
 var _stats_label: Label
@@ -124,9 +124,9 @@ func is_shown() -> bool:
 	return _root.visible
 
 
-## The age question (once). Under 16 without consent leaves the shop closed.
-func submit_age(years: int, consent: bool) -> void:
-	store.set_age(years, consent)
+## The gate (once): 18+ and the Terms of Sale accepted, or the shop stays closed.
+func submit_age(years: int, accepts_terms: bool) -> void:
+	store.set_age(years, accepts_terms)
 	_refresh()
 
 
@@ -356,16 +356,16 @@ func _build_age_gate(page: VBoxContainer) -> void:
 	var row := HBoxContainer.new()
 	_age_box.add_child(row)
 	_age_spin = SpinBox.new()
-	_age_spin.min_value = 1
+	_age_spin.min_value = 0
 	_age_spin.max_value = 120
-	_age_spin.value = 18
+	_age_spin.value = 0
 	row.add_child(_age_spin)
-	_consent = CheckBox.new()
-	_consent.text = "A parent or guardian consents"
-	row.add_child(_consent)
+	_terms_check = CheckBox.new()
+	_terms_check.text = "I am 18 or older and accept the Terms of Sale, including binding individual arbitration and a class-action waiver"
+	row.add_child(_terms_check)
 	var go := Button.new()
 	go.text = "Continue"
-	go.pressed.connect(func() -> void: submit_age(int(_age_spin.value), _consent.button_pressed))
+	go.pressed.connect(func() -> void: submit_age(int(_age_spin.value), _terms_check.button_pressed))
 	row.add_child(go)
 
 

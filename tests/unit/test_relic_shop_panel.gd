@@ -14,7 +14,7 @@ func test_rarity_colors_differ() -> void:
 func test_quote_text_sealed_and_scried() -> void:
 	var store := RelicStore.create(CurioCollection.create(1, Tuning.new()))
 	assert_eq(RelicShopPanel.rsp_quote_text({}), RelicShopPanel.CLOSED_TEXT)
-	store.set_age(30)
+	store.set_age(30, true)
 	var sealed: String = RelicShopPanel.rsp_quote_text(store.quote("sealed_1"))
 	assert_true(sealed.contains("$1.99") and sealed.contains("Common") and sealed.contains("cannot be traded"))
 	assert_true(sealed.contains("DEBUG: no real payment"))

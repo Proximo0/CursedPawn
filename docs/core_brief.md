@@ -45,7 +45,8 @@ Washington gambling = paying + chance + a thing of value; each way to get a curi
   `buy_appraised()` (scried reliquary: contents shown before buying, tradeable), `set_featured(id)`, `grant(id)`,
   `craft(id)`, `craft_cost(id)`, `take_tradeable(id)`, `receive_trade(id)`, `sets()`, `claim_completed_sets()`,
   `reward_run(run)`, fields `owned, tradeable, free_boxes, paid_boxes, shards_free, shards_locked, featured_id`.
-- `RelicStore` (`game/logic/relic_store.gd`): `set_age(years, consent)`, `is_open()`, `quote(id)` (dollars, odds,
+- `RelicStore` (`game/logic/relic_store.gd`): `set_age(years, accepts_terms)` (18+ and the current `TERMS_VERSION`
+  of `docs/legal/terms_of_sale.md`, with binding individual arbitration), `is_open()`, `quote(id)` (dollars, odds,
   pity, what a scried or bound relic contains), `fulfill(id, payment_ref)` after payment, `refund(n)`, `log`.
   Products in `game/data/store.json`. Display names: sealed reliquary, scried reliquary, bound relic, curios.
 - Tarot wager (`RunState`): `{t: "wager", amount}` up to `max_wager()`; event `wager {card, text, stake, payout,
