@@ -243,7 +243,7 @@ func wake(seed_value: int) -> void:
 		body.freeze = false
 		var wall: String = str(body.get_meta("wall", "back"))
 		var delay: float = _wake_rng.randf_range(0.2, 2.4)
-		var speed: float = _wake_rng.randf_range(2.2, 4.6)
+		var speed: float = _wake_rng.randf_range(1.4, 3.0)  # slow enough to land on the counter, in view
 		var lat: float = _wake_rng.randf_range(-0.5, 0.5)
 		var lift: float = _wake_rng.randf_range(0.3, 1.1)
 		var spin := Vector3(_wake_rng.randf_range(-1.0, 1.0), _wake_rng.randf_range(-1.0, 1.0), _wake_rng.randf_range(-1.0, 1.0))
@@ -1091,7 +1091,9 @@ func _update_lights() -> void:
 		var ph: float = float(l["phase"])
 		var flick: float = 1.0 - 0.06 * _noise(_t, ph)  # candles breathe
 		flick -= dn * 0.65 * pow(1.0 - _noise(_t * 1.3, ph), 2.0)
-		var col: Color = (l["color"] as Color).lerp(RED_LIGHT, _red * 0.8)
+		# The counter spot stays bone-amber through the red phase so flying props keep their shape.
+		var red_mix: float = _red * (0.25 if node is SpotLight3D else 0.8)
+		var col: Color = (l["color"] as Color).lerp(RED_LIGHT, red_mix)
 		node.light_color = col
 		node.light_energy = float(l["energy"]) * base_level * maxf(flick, 0.0)
 	var amb: Color = Color(0.55, 0.42, 0.70).lerp(Color(0.60, 0.22, 0.30), _red * 0.6)
