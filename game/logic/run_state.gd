@@ -278,7 +278,7 @@ func _next_customer(ev: Array[Dictionary]) -> void:
 		customer = {"kind": BUYER, "category": category, "imposter": imposter, "type": bt.get("id", ""),
 			"pay_mult": rng.randf_range(0.8, 1.2) * float(bt.get("pay_mult", 1.0)),
 			"cursed_mult": float(bt.get("cursed_mult", 1.0))}
-		ev.append({"e": "customer", "kind": BUYER, "category": category, "type": bt.get("name", ""),
+		ev.append({"e": "customer", "kind": BUYER, "category": category, "type": bt.get("name", ""), "tid": bt.get("id", ""),
 			"line": bt.get("line", "")})
 		return
 	var st: Dictionary = _pick_type(SELLER)
@@ -303,7 +303,7 @@ func _next_customer(ev: Array[Dictionary]) -> void:
 		"imposter": imposter,
 	}
 	ev.append({"e": "customer", "kind": SELLER, "name": obj["name"], "ask": customer["ask"],
-		"type": st.get("name", ""), "line": st.get("line", "")})
+		"type": st.get("name", ""), "tid": st.get("id", ""), "line": st.get("line", "")})
 
 
 ## A customer type of `kind`, weighted; {} when the catalog has none.

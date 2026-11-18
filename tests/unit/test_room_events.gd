@@ -103,3 +103,13 @@ func test_customer_arrives_and_leaves() -> void:
 	room.settle_visuals()
 	assert_eq(room.customer_state(), "none")
 	room.free()
+
+
+func test_customer_dresses_as_their_type() -> void:
+	var room := ShopRoom.new()
+	room.setup(_run_with(0))
+	room.apply_events([{"e": "customer", "kind": "buyer", "category": "toy", "tid": "priest"}] as Array[Dictionary])
+	assert_near(room._customer.scale.y, 1.1)
+	room.apply_events([{"e": "customer", "kind": "buyer", "category": "toy", "tid": "haggler"}] as Array[Dictionary])
+	assert_near(room._customer.scale.y, 0.85)
+	room.free()

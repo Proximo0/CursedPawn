@@ -167,10 +167,13 @@ static func make_body(category: String, display_name: String) -> Dictionary:
 
 
 ## The hooded, cloaked customer silhouette, facing +Z (the camera). Dark body, void face, two amber eyes.
-static func make_customer() -> Node3D:
+## `look` (a customer type from customers.json) may set cloak and eyes (hex colours) and height (scale).
+static func make_customer(look: Dictionary = {}) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Customer"
-	var cloak_col := Color(0.14, 0.08, 0.22)
+	var cloak_col := Color.from_string(str(look.get("cloak", "")), Color(0.14, 0.08, 0.22))
+	var eye_col := Color.from_string(str(look.get("eyes", "")), COL_PALE_AMBER)
+	root.scale = Vector3.ONE * clampf(float(look.get("height", 1.0)), 0.7, 1.3)
 	part(root, cyl(0.20, 0.52, 1.45, 12), cloak_col, Vector3(0, 0.725, 0), Vector3.ZERO, 0.0, true)
 	part(root, cyl(0.0, 0.24, 0.34, 10), cloak_col, Vector3(0, 1.80, 0), Vector3.ZERO, 0.0, true)
 	var hood: MeshInstance3D = part(root, ball(0.27, 12), cloak_col, Vector3(0, 1.55, 0), Vector3.ZERO, 0.0, true)
@@ -178,8 +181,8 @@ static func make_customer() -> Node3D:
 	var face: MeshInstance3D = part(root, ball(0.19, 10), Color(0.03, 0.02, 0.05), Vector3(0, 1.52, 0.12))
 	face.scale = Vector3(0.9, 1.05, 0.8)
 	for sx: float in [-1.0, 1.0]:
-		var eye: MeshInstance3D = part(root, ball(0.028, 6), COL_PALE_AMBER, Vector3(0.07 * sx, 1.55, 0.255), Vector3.ZERO, 2.5)
-		eye.material_override = mat(COL_PALE_AMBER, 2.5, true)
+		var eye: MeshInstance3D = part(root, ball(0.028, 6), eye_col, Vector3(0.07 * sx, 1.55, 0.255), Vector3.ZERO, 2.5)
+		eye.material_override = mat(eye_col, 2.5, true)
 	# a sleeve with a hand holding the cloak shut
 	part(root, box(Vector3(0.16, 0.5, 0.16)), cloak_col, Vector3(-0.34, 0.95, 0.12), Vector3(0.0, 0.0, 0.25))
 	part(root, box(Vector3(0.16, 0.5, 0.16)), cloak_col, Vector3(0.34, 0.95, 0.12), Vector3(0.0, 0.0, -0.25))

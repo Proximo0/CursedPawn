@@ -78,6 +78,7 @@ var _slides: Array[Dictionary] = []
 var _shards: Array[RigidBody3D] = []
 
 var _customer: Node3D
+var _look_id: String = ""  ## customer type the silhouette is dressed as
 var _cust_state: String = "none"  ## none, enter, here, leave
 var _cust_pos: Vector3 = Vector3.ZERO
 var _carry: bool = false
@@ -163,6 +164,7 @@ func setup(run_in: RunState) -> void:
 		var cat: String = ""
 		if str(run.customer.get("kind", "")) == RunState.SELLER:
 			cat = str((run.customer.get("item", {}) as Dictionary).get("category", ""))
+		_set_customer_look(str(run.customer.get("type", "")))
 		_cust_start_enter(cat)
 		_cust_state = "here"
 		_cust_pos = STAND_POS
@@ -190,6 +192,7 @@ func apply_events(events: Array[Dictionary]) -> void:
 				var cat: String = ""
 				if str(e.get("kind", "")) == RunState.SELLER:
 					cat = _category_of_name(str(e.get("name", "")))
+				_set_customer_look(str(e.get("tid", "")))
 				_cust_start_enter(cat)
 			"passed", "left":
 				_cust_start_leave(false)
@@ -738,6 +741,23 @@ func _build_customer() -> void:
 	_customer.visible = false
 	_world.add_child(_customer)
 	_counter_obj = null
+	_look_id = ""
+
+
+## Rebuilds the customer silhouette in the colours and height of customer type `tid` (unchanged if same type).
+func _set_customer_look(tid: String) -> void:
+	if tid == _look_id or run == null or _world == null:
+		return
+	_look_id = tid
+	var look: Dictionary = {}
+	for t: Dictionary in run.catalog.customers:
+		if str(t.get("id", "")) == tid:
+			look = t
+	var old: Node3D = _customer
+	_customer = RoomProps.make_customer(look)
+	_customer.visible = old.visible
+	_world.add_child(_customer)
+	_free_node(old)
 
 
 func _build_camera() -> void:
@@ -1037,7 +1057,7 @@ func _update_fx(delta: float) -> void:
 				(ring.material_override as StandardMaterial3D).albedo_color.a = 0.8 * (1.0 - k)
 		"touch":
 			_fx_frost.visible = true
-			_fx_frost.scale = Vector3.ONE * (0.4 + 0.9 * minf(u * 3.0, 1.0))
+			_fx_frost.scale = Vector3.ONE * (0.3 + 0.55 * minf(u * 3.0, 1.0))  # frost hugs the object without hiding it
 			var dome: MeshInstance3D = _fx_frost.get_node("Dome") as MeshInstance3D
 			dome.scale = Vector3.ONE * (1.0 + 0.1 * pulse)
 
