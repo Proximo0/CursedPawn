@@ -9,6 +9,9 @@ extends Control
 const LOG_LINES: int = 12
 const WAKE_SECS: float = 2.0
 const RECORDING_PATH: String = "user://last_run.json"
+const REPLAY_BEFORE: int = 4  ## commands shown before the wake in an instant replay
+const REPLAY_STEP_SECS: float = 0.9  ## pause between replayed commands
+const REPLAY_TAIL_SECS: float = 4.5  ## time left for the wake itself before returning to the live shop
 const DREAD_BAR_MAX: float = 8.0
 
 var run: RunState = RunState.new()
@@ -38,6 +41,10 @@ var _wager_btn: Button
 var _relics: RelicShopPanel
 var _rewarded: bool = false
 var _room: ShopRoom
+var _replay_btn: Button
+var _replay_run: RunState  ## non-null while an instant replay plays
+var _replay_cmds: Array[Dictionary] = []
+var _replay_wait: float = 0.0
 var _pass_edit: LineEdit
 var _handle_edit: LineEdit
 var _gift_edit: LineEdit
@@ -145,6 +152,7 @@ func _gift_from_text(text: String) -> Dictionary:
 
 ## Picks up a run saved by a previous launch.
 func _resume(saved_run: RunState, saved_rec: RunRecording) -> void:
+	_replay_run = null
 	run = saved_run
 	rec = saved_rec
 	seed_now = run.seed_used
@@ -158,6 +166,8 @@ func _resume(saved_run: RunState, saved_rec: RunRecording) -> void:
 
 
 func _process(delta: float) -> void:
+	if _replay_run != null:
+		_replay_tick(delta)
 	if wake_left > 0.0:
 		wake_left -= delta
 		_wake_label.visible = wake_left > 0.0
@@ -179,6 +189,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func new_run(seed_in: int, gift: Dictionary = {}) -> void:
 	seed_now = seed_in
+	_replay_run = null
 	run = RunState.new()
 	_overlay.run = run
 	rec = RunRecording.begin(run, seed_in, catalog, Tuning.shared(), gift)
@@ -194,7 +205,7 @@ func new_run(seed_in: int, gift: Dictionary = {}) -> void:
 
 ## Sends a command through the recorder and shows what happened.
 func act(cmd: Dictionary) -> void:
-	if run.is_over():
+	if run.is_over() or _replay_run != null:
 		return
 	_on_events(rec.drive(run, cmd))
 	if not Flags.is_scripted_run():
@@ -230,6 +241,7 @@ func _refresh() -> void:
 	_cash_label.text = "Cash %d" % run.cash
 	_rent_label.text = "Rent due %d" % run.rent_for(run.night)
 	_dread_bar.value = run.dread
+	_replay_btn.disabled = rec.wake_at.is_empty() or _replay_run != null
 	_room.set_dread(run.dread)
 	_dread_label.text = "Dread %.1f / %.1f" % [run.dread, run.tuning.wake_threshold]
 	_dread_bar.max_value = maxf(DREAD_BAR_MAX, run.tuning.wake_threshold)
@@ -459,6 +471,11 @@ func _build_ui() -> void:
 	relic_btn.text = "Reliquary"
 	relic_btn.pressed.connect(_on_reliquary)
 	wager_row.add_child(relic_btn)
+	_replay_btn = Button.new()
+	_replay_btn.text = "Replay the wake"
+	_replay_btn.disabled = true
+	_replay_btn.pressed.connect(start_replay)
+	wager_row.add_child(_replay_btn)
 	var right := VBoxContainer.new()
 	right.custom_minimum_size = Vector2(380, 0)
 	cols.add_child(right)
@@ -515,6 +532,37 @@ func _build_ui() -> void:
 	_end_box.add_child(again)
 	_end_box.visible = false
 	add_child(_end_box)
+
+
+## Instant replay of the last wake: rebuilds the run a few commands before it and plays them back into the room.
+func start_replay() -> void:
+	if rec.wake_at.is_empty() or _replay_run != null:
+		return
+	var clip: Vector2i = rec.wake_clip(rec.wake_at.size() - 1, REPLAY_BEFORE)
+	_replay_run = rec.replay(catalog, clip.x)
+	_replay_cmds.clear()
+	for i: int in range(clip.x, clip.y):
+		_replay_cmds.append(rec.commands[i])
+	_replay_wait = REPLAY_STEP_SECS
+	_room.setup(_replay_run)
+	_log("REPLAY: the moments before it woke...")
+	_refresh()
+
+
+func _replay_tick(delta: float) -> void:
+	_replay_wait -= delta
+	if _replay_wait > 0.0:
+		return
+	if _replay_cmds.is_empty():
+		_replay_run = null
+		_room.setup(run)
+		_log("Back to the shop.")
+		_refresh()
+		return
+	var ev: Array[Dictionary] = _replay_run.apply(_replay_cmds.pop_front())
+	_room.set_dread(_replay_run.dread)
+	_room.apply_events(ev)
+	_replay_wait = REPLAY_TAIL_SECS if _replay_cmds.is_empty() else REPLAY_STEP_SECS
 
 
 func _on_new_run() -> void:

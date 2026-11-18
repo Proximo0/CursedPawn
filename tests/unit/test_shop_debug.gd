@@ -74,3 +74,29 @@ func test_end_screen_passes_on_and_gift_starts_next_run() -> void:
 	assert_eq(sd.run.inventory[0]["curse"], sd.catalog.curses[0]["id"])
 	assert_eq(sd.rec.gift["id"], sd.catalog.objects[0]["id"], "recorded for replay")
 	sd.free()
+
+
+func test_instant_replay_rebuilds_the_wake_and_returns() -> void:
+	var tree: SceneTree = Engine.get_main_loop() as SceneTree
+	var sd: ShopDebug = (load("res://game/shop/shop_debug.tscn") as PackedScene).instantiate()
+	tree.root.add_child(sd)
+	var bot := ShopBot.new(ShopBot.GREEDY)
+	var guard: int = 0
+	while sd.rec.wake_at.is_empty() and not sd.run.is_over() and guard < RunState.MAX_COMMANDS:
+		sd.act(bot.decide(sd.run))
+		guard += 1
+	assert_false(sd.rec.wake_at.is_empty(), "the greedy bot wakes something on the default seed")
+	var live_hash: int = sd.run.state_hash()
+	sd.start_replay()
+	assert_true(sd._replay_run != null, "replay running")
+	sd.act({"t": "pass"})
+	assert_eq(sd.run.state_hash(), live_hash, "no commands reach the live run during a replay")
+	var steps: int = 0
+	while sd._replay_cmds.size() > 0 and steps < 20:
+		sd._replay_tick(10.0)
+		steps += 1
+	var at: int = sd.rec.wake_at[-1]
+	assert_eq(sd._replay_run.state_hash(), sd.rec.hashes[at], "replay reaches the recorded wake exactly")
+	sd._replay_tick(10.0)
+	assert_true(sd._replay_run == null, "back to the live shop")
+	sd.free()
