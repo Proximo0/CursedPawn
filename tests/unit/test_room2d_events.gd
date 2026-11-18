@@ -129,3 +129,16 @@ func test_tool_effect_and_card_show() -> void:
 	room.apply_events([{"e": "customer", "kind": "buyer", "category": "toy", "tid": "priest"}] as Array[Dictionary])
 	assert_false(room.has_card())
 	room.free()
+
+
+func test_selling_a_sliding_prop_does_not_touch_the_freed_body() -> void:
+	var tree: SceneTree = Engine.get_main_loop() as SceneTree
+	var room := ShopRoom2D.new()
+	tree.root.add_child(room)
+	var run := _run_with(0)
+	room.setup(run)
+	room.apply_events([{"e": "bought", "uid": 1, "name": run.catalog.objects[0]["name"], "price": 5}] as Array[Dictionary])
+	room.apply_events([{"e": "sold", "uid": 1, "name": run.catalog.objects[0]["name"], "price": 9, "imposter": false}] as Array[Dictionary])
+	room._update_slides(0.1)
+	assert_eq(room._slides.size(), 0, "freed slide dropped without a cast error")
+	room.free()
