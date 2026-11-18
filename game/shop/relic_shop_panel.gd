@@ -96,6 +96,8 @@ func _ready() -> void:
 	layer = 5
 	collection = CurioCollection.create(Flags.seed_value(), Tuning.shared())
 	store = RelicStore.create(collection)
+	if not Flags.is_scripted_run():
+		PlayerProfile.load_into(store)
 	_build_ui()
 	_root.visible = false
 	_refresh()
@@ -195,6 +197,8 @@ func _log(line: String) -> void:
 
 
 func _refresh() -> void:
+	if not Flags.is_scripted_run():
+		PlayerProfile.save(store)
 	if _root == null:
 		return
 	for s: String in collection.claim_completed_sets():

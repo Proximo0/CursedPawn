@@ -115,3 +115,20 @@ func spent_cents() -> int:
 		if not entry["refunded"]:
 			t += int(entry["price_cents"])
 	return t
+
+
+## Everything the shop and its collection need to come back after a restart.
+func to_dict() -> Dictionary:
+	return {"age_checked": age_checked, "age_ok": age_ok, "terms_accepted": terms_accepted,
+		"log": log.duplicate(true), "collection": collection.to_dict()}
+
+
+func from_dict(d: Dictionary) -> void:
+	age_checked = bool(d.get("age_checked", false))
+	age_ok = bool(d.get("age_ok", false))
+	terms_accepted = str(d.get("terms_accepted", ""))
+	log.clear()
+	for e: Variant in d.get("log", []):
+		if e is Dictionary:
+			log.append(e)
+	collection.from_dict(d.get("collection", {}))

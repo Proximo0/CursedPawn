@@ -295,16 +295,26 @@ func _curio_pool(rarity: String) -> Array[Dictionary]:
 	return fresh if not fresh.is_empty() else all
 
 
+## JSON brings counts back as floats; keep them ints.
+static func _curio_int_counts(src: Variant) -> Dictionary:
+	var out: Dictionary = {}
+	if src is Dictionary:
+		for k: Variant in src:
+			out[str(k)] = int(src[k])
+	return out
+
+
 func to_dict() -> Dictionary:
 	return {"owned": owned.duplicate(), "tradeable": tradeable.duplicate(), "free_boxes": free_boxes,
 		"paid_boxes": paid_boxes, "shards_locked": shards_locked, "shards_free": shards_free,
 		"since_legendary": since_legendary, "opened": opened, "featured_id": featured_id,
-		"appraised": appraised.duplicate(), "claimed_sets": Array(claimed_sets), "rng_state": rng.state}
+		"appraised": appraised.duplicate(), "claimed_sets": Array(claimed_sets),
+		"rng_state": str(rng.state)}  ## a string: JSON numbers are doubles and would round a 64-bit state
 
 
 func from_dict(d: Dictionary) -> void:
-	owned = (d.get("owned", {}) as Dictionary).duplicate()
-	tradeable = (d.get("tradeable", {}) as Dictionary).duplicate()
+	owned = _curio_int_counts(d.get("owned", {}))
+	tradeable = _curio_int_counts(d.get("tradeable", {}))
 	free_boxes = int(d.get("free_boxes", 0))
 	paid_boxes = int(d.get("paid_boxes", 0))
 	shards_locked = int(d.get("shards_locked", 0))
@@ -314,4 +324,4 @@ func from_dict(d: Dictionary) -> void:
 	featured_id = str(d.get("featured_id", ""))
 	appraised = (d.get("appraised", {}) as Dictionary).duplicate()
 	claimed_sets = PackedStringArray(d.get("claimed_sets", []))
-	rng.state = int(d.get("rng_state", rng.state))
+	rng.state = int(str(d.get("rng_state", str(rng.state))))

@@ -101,6 +101,7 @@ The full story is in `docs/lessons/ops_board.md` (VoxelSpace ops board: 20 commi
 | A hitch was chased for a day through five wrong hypotheses without engine debug symbols | Log module + RVA for each frame of the stack at the suspicious call (GetModuleHandleExW FROM_ADDRESS) and map each RVA to the nearest `dumpbin /exports` entry: one run named the caller. |
 | Showcase captures pinned the universe clock for repeatable lighting, which also froze the field tick: batteries never charged and lamps never lit in any screenshot | Pin the presentation (sun position, sky) separately from the simulation clock; the sim keeps advancing under a pinned shot. A capture waits on the observed state it is meant to show (lamps lit), with a time fallback. |
 | Game data in `game/data/*.json` is not a Godot resource, so exports would have shipped without it (empty catalog) | Every export preset's `include_filter` lists the data globs; check an exported build shows real data before handing it over. |
+| A saved RNG state came back different after a JSON round trip (64-bit int stored as a double), so the next reliquary changed after a restart | Store 64-bit values (RNG state, big hashes) as strings in JSON, and test save-then-load by comparing the next random outcome. |
 
 ## Physics and gameplay
 
