@@ -38,7 +38,7 @@ jobs:
           # Same Playwright and bundled Chromium as the cloud sessions (the runner's own Chrome hung after engine start).
           npm install --no-save --no-audit --no-fund playwright@1.63.0 >/dev/null
           npx playwright install --only-shell chromium >/dev/null
-          SMOKE_TIMEOUT_MS=60000 node tools/web_smoke.mjs build/web
+          SMOKE_SHOT_B64=1 SMOKE_TIMEOUT_MS=60000 node tools/web_smoke.mjs build/web
       - uses: actions/upload-artifact@v4
         if: always()
         with:

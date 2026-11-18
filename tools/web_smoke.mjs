@@ -57,6 +57,7 @@ if (first < 0) problems.push(`game not ready within ${BOOT_LIMIT_MS / 1000} s`);
 for (const p of problems) console.log(p);
 if (problems.length) {
   console.log(`webgl2=${webgl2} page text: ${pageText}`);
+  if (process.env.SMOKE_SHOT_B64) console.log(`SHOT_B64 ${shot.toString('base64')}`);  // CI: artifacts may be unreachable
   console.log('last console lines:');
   for (const l of log.slice(-15)) console.log(`  ${l}`);
 }
