@@ -29,7 +29,9 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const t0 = Date.now();
 let banner = -1;
 const problems = [];
+const log = [];
 page.on('console', (m) => {
+  log.push(`${Date.now() - t0} ${m.type()} ${m.text().slice(0, 160)}`);
   if (banner < 0 && m.text().startsWith('Godot Engine')) banner = Date.now() - t0;
   if (m.type() === 'error') problems.push(`console error: ${m.text().slice(0, 200)}`);
 });
@@ -44,6 +46,7 @@ try {
   first = Date.now() - t0;
 } catch { /* reported below */ }
 await page.waitForTimeout(2000);  // errors that follow the first frame
+const webgl2 = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2')).catch(() => 'n/a');
 const shot = await page.screenshot({ path: join(dir, '..', 'web_smoke.png') });
 if (first >= 0 && shot.length < MIN_SHOT_BYTES) problems.push(`screen looks blank (${shot.length} bytes)`);
 await browser.close();
@@ -51,5 +54,9 @@ server.close();
 if (banner < 0) problems.push('no engine banner');
 if (first < 0) problems.push(`game not ready within ${BOOT_LIMIT_MS / 1000} s`);
 for (const p of problems) console.log(p);
+if (problems.length) {
+  console.log(`webgl2=${webgl2} last console lines:`);
+  for (const l of log.slice(-15)) console.log(`  ${l}`);
+}
 console.log(`WEB smoke ${problems.length ? 'FAIL' : 'PASS'} banner_ms=${banner} ready_ms=${first} shot_kb=${Math.round(shot.length / 1024)} problems=${problems.length}`);
 process.exit(problems.length ? 1 : 0);
