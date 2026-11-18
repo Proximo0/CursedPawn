@@ -46,6 +46,7 @@ try {
   first = Date.now() - t0;
 } catch { /* reported below */ }
 await page.waitForTimeout(2000);  // errors that follow the first frame
+const pageText = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 300)).catch(() => 'n/a');
 const webgl2 = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2')).catch(() => 'n/a');
 const shot = await page.screenshot({ path: join(dir, '..', 'web_smoke.png') });
 if (first >= 0 && shot.length < MIN_SHOT_BYTES) problems.push(`screen looks blank (${shot.length} bytes)`);
@@ -55,7 +56,8 @@ if (banner < 0) problems.push('no engine banner');
 if (first < 0) problems.push(`game not ready within ${BOOT_LIMIT_MS / 1000} s`);
 for (const p of problems) console.log(p);
 if (problems.length) {
-  console.log(`webgl2=${webgl2} last console lines:`);
+  console.log(`webgl2=${webgl2} page text: ${pageText}`);
+  console.log('last console lines:');
   for (const l of log.slice(-15)) console.log(`  ${l}`);
 }
 console.log(`WEB smoke ${problems.length ? 'FAIL' : 'PASS'} banner_ms=${banner} ready_ms=${first} shot_kb=${Math.round(shot.length / 1024)} problems=${problems.length}`);
