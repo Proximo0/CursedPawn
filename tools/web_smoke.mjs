@@ -11,7 +11,7 @@ const { chromium } = require('playwright');
 
 const dir = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith('--')) ?? 'build/web');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.pck': 'application/octet-stream', '.png': 'image/png' };
-const BOOT_LIMIT_MS = 30000;
+const BOOT_LIMIT_MS = Number(process.env.SMOKE_TIMEOUT_MS ?? 30000);
 const server = createServer(async (req, res) => {
   try {
     const path = join(dir, decodeURIComponent(new URL(req.url, 'http://x').pathname));

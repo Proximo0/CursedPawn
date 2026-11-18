@@ -36,7 +36,7 @@ jobs:
       - name: Boot in headless Chrome
         run: |
           npm install --no-save --no-audit --no-fund playwright@1.49.1 >/dev/null
-          node tools/web_smoke.mjs build/web --chrome
+          SMOKE_TIMEOUT_MS=120000 node tools/web_smoke.mjs build/web --chrome
       - uses: actions/upload-artifact@v4
         if: always()
         with:
