@@ -21,8 +21,9 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
   templates come from `tools/fetch_templates.py`, which range-reads only the ones needed out of the 1.28 GB file.
 - `tools/import.sh`: the shared import step; skipped when no file changed (`FORCE_IMPORT=1` to force). Every tool calls it.
 - CI: `checks` (unit, lint, sims, lab) and `web` (playable build; main deploys to GitHub Pages). Doc-only pushes skip both.
-- Run the game: `godot --path .` (add `-- --dev` for dev entries, `-- --stamp` to show the frame stamp). In the debug
-  shop, F12 reloads `game/data/*.json` and restarts the run on the same seed; F1 loads a tuning preset.
+- Run the game: `godot --path .` (add `-- --dev` for dev entries, `-- --stamp` to show the frame stamp). In the game
+  screen and the debug shop, F12 reloads `game/data/*.json` and restarts the run on the same seed; F1 loads a tuning
+  preset.
 
 ## Layout
 - `game/autoload/`: `Flags` (run flags, frame counter, state hash), `Controls` (input actions).

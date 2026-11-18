@@ -6,6 +6,7 @@ var args: Dictionary = {}
 var frame: int = 0
 var commands: int = 0  ## player commands issued; compare state hashes only on frames where this is 0
 var _hash_providers: Array[Callable] = []
+var _web_ready_sent: bool = false
 
 
 func _ready() -> void:
@@ -16,6 +17,16 @@ func _ready() -> void:
 
 func _physics_process(_delta: float) -> void:
 	frame += 1
+
+
+## Web build: sets window.cursedPawnReady on the first frame after the main scene is ready, whatever the main scene
+## is, so tools/web_smoke.mjs waits on game state instead of guessing from pixels.
+func _process(_delta: float) -> void:
+	if _web_ready_sent or get_tree().current_scene == null:
+		return
+	_web_ready_sent = true
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("window.cursedPawnReady = true", true)
 
 
 ## Captures, tests and gates: no saves, no writes to player data.
