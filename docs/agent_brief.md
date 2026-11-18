@@ -42,5 +42,5 @@ Money is whole coins (int). Time in the logic is day-clock minutes (`RunState.cl
   `dev_menu()`, `seed_value()`, `register_hash(callable)`, `state_hash()`.
 - `FrameStamp` (F10 or `--stamp`): frame, state hash and a 112-bit code strip on screen; decode a screenshot with
   `python3 tools/frame_code.py decode <png>`.
-- `RenderToggles` (F4 hide, F6 particles, F7 MSAA, F8 shadows, F9 3D text): for GPU glitch hunting.
+- `RenderToggles` (F4 hide, F6 particles, F7 MSAA, F8 2D light shadows, F9 2D lights): for GPU glitch hunting.
 - `Tuning.shared()` (`game/debug/tuning.gd`): live-tunable numbers. Read `Tuning.shared().<field>` each tick.

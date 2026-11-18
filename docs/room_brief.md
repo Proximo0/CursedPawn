@@ -1,4 +1,4 @@
-# Room brief: the 3D shop room (vertical slice, due 23 Nov 2026)
+# Room brief: the 3D shop room (RETIRED 18 Nov 2026, replaced by docs/room2d_brief.md)
 
 Goal: the one-room pawnshop the run plays in. Fixed camera, low-poly 3D rendered at low resolution with a limited
 palette and ordered dither (handoff: "one room, fixed camera, low-poly 3D at low resolution with palette and

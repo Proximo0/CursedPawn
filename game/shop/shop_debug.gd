@@ -2,7 +2,7 @@ class_name ShopDebug
 extends Control
 ## Playable debug shop: plain Control UI over RunState. Every action goes through RunRecording.drive.
 ## Keys: F1 tuning panel, F2 debug overlay, F5 save the recording to user://last_run.json, F11 room dither.
-## The 3D shop room (ShopRoom) draws behind the UI and follows the run's events.
+## The 2D shop room (ShopRoom2D) draws behind the UI and follows the run's events.
 ## The run in progress is saved after every action and resumed on launch; the end screen makes a pass-on link,
 ## and a gift link (in the web page URL or pasted) starts the next run with a friend's object.
 
@@ -40,7 +40,7 @@ var _wager_spin: SpinBox
 var _wager_btn: Button
 var _relics: RelicShopPanel
 var _rewarded: bool = false
-var _room: ShopRoom
+var _room: ShopRoom2D
 var _replay_btn: Button
 var _replay_run: RunState  ## non-null while an instant replay plays
 var _replay_cmds: Array[Dictionary] = []
@@ -128,7 +128,7 @@ func _ready() -> void:
 	add_child(_overlay)
 	add_child(FrameStamp.new())
 	add_child(RenderToggles.new())
-	_room = ShopRoom.new()
+	_room = ShopRoom2D.new()
 	add_child(_room)
 	_relics = RelicShopPanel.new()
 	add_child(_relics)
@@ -396,7 +396,7 @@ func _make_theme() -> Theme:
 		th.set_stylebox(st, "Button", sb)
 	th.set_color("font_disabled_color", "Button", Color(0.5, 0.5, 0.55))
 	var panel := StyleBoxFlat.new()
-	panel.bg_color = Color(0.18, 0.16, 0.22, 0.82)  ## the 3D shop room shows through
+	panel.bg_color = Color(0.18, 0.16, 0.22, 0.82)  ## the shop room shows through
 	panel.set_content_margin_all(10.0)
 	th.set_stylebox("panel", "PanelContainer", panel)
 	var fill := StyleBoxFlat.new()
