@@ -36,6 +36,10 @@ const FIELDS: Array = [
 	["wake_dread_keep", 0.5, 0.0, 1.0, 0.05, "Curses", "Fraction of Dread left after a wake."],
 	["wake_break_chance", 0.5, 0.0, 1.0, 0.05, "Curses", "Chance a wake breaks one held object."],
 	["wake_close_chance", 0.6, 0.0, 1.0, 0.05, "Curses", "Chance a wake locks the door and ends the day early."],
+	["box_rare_odds", 0.25, 0.0, 1.0, 0.01, "Estate boxes", "Chance an estate box holds a rare curio (shown to the player before buying)."],
+	["box_legendary_odds", 0.05, 0.0, 1.0, 0.01, "Estate boxes", "Chance an estate box holds a legendary curio (shown before buying)."],
+	["box_pity", 30, 1, 200, 1, "Estate boxes", "A legendary is guaranteed by this many boxes without one."],
+	["box_per_won_run", 1, 0, 10, 1, "Estate boxes", "Free estate boxes for surviving a run (every curio can be earned in play)."],
 	["secs_per_customer", 25.0, 1.0, 120.0, 1.0, "Pacing", "Estimated real seconds a player spends per customer (lab run length)."],
 	["secs_per_inspect", 5.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per tool use."],
 	["secs_per_haggle", 4.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per offer."],
@@ -70,6 +74,10 @@ var wake_threshold: float
 var wake_dread_keep: float
 var wake_close_chance: float
 var wake_break_chance: float
+var box_rare_odds: float
+var box_legendary_odds: float
+var box_pity: float
+var box_per_won_run: float
 var secs_per_customer: float
 var secs_per_inspect: float
 var secs_per_haggle: float

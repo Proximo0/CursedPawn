@@ -36,3 +36,11 @@ the lab's estimate of real seconds per action, used for the run-length target.
 ## Lab
 `tests/lab/lab.tscn` (in `check_all` and CI): 300 runs per bot. FAIL on stuck runs, replay or restore divergence, or a
 curse with no tell. WARN on the balance targets in `docs/handoff.md`.
+
+## Estate boxes (paid gacha, US-only design, decided 18 Nov 2026)
+`CurioCollection` (`game/logic/curio_collection.gd`): `create(seed, tuning)`, `odds() -> {common, rare, legendary}`
+(show before every purchase), `pity_left()`, `add_boxes(n)` (purchase or reward), `reward_run(run)`, `open_box() ->
+{id, name, rarity, new, pity}`, `to_dict()`/`from_dict()`. Curios (`game/data/curios.json`, placeholder) are cosmetic:
+shop decor and a collection book. Never tradeable, sellable or convertible to money, and they never change run
+numbers. New curios come before duplicates. Payments: Steam microtransactions; the web store needs a payment
+provider that allows paid random items (Paddle's AUP bans "games of chance").

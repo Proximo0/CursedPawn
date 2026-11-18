@@ -1,0 +1,12 @@
+[
+	{"id": "curio_01", "name": "Placeholder curio 1", "rarity": "common"},
+	{"id": "curio_02", "name": "Placeholder curio 2", "rarity": "common"},
+	{"id": "curio_03", "name": "Placeholder curio 3", "rarity": "common"},
+	{"id": "curio_04", "name": "Placeholder curio 4", "rarity": "common"},
+	{"id": "curio_05", "name": "Placeholder curio 5", "rarity": "common"},
+	{"id": "curio_06", "name": "Placeholder curio 6", "rarity": "common"},
+	{"id": "curio_07", "name": "Placeholder curio 7", "rarity": "rare"},
+	{"id": "curio_08", "name": "Placeholder curio 8", "rarity": "rare"},
+	{"id": "curio_09", "name": "Placeholder curio 9", "rarity": "rare"},
+	{"id": "curio_10", "name": "Placeholder curio 10", "rarity": "legendary"}
+]
