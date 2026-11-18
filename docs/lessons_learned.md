@@ -100,6 +100,7 @@ The full story is in `docs/lessons/ops_board.md` (VoxelSpace ops board: 20 commi
 | Screenshot runs measured a 45-90 ms hitch that was the editor compiling a missing shader permutation, not the game | After every camera cut a capture waits in a warm phase: at least N frames, then M quiet frames (no pending shader or asset compiles, no render-state churn), with a timeout, and logs the wait. Measure only after it. |
 | A hitch was chased for a day through five wrong hypotheses without engine debug symbols | Log module + RVA for each frame of the stack at the suspicious call (GetModuleHandleExW FROM_ADDRESS) and map each RVA to the nearest `dumpbin /exports` entry: one run named the caller. |
 | Showcase captures pinned the universe clock for repeatable lighting, which also froze the field tick: batteries never charged and lamps never lit in any screenshot | Pin the presentation (sun position, sky) separately from the simulation clock; the sim keeps advancing under a pinned shot. A capture waits on the observed state it is meant to show (lamps lit), with a time fallback. |
+| Game data in `game/data/*.json` is not a Godot resource, so exports would have shipped without it (empty catalog) | Every export preset's `include_filter` lists the data globs; check an exported build shows real data before handing it over. |
 
 ## Physics and gameplay
 
