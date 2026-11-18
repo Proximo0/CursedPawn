@@ -52,3 +52,10 @@ Washington gambling = paying + chance + a thing of value; each way to get a curi
 - Tarot wager (`RunState`): `{t: "wager", amount}` up to `max_wager()`; event `wager {card, text, stake, payout,
   dread}`. Deck in `game/data/tarot.json`; `Catalog.tarot_return()` must stay below 1. Run cash is never sold for
   real money and nothing from the store changes a run.
+
+## Pass it on and saved runs
+- `PassLink.pick_worst(run)` picks the item to pass on (most dread among cursed, else cheapest). `PassLink.encode(item,
+  run, handle)` makes the code; `PassLink.url(base, code)` puts it in the fragment (`#gift=`). `PassLink.decode(code,
+  cat, tun)` returns a gift for `RunState.start(..., gift)` or {}; value is re-derived from the receiver's catalog.
+  Items may carry `history`: [[handle, night reached, wakes, won], ...], newest last, at most 6.
+- `PlayerProfile.save_run(run)` after every command (clears the file when the run is over), `load_run(cat)` on boot.

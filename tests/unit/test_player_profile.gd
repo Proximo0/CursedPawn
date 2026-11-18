@@ -45,3 +45,41 @@ func test_newer_version_is_not_loaded() -> void:
 	f.close()
 	assert_false(PlayerProfile.load_into(pp_store(1), PP_PATH))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+
+
+func test_run_in_progress_round_trips_exactly() -> void:
+	var path: String = "user://test_run_unit.save"
+	var cat := Catalog.load_default()
+	var a := RunState.new()
+	a.start(42, cat, Tuning.new())
+	var bot := ShopBot.new()
+	for i: int in range(12):
+		a.apply(bot.decide(a))
+	assert_eq(PlayerProfile.save_run(a, path), OK)
+	var b: RunState = PlayerProfile.load_run(cat, path)
+	assert_true(b != null)
+	assert_eq(b.state_hash(), a.state_hash(), "identical state")
+	for i: int in range(20):
+		if a.is_over():
+			break
+		var cmd: Dictionary = bot.decide(a)
+		assert_eq(b.apply(cmd), a.apply(cmd), "same events after load")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func test_finished_run_clears_the_save() -> void:
+	var path: String = "user://test_run_unit2.save"
+	var cat := Catalog.load_default()
+	var a := RunState.new()
+	a.start(1, cat, Tuning.new())
+	assert_eq(PlayerProfile.save_run(a, path), OK)
+	assert_true(FileAccess.file_exists(path))
+	a.phase = RunState.PHASE_OVER
+	PlayerProfile.save_run(a, path)
+	assert_false(FileAccess.file_exists(path))
+	assert_true(PlayerProfile.load_run(cat, path) == null)
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string("junk")
+	f.close()
+	assert_true(PlayerProfile.load_run(cat, path) == null, "junk is ignored")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

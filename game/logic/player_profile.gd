@@ -28,3 +28,38 @@ static func load_into(store: RelicStore, path: String = PATH) -> bool:
 		return false
 	store.from_dict(parsed["store"])
 	return true
+
+
+## The run in progress, saved after every command so closing the game never loses a night. Binary Variant data
+## (var_to_bytes): keeps ints and the 64-bit RNG state exact, and bytes_to_var never builds objects.
+const RUN_PATH: String = "user://run.save"
+
+
+static func save_run(run: RunState, path: String = RUN_PATH) -> Error:
+	if run.phase == RunState.PHASE_OVER:
+		return clear_run(path)
+	var tmp: String = path + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	if f == null:
+		return FileAccess.get_open_error()
+	f.store_buffer(var_to_bytes({"version": VERSION, "run": run.snapshot()}))
+	f.close()
+	return DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path))
+
+
+## A saved run restored against `cat`, or null when there is none or it is unreadable.
+static func load_run(cat: Catalog, path: String = RUN_PATH) -> RunState:
+	if not FileAccess.file_exists(path):
+		return null
+	var d: Variant = bytes_to_var(FileAccess.get_file_as_bytes(path))
+	if not d is Dictionary or int(d.get("version", 0)) > VERSION or not d.get("run") is Dictionary:
+		return null
+	var run := RunState.new()
+	run.restore(d["run"], cat)
+	return run
+
+
+static func clear_run(path: String = RUN_PATH) -> Error:
+	if not FileAccess.file_exists(path):
+		return OK
+	return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
