@@ -10,14 +10,66 @@ signal changed(field: String, value: float)
 
 ## [field, default, min, max, step, group, doc]. The order here is the order a tuning panel shows.
 const FIELDS: Array = [
-	["gravity", 18.0, 5.0, 40.0, 0.5, "World", "Gravity, m/s². Real is 9.8; higher feels snappier, less floaty."],
-	["move_speed", 6.0, 1.0, 20.0, 0.25, "Movement", "Top move speed, m/s."],
+	["nights", 5.0, 1.0, 10.0, 1.0, "Run", "Nights in one run; survive them all to win."],
+	["start_cash", 100.0, 0.0, 1000.0, 5.0, "Run", "Cash at the start of a run."],
+	["rent_base", 40.0, 0.0, 500.0, 5.0, "Run", "Rent due at the end of night 1."],
+	["rent_growth", 1.5, 1.0, 3.0, 0.05, "Run", "Rent multiplier per night (night n pays base * growth^(n-1))."],
+	["day_minutes", 240.0, 60.0, 720.0, 10.0, "Clock", "Shop minutes per day on the day clock."],
+	["customer_minutes", 30.0, 5.0, 120.0, 5.0, "Clock", "Day-clock minutes each customer takes before any tool or haggle."],
+	["inspect_minutes", 15.0, 0.0, 60.0, 1.0, "Clock", "Day-clock minutes per tool use (UV lamp, scale, listen, touch)."],
+	["haggle_minutes", 5.0, 0.0, 30.0, 1.0, "Clock", "Day-clock minutes per offer."],
+	["seller_share", 0.6, 0.0, 1.0, 0.05, "Customers", "Chance a customer is selling (when you hold stock); otherwise buying."],
+	["buyer_match_chance", 0.6, 0.0, 1.0, 0.05, "Customers", "Chance a buyer wants a category you hold."],
+	["patience_base", 3.0, 1.0, 10.0, 1.0, "Customers", "Offers a seller takes before walking out (plus 0-1)."],
+	["value_spread", 0.25, 0.0, 1.0, 0.05, "Customers", "Random spread of an object's true value around its catalog value."],
+	["seller_reserve_frac", 0.55, 0.1, 1.5, 0.05, "Customers", "A seller's lowest price, as a fraction of true value."],
+	["seller_ask_markup", 1.4, 1.0, 3.0, 0.05, "Customers", "A seller's opening ask over their lowest price."],
+	["buyer_pay_frac", 1.25, 0.5, 3.0, 0.05, "Customers", "What a buyer pays, as a fraction of the item's true value."],
+	["value_noise", 0.5, 0.0, 1.0, 0.05, "Inspect", "Error of the uninspected value estimate (fraction of value)."],
+	["inspect_noise_cut", 0.6, 0.1, 1.0, 0.05, "Inspect", "Each tool used multiplies the estimate error by this."],
+	["cursed_share", 0.3, 0.0, 1.0, 0.05, "Curses", "Chance a seller's object is cursed."],
+	["cursed_value_mult", 1.8, 1.0, 5.0, 0.1, "Curses", "True-value multiplier for cursed objects (they pay best)."],
+	["dread_on_buy", 1.0, 0.0, 5.0, 0.1, "Curses", "Dread gained when buying a cursed object, times the curse's dread."],
+	["dread_per_night", 1.0, 0.0, 5.0, 0.1, "Curses", "Dread per held cursed object each night, times the curse's dread."],
+	["wake_threshold", 4.0, 1.0, 20.0, 0.5, "Curses", "Dread at which something wakes."],
+	["wake_dread_keep", 0.5, 0.0, 1.0, 0.05, "Curses", "Fraction of Dread left after a wake."],
+	["wake_close_chance", 0.3, 0.0, 1.0, 0.05, "Curses", "Chance a wake locks the door and ends the day early."],
+	["secs_per_customer", 25.0, 1.0, 120.0, 1.0, "Pacing", "Estimated real seconds a player spends per customer (lab run length)."],
+	["secs_per_inspect", 5.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per tool use."],
+	["secs_per_haggle", 4.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per offer."],
+	["secs_per_night", 30.0, 0.0, 300.0, 5.0, "Pacing", "Estimated real seconds of night-end and rent screens."],
 ]
 
 static var _shared: Tuning = null
 
-var gravity: float
-var move_speed: float
+var nights: float
+var start_cash: float
+var rent_base: float
+var rent_growth: float
+var day_minutes: float
+var customer_minutes: float
+var inspect_minutes: float
+var haggle_minutes: float
+var seller_share: float
+var buyer_match_chance: float
+var patience_base: float
+var value_spread: float
+var seller_reserve_frac: float
+var seller_ask_markup: float
+var buyer_pay_frac: float
+var value_noise: float
+var inspect_noise_cut: float
+var cursed_share: float
+var cursed_value_mult: float
+var dread_on_buy: float
+var dread_per_night: float
+var wake_threshold: float
+var wake_dread_keep: float
+var wake_close_chance: float
+var secs_per_customer: float
+var secs_per_inspect: float
+var secs_per_haggle: float
+var secs_per_night: float
 
 
 func _init() -> void:

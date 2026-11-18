@@ -1,0 +1,18 @@
+[
+	{"id": "music_box", "name": "Music box", "category": "toy", "value": 40},
+	{"id": "tin_soldier", "name": "Tin soldier", "category": "toy", "value": 20},
+	{"id": "porcelain_doll", "name": "Porcelain doll", "category": "toy", "value": 60},
+	{"id": "silver_locket", "name": "Silver locket", "category": "jewelry", "value": 70},
+	{"id": "signet_ring", "name": "Signet ring", "category": "jewelry", "value": 90},
+	{"id": "pocket_watch", "name": "Pocket watch", "category": "jewelry", "value": 110},
+	{"id": "violin", "name": "Violin", "category": "instrument", "value": 120},
+	{"id": "harmonica", "name": "Harmonica", "category": "instrument", "value": 25},
+	{"id": "hand_bell", "name": "Hand bell", "category": "instrument", "value": 35},
+	{"id": "ledger", "name": "Old ledger", "category": "book", "value": 30},
+	{"id": "atlas", "name": "Atlas", "category": "book", "value": 55},
+	{"id": "diary", "name": "Locked diary", "category": "book", "value": 45},
+	{"id": "hand_mirror", "name": "Hand mirror", "category": "relic", "value": 65},
+	{"id": "candlestick", "name": "Candlestick", "category": "relic", "value": 30},
+	{"id": "oil_portrait", "name": "Oil portrait", "category": "relic", "value": 100},
+	{"id": "brass_key", "name": "Brass key", "category": "relic", "value": 15}
+]

@@ -29,13 +29,12 @@ contracts other modules already provide. Use the contracts; do not change them.
   4. Anything others must know, including lines the lead must add to files you do not own.
 
 ## Units and axes
-<!-- Fill in: units, axes, physics rate, collision layers. Example (Sandblood): metres/kg/s, Y up, -Z forward,
-     60 Hz Jolt, layers 1 arena, 2 bodies, 3 weapons. -->
+Money is whole coins (int). Time in the logic is day-clock minutes (`RunState.clock`), never wall clock.
+3D (later): metres, Y up, -Z forward, 60 Hz physics, one room with a fixed camera.
 
 ## Contracts
-<!-- One section per module other workers depend on: class, readable fields, signals, methods, data keys, taken
-     input keys. When a build step has its own brief (`docs/<step>_brief.md`, see `docs/playbook.md`), point at it
-     here instead of copying it. Workers code against the contract at the same time; they never change it. -->
+- The shop run (`Catalog`, `RunState`, `RunRecording`, `ShopBot`): `docs/core_brief.md`.
+- Taken input keys: F10 frame stamp, F4 and F6-F9 render toggles, Escape pause.
 
 ## Debug layer already provided
 - `Flags` (`game/autoload/flags.gd`): `Flags.args` (user args after `--`), `frame`, `commands`, `is_scripted_run()`,

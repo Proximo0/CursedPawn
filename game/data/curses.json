@@ -1,0 +1,10 @@
+[
+	{"id": "lucky_paw", "name": "Lucky paw", "dread": 1.0, "sale_mult": 1.5, "imposter_every": 0,
+		"tells": {"touch": "Warm, like something alive.", "listen": "A faint scratching inside."}},
+	{"id": "not_who_they_seem", "name": "Not who they seem", "dread": 1.0, "sale_mult": 1.0, "imposter_every": 3,
+		"tells": {"uv": "Fingerprints that are not quite human."}},
+	{"id": "placeholder_c", "name": "Placeholder curse C", "dread": 1.5, "sale_mult": 1.2, "imposter_every": 0,
+		"tells": {"scale": "It weighs a little more every time."}},
+	{"id": "placeholder_d", "name": "Placeholder curse D", "dread": 0.5, "sale_mult": 1.1, "imposter_every": 0,
+		"tells": {"uv": "A handprint glows and fades.", "listen": "Breathing, very slow."}}
+]
