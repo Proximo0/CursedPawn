@@ -15,6 +15,7 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
 - `tools/run_sims.sh`: regression sims (`tests/sim/sim_*.gd`, listed in `tests/sim/sim_suite.gd`).
 - `tools/check_all.sh`: everything at once (unit, sims, lint, plus the bot and lab if their scenes exist).
 - `tools/export_windows.sh`: Windows build zip in `build/`. `tools/export_android.sh`: debug APK in `build/`.
+- `tools/fetch_web_template.sh`: fetch the 2D-only web engine (needed before a Web export; 7.3 MB download vs 9.9 MB).
 - Run the game: `godot --path .` (add `-- --dev` for dev entries, `-- --stamp` to show the frame stamp).
 
 ## Layout

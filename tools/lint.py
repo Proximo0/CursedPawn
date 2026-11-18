@@ -11,6 +11,7 @@ Rules:
   func-return-type  named func without "-> type"
   func-param-type   named func parameter without a ": type"
   class-var-type    class-level var without a type or ":="
+  no-deprecated     APIs removed from the web engine (built with deprecated=no): Image.create(
 
 Prints "path:line rule message" per problem, then "LINT problems=<n>".
 Exits 1 when n > 0.
@@ -28,6 +29,8 @@ PURE_PREFIXES = ("game/logic/",)
 PRINT_RE = re.compile(r"(?<![\w.])print\s*\(")
 RANDOM_RE = re.compile(r"(?<![\w.])(randf|randi|randomize|randf_range|randi_range)\s*\(")
 CLOCK_RE = re.compile(r"\b(?:Time|OS)\.get_(?:ticks|unix)\w*")
+# The 2D web template is compiled with deprecated=no, so these fail only in the browser. Add names as found.
+DEPRECATED_RE = re.compile(r"\bImage\.create\s*\(")
 FUNC_RE = re.compile(r"^[ \t]*(?:static[ \t]+)?func[ \t]+(\w+)[ \t]*\(", re.M)
 PARAM_TYPED_RE = re.compile(r"^\s*\w+\s*:\s*\S")
 CLASS_VAR_RE = re.compile(r"^(?:@\w+(?:\([^)]*\))?\s+)*(?:static\s+)?var\s+\w+(.*)$")
@@ -102,6 +105,8 @@ def check_file(rel: str, source: str, problems: list) -> None:
             problems.append((rel, lineno, "no-print", "print() outside game/debug/; use a debug helper"))
         if RANDOM_RE.search(code):
             problems.append((rel, lineno, "no-random", "global random call; use a seeded RandomNumberGenerator"))
+        if DEPRECATED_RE.search(code):
+            problems.append((rel, lineno, "no-deprecated", "deprecated API (missing in the web engine); use Image.create_empty"))
         if pure and CLOCK_RE.search(code):
             problems.append((rel, lineno, "no-clock", "pure logic must not read the clock; take delta or a tick"))
         if code[:1] not in (" ", "\t"):

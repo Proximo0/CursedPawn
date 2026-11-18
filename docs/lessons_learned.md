@@ -176,3 +176,4 @@ The full story is in `docs/lessons/ops_board.md` (VoxelSpace ops board: 20 commi
 | An APK has no folder beside it, so a credentials file copied next to the build never reached the phone | Put the git-ignored credentials file in the Android preset's `include_filter`; the export script warns when it is missing. |
 | A rendering bug survived many guesses because every probe read game-thread state | Write one probe that reads what the renderer actually published (proxy, draw masks, ranges) before guessing again; plugin ids built from names can collide silently. |
 | A diagnostic probe traced the previous view | Run probes a few frames after the camera settles and log the camera they used. |
+| The 2D-only web engine (built with `deprecated=no`) failed in the browser on `Image.create()` while desktop and tests passed | Use `Image.create_empty`; lint rule `no-deprecated` catches it; after a template change, load the web build in headless Chromium before shipping. |

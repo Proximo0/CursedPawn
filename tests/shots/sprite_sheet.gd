@@ -9,7 +9,7 @@ const SHEET_W: int = 1320
 
 
 func _initialize() -> void:
-	var sheet: Image = Image.create(SHEET_W, 1000, false, Image.FORMAT_RGBA8)
+	var sheet: Image = Image.create_empty(SHEET_W, 1000, false, Image.FORMAT_RGBA8)
 	sheet.fill(BG)
 	var y: int = 4
 	var objs: Array = _load("res://game/data/objects.json")

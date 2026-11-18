@@ -335,7 +335,7 @@ static func _sk_col(c: int) -> Color:
 
 
 static func _sk_new(w: int, h: int) -> Image:
-	var g: Image = Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var g: Image = Image.create_empty(w, h, false, Image.FORMAT_RGBA8)
 	g.fill(Color(0, 0, 0, 0))
 	return g
 
