@@ -55,9 +55,10 @@ func test_run_in_progress_round_trips_exactly() -> void:
 	var bot := ShopBot.new()
 	for i: int in range(12):
 		a.apply(bot.decide(a))
-	assert_eq(PlayerProfile.save_run(a, path), OK)
-	var b: RunState = PlayerProfile.load_run(cat, path)
-	assert_true(b != null)
+	assert_eq(PlayerProfile.save_run(a, {"seed": 42}, path), OK)
+	var loaded: Dictionary = PlayerProfile.load_run(cat, path)
+	assert_eq(loaded["rec"], {"seed": 42}, "recording kept")
+	var b: RunState = loaded["run"]
 	assert_eq(b.state_hash(), a.state_hash(), "identical state")
 	for i: int in range(20):
 		if a.is_over():
@@ -72,14 +73,14 @@ func test_finished_run_clears_the_save() -> void:
 	var cat := Catalog.load_default()
 	var a := RunState.new()
 	a.start(1, cat, Tuning.new())
-	assert_eq(PlayerProfile.save_run(a, path), OK)
+	assert_eq(PlayerProfile.save_run(a, {}, path), OK)
 	assert_true(FileAccess.file_exists(path))
 	a.phase = RunState.PHASE_OVER
-	PlayerProfile.save_run(a, path)
+	PlayerProfile.save_run(a, {}, path)
 	assert_false(FileAccess.file_exists(path))
-	assert_true(PlayerProfile.load_run(cat, path) == null)
+	assert_true(PlayerProfile.load_run(cat, path).is_empty())
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	f.store_string("junk")
 	f.close()
-	assert_true(PlayerProfile.load_run(cat, path) == null, "junk is ignored")
+	assert_true(PlayerProfile.load_run(cat, path).is_empty(), "junk is ignored")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

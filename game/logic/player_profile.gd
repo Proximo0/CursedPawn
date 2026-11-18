@@ -35,28 +35,30 @@ static func load_into(store: RelicStore, path: String = PATH) -> bool:
 const RUN_PATH: String = "user://run.save"
 
 
-static func save_run(run: RunState, path: String = RUN_PATH) -> Error:
+## `rec` is the run's recording (RunRecording.to_dict()) so instant replay survives a restart.
+static func save_run(run: RunState, rec: Dictionary = {}, path: String = RUN_PATH) -> Error:
 	if run.phase == RunState.PHASE_OVER:
 		return clear_run(path)
 	var tmp: String = path + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		return FileAccess.get_open_error()
-	f.store_buffer(var_to_bytes({"version": VERSION, "run": run.snapshot()}))
+	f.store_buffer(var_to_bytes({"version": VERSION, "run": run.snapshot(), "rec": rec}))
 	f.close()
 	return DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path))
 
 
-## A saved run restored against `cat`, or null when there is none or it is unreadable.
-static func load_run(cat: Catalog, path: String = RUN_PATH) -> RunState:
+## A saved run restored against `cat`: {run: RunState, rec: Dictionary}, or {} when there is none or it is
+## unreadable.
+static func load_run(cat: Catalog, path: String = RUN_PATH) -> Dictionary:
 	if not FileAccess.file_exists(path):
-		return null
+		return {}
 	var d: Variant = bytes_to_var(FileAccess.get_file_as_bytes(path))
 	if not d is Dictionary or int(d.get("version", 0)) > VERSION or not d.get("run") is Dictionary:
-		return null
+		return {}
 	var run := RunState.new()
 	run.restore(d["run"], cat)
-	return run
+	return {"run": run, "rec": d.get("rec", {}) if d.get("rec") is Dictionary else {}}
 
 
 static func clear_run(path: String = RUN_PATH) -> Error:

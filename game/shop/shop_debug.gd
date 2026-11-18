@@ -2,6 +2,8 @@ class_name ShopDebug
 extends Control
 ## Playable debug shop: plain Control UI over RunState. Every action goes through RunRecording.drive.
 ## Keys: F1 tuning panel, F2 debug overlay, F5 save the recording to user://last_run.json.
+## The run in progress is saved after every action and resumed on launch; the end screen makes a pass-on link,
+## and a gift link (in the web page URL or pasted) starts the next run with a friend's object.
 
 const LOG_LINES: int = 12
 const WAKE_SECS: float = 2.0
@@ -34,6 +36,9 @@ var _wager_spin: SpinBox
 var _wager_btn: Button
 var _relics: RelicShopPanel
 var _rewarded: bool = false
+var _pass_edit: LineEdit
+var _handle_edit: LineEdit
+var _gift_edit: LineEdit
 
 
 ## One event Dictionary as a readable log line.
@@ -112,7 +117,39 @@ func _ready() -> void:
 	_relics = RelicShopPanel.new()
 	add_child(_relics)
 	catalog = Catalog.load_default()
-	new_run(Flags.seed_value())
+	if not Flags.is_scripted_run():
+		_gift_edit.text = _link_in_page()
+		var saved: Dictionary = PlayerProfile.load_run(catalog)
+		if not saved.is_empty():
+			_resume(saved["run"], RunRecording.from_dict(saved["rec"]))
+			return
+	new_run(Flags.seed_value(), _gift_from_text(_gift_edit.text))
+
+
+## A gift code in the page URL (web build): "#gift=..." -> the code, else "".
+func _link_in_page() -> String:
+	if not OS.has_feature("web"):
+		return ""
+	var hash_text: String = str(JavaScriptBridge.eval("window.location.hash", true))
+	return PassLink.code_from_text(hash_text) if hash_text.begins_with(PassLink.FRAGMENT_KEY) else ""
+
+
+func _gift_from_text(text: String) -> Dictionary:
+	var code: String = PassLink.code_from_text(text)
+	return {} if code == "" else PassLink.decode(code, catalog, Tuning.shared())
+
+
+## Picks up a run saved by a previous launch.
+func _resume(saved_run: RunState, saved_rec: RunRecording) -> void:
+	run = saved_run
+	rec = saved_rec
+	seed_now = run.seed_used
+	_overlay.run = run
+	log_lines.clear()
+	_end_box.visible = false
+	_rewarded = false
+	_log("Welcome back. Night %d, the shop is as you left it." % run.night)
+	_refresh()
 
 
 func _process(delta: float) -> void:
@@ -131,11 +168,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-func new_run(seed_in: int) -> void:
+func new_run(seed_in: int, gift: Dictionary = {}) -> void:
 	seed_now = seed_in
 	run = RunState.new()
 	_overlay.run = run
-	rec = RunRecording.begin(run, seed_in, catalog, Tuning.shared())
+	rec = RunRecording.begin(run, seed_in, catalog, Tuning.shared(), gift)
 	log_lines.clear()
 	_end_box.visible = false
 	_rewarded = false
@@ -150,6 +187,8 @@ func act(cmd: Dictionary) -> void:
 	if run.is_over():
 		return
 	_on_events(rec.drive(run, cmd))
+	if not Flags.is_scripted_run():
+		PlayerProfile.save_run(run, rec.to_dict())
 	_refresh()
 
 
@@ -199,6 +238,18 @@ func _refresh() -> void:
 		_end_box.visible = true
 		_end_label.text = "RUN WON, cash %d" % run.cash if run.won else "RUN LOST on night %d" % run.night
 		_end_label.add_theme_color_override("font_color", Color(0.5, 0.9, 0.5) if run.won else Color(1.0, 0.35, 0.35))
+		_pass_edit.text = pass_text()
+
+
+## What the end screen offers to pass on: a share link on the web, the bare code elsewhere.
+func pass_text() -> String:
+	var code: String = PassLink.encode(PassLink.pick_worst(run), run, _handle_edit.text)
+	if code == "":
+		return "Nothing left to pass on."
+	if OS.has_feature("web"):
+		var page: String = str(JavaScriptBridge.eval("window.location.origin + window.location.pathname", true))
+		return PassLink.url(page, code)
+	return code
 
 
 func _rebuild_customer() -> void:
@@ -426,9 +477,28 @@ func _build_ui() -> void:
 	add_child(_wake_label)
 	_end_box = VBoxContainer.new()
 	_end_box.set_anchors_preset(Control.PRESET_CENTER)
-	_end_box.position = Vector2(-120, -60)
+	_end_box.position = Vector2(-240, -140)
 	_end_label = _label_of("", 32)
 	_end_box.add_child(_end_label)
+	_end_box.add_child(_label_of("Pass your worst object to a friend. Sign it (optional):", 16))
+	_handle_edit = LineEdit.new()
+	_handle_edit.max_length = PassLink.MAX_HANDLE
+	_handle_edit.placeholder_text = "your name"
+	_handle_edit.text_changed.connect(func(_t: String) -> void: _pass_edit.text = pass_text())
+	_end_box.add_child(_handle_edit)
+	var pass_row := HBoxContainer.new()
+	_pass_edit = LineEdit.new()
+	_pass_edit.editable = false
+	_pass_edit.custom_minimum_size = Vector2(420, 0)
+	pass_row.add_child(_pass_edit)
+	var copy := Button.new()
+	copy.text = "Copy"
+	copy.pressed.connect(func() -> void: DisplayServer.clipboard_set(_pass_edit.text))
+	pass_row.add_child(copy)
+	_end_box.add_child(pass_row)
+	_gift_edit = LineEdit.new()
+	_gift_edit.placeholder_text = "Paste a friend's link to start with their object"
+	_end_box.add_child(_gift_edit)
 	var again := Button.new()
 	again.text = "New run"
 	again.pressed.connect(_on_new_run)
@@ -438,4 +508,12 @@ func _build_ui() -> void:
 
 
 func _on_new_run() -> void:
-	new_run(seed_now + 1)
+	var gift: Dictionary = _gift_from_text(_gift_edit.text)
+	var tried: bool = _gift_edit.text.strip_edges() != ""
+	_gift_edit.text = ""
+	new_run(seed_now + 1, gift)
+	if tried and gift.is_empty():
+		_log("That link didn't take. The object is still out there somewhere.")
+	elif not gift.is_empty():
+		_log("A parcel arrives: %s." % gift["name"])
+	_refresh()

@@ -52,3 +52,25 @@ func test_wager_through_run() -> void:
 	var rec := RunRecording.begin(run, 5, Catalog.load_default(), Tuning.new())
 	var ev: Array[Dictionary] = rec.drive(run, {"t": "wager", "amount": maxi(1, run.max_wager())})
 	assert_true(ev.size() > 0 and ShopDebug.sd_event_text(ev[0]) != "" and not ShopDebug.sd_event_text(ev[0]).begins_with("Unknown"))
+
+
+func test_end_screen_passes_on_and_gift_starts_next_run() -> void:
+	var tree: SceneTree = Engine.get_main_loop() as SceneTree
+	var sd: ShopDebug = (load("res://game/shop/shop_debug.tscn") as PackedScene).instantiate()
+	tree.root.add_child(sd)
+	var bot := ShopBot.new(ShopBot.GREEDY)
+	var guard: int = 0
+	while not sd.run.is_over() and guard < RunState.MAX_COMMANDS:
+		sd.act(bot.decide(sd.run))
+		guard += 1
+	sd.run.inventory.assign([{"uid": 99, "id": sd.catalog.objects[0]["id"], "name": sd.catalog.objects[0]["name"],
+		"category": sd.catalog.objects[0]["category"], "value": 10, "curse": sd.catalog.curses[0]["id"], "est": 5,
+		"tells": 0}])
+	var text: String = sd.pass_text()
+	assert_true(text.begins_with(PassLink.CODE_VERSION), "a code on desktop")
+	sd._gift_edit.text = text
+	sd._on_new_run()
+	assert_eq(sd.run.inventory.size(), 1, "gift in the new shop")
+	assert_eq(sd.run.inventory[0]["curse"], sd.catalog.curses[0]["id"])
+	assert_eq(sd.rec.gift["id"], sd.catalog.objects[0]["id"], "recorded for replay")
+	sd.free()
