@@ -37,6 +37,11 @@ var down_id: String = ""
 var room: ShopRoom2D
 var hud: UiHud
 var sfx: SfxPlayer  ## procedural sound (game/audio)
+var settings: TsSettings = TsSettings.shared()
+var hints: TsHintTracker
+var pause: PauseMenu
+var title: TitleScreen
+var _saved: Dictionary = {}  ## a run saved by an earlier launch, offered as Continue on the title
 
 var _overlay: DebugOverlay
 var _relics: RelicShopPanel
@@ -117,13 +122,45 @@ func _ready() -> void:
 	add_child(_relics)
 	_build_hud()
 	catalog = Catalog.load_default()
+	hints = TsHintTracker.new(settings)
+	settings.apply(sfx, room)
+	pause = PauseMenu.new()
+	pause.sfx = sfx
+	pause.room = room
+	add_child(pause)
+	pause.quit_to_title.connect(_show_title)
+	# Scripted runs (tests, captures) skip the title and play straight away.
+	new_run(Flags.seed_value(), {})
 	if not Flags.is_scripted_run():
 		gift_text = _link_in_page()
-		var saved: Dictionary = PlayerProfile.load_run(catalog)
-		if not saved.is_empty():
-			_resume(saved["run"], RunRecording.from_dict(saved["rec"]))
-			return
-	new_run(Flags.seed_value(), _gift_from_text(gift_text))
+		_saved = PlayerProfile.load_run(catalog)
+		_show_title()
+
+
+## Shows the title over a dimmed shop. New run starts fresh (with a friend's gift if the page carries one);
+## Continue resumes the run saved by an earlier launch.
+func _show_title() -> void:
+	if title != null:
+		title.queue_free()
+	title = TitleScreen.new()
+	title.sfx = sfx
+	title.room = room
+	title.has_save = not _saved.is_empty() or (rec != null and not rec.commands.is_empty() and not run.is_over())
+	title.parcel = TitleScreen.ts_parcel_in_page()
+	add_child(title)
+	title.start_new.connect(func() -> void:
+		title.hide()
+		_saved = {}
+		new_run(seed_now + 1, _gift_from_text(gift_text)))
+	title.continue_run.connect(func() -> void:
+		title.hide()
+		if not _saved.is_empty():
+			_resume(_saved["run"], RunRecording.from_dict(_saved["rec"]))
+			_saved = {}
+		_refresh())
+	title.quit.connect(get_tree().quit)
+	title.visibility_changed.connect(func() -> void: _hud_view.visible = not title.visible)
+	_hud_view.visible = false  # the title owns the screen; the shop shows dimly behind it
 
 
 func _build_hud() -> void:
@@ -268,6 +305,8 @@ func _log(line: String) -> void:
 
 func _refresh() -> void:
 	var r: RunState = view_run()
+	if hints != null:
+		hints.refresh(r)
 	if room != null:
 		room.set_dread(r.dread)
 	if sfx != null:
@@ -481,6 +520,8 @@ func _replay_tick(delta: float) -> void:
 # ---------------------------------------------------------------- frame and input
 
 func _process(delta: float) -> void:
+	if hints != null:
+		hints.tick(delta)
 	if _replay_run != null:
 		_replay_tick(delta)
 	if not cards.is_empty():
@@ -501,6 +542,8 @@ func _view_pos(p: Vector2) -> Vector2:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if pause != null:
+		pause.blocked = stake_open or not cards.is_empty() or (title != null and title.visible)
 	var mb := event as InputEventMouseButton
 	if mb != null:
 		_on_mouse_button(mb)
@@ -514,7 +557,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo and key.keycode == KEY_M and sfx != null and not end_panel_visible():
-		sfx.set_muted(not sfx.muted)
+		settings.muted = not settings.muted
+		settings.apply(sfx, room)
+		settings.save_player()
 		get_viewport().set_input_as_handled()
 		return
 	if key != null and key.pressed:

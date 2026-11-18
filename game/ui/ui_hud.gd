@@ -111,6 +111,8 @@ func _draw() -> void:
 	widgets.clear()
 	var r: RunState = game.view_run()
 	_draw_top(r)
+	if game != null and game.hints != null:
+		TsHintFrame.ts_draw(self, game.hints.text(), game.hints.age)
 	if game.end_panel_visible():
 		_draw_log()
 		widgets.clear()
