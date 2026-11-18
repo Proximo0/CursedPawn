@@ -18,6 +18,7 @@ var run: RunState = RunState.new()
 var rec: RunRecording
 var catalog: Catalog
 var seed_now: int = 1
+var _web_ready_sent: bool = false
 var log_lines: Array[String] = []
 var tell_texts: Dictionary = {}  ## tool -> tell text for the current seller
 var wake_left: float = 0.0
@@ -142,6 +143,13 @@ func _ready() -> void:
 	new_run(Flags.seed_value(), _gift_from_text(_gift_edit.text))
 
 
+## Web build: sets window.cursedPawnReady once the shop has run its first frame, so tools/web_smoke.mjs can wait on
+## game state instead of guessing from pixels.
+func _signal_web_ready() -> void:
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("window.cursedPawnReady = true", true)
+
+
 ## A gift code in the page URL (web build): "#gift=..." -> the code, else "".
 func _link_in_page() -> String:
 	if not OS.has_feature("web"):
@@ -171,6 +179,9 @@ func _resume(saved_run: RunState, saved_rec: RunRecording) -> void:
 
 
 func _process(delta: float) -> void:
+	if not _web_ready_sent:
+		_web_ready_sent = true
+		_signal_web_ready()
 	if _replay_run != null:
 		_replay_tick(delta)
 	if wake_left > 0.0:
