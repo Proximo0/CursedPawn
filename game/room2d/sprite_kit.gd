@@ -108,18 +108,24 @@ static func tool_texture(tool: String) -> ImageTexture:
 	var g: Image = _sk_new(24, 24)
 	match tool:
 		"uv":
-			_sk_r(g, 10, 1, 4, 9, 2)
-			_sk_r(g, 10, 1, 1, 9, 3)
-			_sk_r(g, 7, 10, 10, 5, 3)
-			_sk_r(g, 7, 10, 10, 1, 4)
+			_sk_r(g, 9, 1, 6, 6, 3)
+			_sk_r(g, 9, 1, 1, 6, 4)
+			_sk_r(g, 10, 3, 4, 1, 2)
+			_sk_r(g, 10, 5, 4, 1, 2)
+			for y: int in range(7, 12):
+				_sk_r(g, 12 - (3 + (y - 7)), y, 2 * (3 + (y - 7)), 1, 3)
+			_sk_r(g, 4, 12, 16, 2, 15)
 			_sk_outline(g)
-			_sk_r(g, 8, 15, 8, 1, 15)
-			_sk_l(g, 8, 17, 4, 22, 4)
-			_sk_l(g, 12, 17, 12, 22, 4)
-			_sk_l(g, 16, 17, 20, 22, 4)
-			_sk_p(g, 12, 20, 15)
-			_sk_p(g, 6, 20, 15)
-			_sk_p(g, 18, 20, 15)
+			for y: int in range(14, 23):
+				var hw: int = 8 + (y - 14)
+				for x: int in range(12 - hw, 12 + hw):
+					if x >= 0 and x < 24 and (x + y) % 2 == 0:
+						_sk_p(g, x, y, 4)
+			_sk_r(g, 11, 14, 2, 9, 15)
+			_sk_p(g, 6, 17, 15)
+			_sk_p(g, 17, 19, 15)
+			_sk_p(g, 3, 21, 15)
+			_sk_p(g, 21, 15, 15)
 		"scale":
 			_sk_r(g, 11, 6, 3, 15, 11)
 			_sk_r(g, 6, 20, 13, 3, 10)
@@ -133,15 +139,25 @@ static func tool_texture(tool: String) -> ImageTexture:
 			_sk_r(g, 17, 14, 7, 2, 11)
 			_sk_outline(g)
 		"listen":
-			for i: int in range(0, 15):
-				var t: float = float(i) / 14.0
-				_sk_e(g, 6 + int(t * 12.0), 8 + int(t * 9.0), lerpf(6.0, 1.5, t), lerpf(6.0, 1.5, t), 10)
-			_sk_e(g, 6, 8, 5.0, 5.0, 2)
-			_sk_e(g, 5, 7, 3.0, 3.0, 1)
-			_sk_r(g, 18, 16, 4, 4, 9)
-			_sk_p(g, 8, 4, 11)
-			_sk_p(g, 11, 6, 11)
+			for i: int in range(0, 16):
+				var t: float = float(i) / 15.0
+				var r: float = lerpf(6.0, 1.8, t)
+				_sk_e(g, 7.0 + t * 11.0, 7.0 + t * 10.0, r, r, 10)
+			_sk_r(g, 18, 16, 5, 4, 14)
+			_sk_r(g, 21, 19, 2, 4, 14)
 			_sk_outline(g)
+			for i: int in range(0, 16):
+				var t2: float = float(i) / 15.0
+				var r2: float = lerpf(6.0, 1.8, t2)
+				_sk_e(g, 6.0 + t2 * 11.0, 6.0 + t2 * 10.0, r2 - 1.5, r2 - 1.5, 11)
+			_sk_e(g, 7, 7, 4.5, 4.5, 8)
+			_sk_e(g, 8, 8, 2.5, 2.5, 0)
+			_sk_r(g, 18, 16, 4, 1, 15)
+			_sk_r(g, 21, 20, 1, 2, 15)
+			_sk_p(g, 1, 12, 15)
+			_sk_p(g, 2, 14, 15)
+			_sk_p(g, 12, 1, 15)
+			_sk_p(g, 14, 2, 15)
 		"touch":
 			_sk_r(g, 7, 11, 11, 9, 14)
 			_sk_r(g, 8, 4, 2, 8, 14)
@@ -243,21 +259,21 @@ static func tile_texture(kind: String) -> ImageTexture:
 			g = _sk_new(32, 32)
 			for x: int in range(32):
 				var m: int = x % 16
-				var c: int = 2 if m < 8 else 1
+				var c: int = 3 if m < 8 else 1
 				_sk_r(g, x, 0, 1, 32, c)
 			for x: int in [0, 16]:
-				_sk_r(g, x, 0, 1, 32, 3)
+				_sk_r(g, x, 0, 1, 32, 4)
 			# small damask diamonds on the light stripes
 			for y: int in [6, 22]:
 				var dy: int = y
-				_sk_p(g, 4, dy, 3)
-				_sk_p(g, 3, dy + 1, 3)
-				_sk_p(g, 5, dy + 1, 3)
-				_sk_p(g, 4, dy + 2, 3)
-				_sk_p(g, 20, dy + 8, 3)
-				_sk_p(g, 19, dy + 9, 3)
-				_sk_p(g, 21, dy + 9, 3)
-				_sk_p(g, 20, dy + 10, 3)
+				_sk_p(g, 4, dy, 4)
+				_sk_p(g, 3, dy + 1, 4)
+				_sk_p(g, 5, dy + 1, 4)
+				_sk_p(g, 4, dy + 2, 4)
+				_sk_p(g, 20, dy + 8, 4)
+				_sk_p(g, 19, dy + 9, 4)
+				_sk_p(g, 21, dy + 9, 4)
+				_sk_p(g, 20, dy + 10, 4)
 		"floor":
 			g = _sk_new(32, 32)
 			for row: int in range(4):
@@ -557,36 +573,60 @@ static func _sk_o_rocking_horse(g: Image) -> void:
 
 
 static func _sk_o_spinning_top(g: Image) -> void:
-	_sk_r(g, 15, 2, 2, 5, 9)
-	_sk_r(g, 12, 6, 8, 2, 11)
-	for y: int in range(8, 28):
-		var hw: int = 10 - (y - 8) * 10 / 20
-		var c: int = 13 if ((y - 8) / 4) % 2 == 0 else 15
+	_sk_r(g, 14, 2, 4, 6, 10)
+	_sk_r(g, 13, 1, 6, 2, 11)
+	for y: int in range(8, 29):
+		var hw: int = 0
+		if y < 15:
+			hw = 5 + (y - 8) * 6 / 6
+		else:
+			hw = 11 - (y - 15) * 11 / 14
+		var c: int = 13 if ((y - 8) / 3) % 2 == 0 else 14
 		_sk_r(g, 16 - hw, y, hw * 2, 1, c)
-	_sk_r(g, 15, 28, 2, 2, 0)
+	_sk_r(g, 15, 28, 2, 3, 4)
 	_sk_outline(g)
-	_sk_r(g, 8, 10, 2, 3, 12)
-	_sk_p(g, 11, 11, 15)
+	_sk_r(g, 8, 10, 2, 4, 15)
+	_sk_r(g, 11, 16, 1, 3, 15)
+	_sk_r(g, 15, 3, 1, 4, 11)
+	_sk_l(g, 27, 10, 29, 14, 4)
+	_sk_l(g, 29, 14, 27, 18, 4)
+	_sk_l(g, 4, 10, 2, 14, 4)
+	_sk_l(g, 2, 14, 4, 18, 4)
+	_sk_r(g, 9, 31, 14, 1, 2)
 
 
 static func _sk_o_marionette(g: Image) -> void:
-	_sk_r(g, 8, 2, 16, 2, 9)
-	_sk_r(g, 15, 2, 2, 6, 9)
-	_sk_e(g, 16, 13, 3.0, 3.0, 15)
-	_sk_r(g, 12, 16, 8, 7, 12)
-	_sk_r(g, 8, 16, 4, 2, 12)
-	_sk_r(g, 20, 16, 4, 2, 12)
-	_sk_r(g, 12, 23, 3, 6, 3)
-	_sk_r(g, 17, 23, 3, 6, 3)
-	_sk_r(g, 11, 29, 5, 1, 9)
-	_sk_r(g, 17, 29, 5, 1, 9)
+	_sk_r(g, 3, 1, 26, 2, 9)
+	_sk_r(g, 14, 3, 4, 2, 9)
+	_sk_p(g, 3, 1, 11)
+	_sk_p(g, 28, 1, 11)
+	for i: int in range(5):
+		_sk_r(g, 13 + i, 6 - i, 6 - i * 2 if i < 3 else 1, 1, 13)
+	_sk_e(g, 16, 10, 4.0, 4.0, 14)
+	_sk_r(g, 11, 14, 10, 8, 13)
+	_sk_r(g, 11, 14, 10, 1, 11)
+	_sk_l(g, 11, 15, 6, 21, 13)
+	_sk_l(g, 12, 15, 7, 21, 13)
+	_sk_l(g, 20, 15, 25, 21, 13)
+	_sk_l(g, 19, 15, 24, 21, 13)
+	_sk_r(g, 5, 21, 3, 3, 14)
+	_sk_r(g, 24, 21, 3, 3, 14)
+	_sk_r(g, 11, 22, 4, 8, 3)
+	_sk_r(g, 17, 22, 4, 4, 3)
+	_sk_r(g, 20, 25, 4, 4, 3)
+	_sk_r(g, 9, 29, 7, 2, 9)
+	_sk_r(g, 22, 28, 5, 2, 9)
 	_sk_outline(g)
-	_sk_l(g, 8, 4, 8, 17, 14)
-	_sk_l(g, 23, 4, 23, 17, 14)
-	_sk_l(g, 16, 8, 16, 10, 14)
-	_sk_p(g, 15, 12, 0)
-	_sk_p(g, 17, 12, 0)
-	_sk_r(g, 15, 17, 2, 2, 11)
+	_sk_p(g, 14, 10, 0)
+	_sk_p(g, 18, 10, 0)
+	_sk_p(g, 13, 12, 13)
+	_sk_p(g, 19, 12, 13)
+	_sk_p(g, 16, 17, 11)
+	_sk_p(g, 16, 19, 11)
+	_sk_l(g, 4, 3, 6, 21, 15)
+	_sk_l(g, 27, 3, 25, 21, 15)
+	_sk_l(g, 8, 3, 12, 24, 15)
+	_sk_l(g, 24, 3, 22, 25, 15)
 
 
 static func _sk_o_toy_theatre(g: Image) -> void:
@@ -668,15 +708,21 @@ static func _sk_o_cameo_brooch(g: Image) -> void:
 
 
 static func _sk_o_mourning_ring(g: Image) -> void:
-	_sk_ring(g, 16.0, 20.0, 9.0, 9.0, 3.0, 2)
-	_sk_r(g, 12, 6, 8, 8, 1)
-	_sk_r(g, 13, 7, 6, 6, 14)
+	_sk_ring(g, 16.0, 21.0, 10.0, 9.0, 3.0, 10)
+	_sk_e(g, 16, 9, 7.0, 6.0, 11)
+	_sk_e(g, 16, 9, 5.0, 4.0, 1)
 	_sk_outline(g)
-	_sk_p(g, 14, 8, 15)
+	_sk_r(g, 15, 7, 3, 1, 15)
 	_sk_p(g, 15, 8, 15)
-	_sk_r(g, 15, 10, 2, 2, 8)
-	_sk_l(g, 9, 21, 10, 26, 3)
-	_sk_l(g, 23, 21, 22, 26, 3)
+	_sk_p(g, 17, 8, 15)
+	_sk_r(g, 15, 9, 3, 1, 15)
+	_sk_p(g, 16, 8, 0)
+	_sk_p(g, 11, 9, 14)
+	_sk_p(g, 21, 9, 14)
+	_sk_p(g, 16, 3, 14)
+	_sk_p(g, 16, 15, 14)
+	_sk_l(g, 8, 21, 9, 26, 11)
+	_sk_l(g, 7, 17, 6, 20, 11)
 
 
 static func _sk_o_pearl_necklace(g: Image) -> void:
@@ -707,18 +753,32 @@ static func _sk_o_hatpin(g: Image) -> void:
 
 
 static func _sk_o_charm_bracelet(g: Image) -> void:
-	for a: int in range(0, 40):
-		var v: Vector2 = Vector2.from_angle(float(a) * TAU / 40.0)
-		_sk_p(g, 16 + int(v.x * 12.0), 12 + int(v.y * 9.0), 14 if a % 2 == 0 else 15)
+	_sk_ring(g, 16.0, 11.0, 14.0, 10.0, 2.0, 14)
+	for a: int in range(0, 48, 3):
+		var v: Vector2 = Vector2.from_angle(float(a) * TAU / 48.0)
+		_sk_p(g, 16 + int(v.x * 13.0), 11 + int(v.y * 9.0), 15)
+	_sk_r(g, 8, 20, 5, 1, 14)
+	# heart
+	_sk_r(g, 6, 22, 2, 1, 13)
+	_sk_r(g, 9, 22, 2, 1, 13)
+	_sk_r(g, 5, 23, 7, 2, 13)
+	_sk_r(g, 6, 25, 5, 1, 13)
+	_sk_r(g, 7, 26, 3, 1, 13)
+	_sk_p(g, 8, 27, 13)
+	# key
+	_sk_ring(g, 16.0, 25.0, 2.5, 2.5, 1.3, 11)
+	_sk_r(g, 16, 27, 1, 4, 11)
+	_sk_r(g, 17, 29, 2, 1, 11)
+	# star
+	_sk_r(g, 24, 22, 1, 7, 11)
+	_sk_r(g, 21, 25, 7, 1, 11)
+	_sk_r(g, 22, 23, 5, 5, 11)
 	_sk_outline(g)
-	_sk_r(g, 6, 22, 4, 4, 13)
-	_sk_r(g, 7, 21, 2, 1, 13)
-	_sk_r(g, 14, 22, 4, 5, 11)
-	_sk_p(g, 16, 21, 11)
-	_sk_r(g, 22, 22, 4, 4, 4)
-	_sk_p(g, 7, 22, 15)
-	_sk_p(g, 15, 23, 15)
-	_sk_outline(g)
+	_sk_p(g, 8, 23, 15)
+	_sk_p(g, 23, 24, 15)
+	_sk_p(g, 8, 21, 14)
+	_sk_p(g, 24, 21, 14)
+	_sk_p(g, 16, 22, 14)
 
 
 # ---------------------------------------------------------------- objects: instruments
@@ -797,33 +857,39 @@ static func _sk_o_accordion(g: Image) -> void:
 
 static func _sk_o_ocarina(g: Image) -> void:
 	_sk_e(g, 15, 18, 12.0, 7.0, 10)
-	_sk_r(g, 22, 8, 5, 7, 10)
-	_sk_r(g, 5, 14, 20, 8, 10)
-	_sk_e(g, 15, 21, 9.0, 4.0, 9)
+	_sk_r(g, 1, 19, 5, 3, 10)
+	_sk_r(g, 22, 7, 6, 9, 9)
+	_sk_e(g, 15, 21, 10.0, 4.0, 9)
+	_sk_r(g, 1, 21, 5, 1, 9)
 	_sk_outline(g)
-	_sk_r(g, 23, 10, 3, 2, 0)
-	_sk_p(g, 9, 16, 0)
-	_sk_p(g, 13, 14, 0)
-	_sk_p(g, 17, 14, 0)
-	_sk_p(g, 21, 16, 0)
-	_sk_p(g, 12, 19, 0)
-	_sk_p(g, 18, 19, 0)
-	_sk_r(g, 7, 14, 5, 1, 11)
+	_sk_r(g, 24, 9, 2, 3, 0)
+	_sk_r(g, 7, 13, 6, 1, 11)
+	for p: Vector2i in [Vector2i(10, 15), Vector2i(14, 14), Vector2i(18, 15), Vector2i(12, 19), Vector2i(17, 19), Vector2i(7, 19)]:
+		_sk_r(g, p.x, p.y, 2, 2, 0)
+		_sk_p(g, p.x - 1, p.y - 1, 11)
+	_sk_p(g, 3, 20, 0)
 
 
 static func _sk_o_metronome(g: Image) -> void:
 	for y: int in range(4, 28):
-		var hw: int = 3 + (y - 4) * 8 / 23
+		var hw: int = 4 + (y - 4) * 8 / 23
 		_sk_r(g, 16 - hw, y, hw * 2, 1, 9)
-	_sk_r(g, 5, 27, 22, 3, 8)
+		_sk_r(g, 16 - hw, y, 2, 1, 8)
+	_sk_r(g, 3, 27, 26, 3, 8)
+	_sk_r(g, 3, 27, 26, 1, 9)
+	for y: int in range(9, 26):
+		var hw2: int = 2 + (y - 4) * 8 / 23 - 3
+		_sk_r(g, 16 - hw2, y, hw2 * 2, 1, 10)
+		if y % 3 == 0:
+			_sk_r(g, 16 - hw2, y, 3 if y % 6 == 0 else 2, 1, 0)
+	_sk_l(g, 16, 25, 23, 1, 15)
+	_sk_l(g, 17, 25, 24, 1, 15)
+	_sk_r(g, 19, 8, 6, 4, 13)
 	_sk_outline(g)
-	_sk_r(g, 13, 10, 6, 15, 10)
-	_sk_r(g, 15, 12, 2, 1, 0)
-	_sk_r(g, 15, 15, 2, 1, 0)
-	_sk_r(g, 15, 18, 2, 1, 0)
-	_sk_l(g, 16, 26, 20, 1, 14)
-	_sk_r(g, 17, 8, 5, 3, 11)
-	_sk_r(g, 6, 27, 20, 1, 9)
+	_sk_r(g, 19, 8, 6, 1, 15)
+	_sk_r(g, 14, 25, 4, 3, 11)
+	_sk_p(g, 28, 17, 11)
+	_sk_r(g, 28, 16, 2, 3, 11)
 
 
 static func _sk_o_gramophone(g: Image) -> void:
@@ -846,102 +912,199 @@ static func _sk_o_gramophone(g: Image) -> void:
 # ---------------------------------------------------------------- objects: books
 
 static func _sk_o_book(g: Image, id: String) -> void:
-	var cover: int = 12
-	var trim: int = 11
-	var x0: int = 6
-	var w: int = 19
-	var y0: int = 3
-	var h: int = 27
 	match id:
 		"ledger":
-			cover = 12
+			_sk_bk_ledger(g)
 		"atlas":
-			cover = 3
-			x0 = 4
-			w = 23
-			h = 25
-			y0 = 5
+			_sk_bk_atlas(g)
 		"diary":
-			cover = 2
-			x0 = 8
-			w = 16
-			h = 23
-			y0 = 7
+			_sk_bk_diary(g)
 		"hymnal":
-			cover = 1
-			x0 = 8
-			w = 16
+			_sk_bk_hymnal(g)
 		"almanac":
-			cover = 6
+			_sk_bk_almanac(g)
 		"photo_album":
-			cover = 9
-			x0 = 4
-			w = 23
-			h = 24
-			y0 = 6
+			_sk_bk_album(g)
 		"herbarium":
-			cover = 5
-			trim = 7
-		"first_edition":
-			cover = 8
-			x0 = 7
-			w = 18
-	_sk_r(g, x0, y0, w, h, cover)
-	_sk_r(g, x0 + w, y0 + 1, 2, h - 2, 14)
-	_sk_r(g, x0 + w, y0 + 2, 2, 1, 15)
-	_sk_r(g, x0, y0, 3, h, 0 if cover != 1 else 2)
-	_sk_r(g, x0 + 3, y0, 1, h, trim)
+			_sk_bk_herbarium(g)
+		_:
+			_sk_bk_first_edition(g)
+
+
+## Thick ledger lying flat: dark brown boards, bone page block, amber strap and buckle.
+static func _sk_bk_ledger(g: Image) -> void:
+	_sk_r(g, 2, 11, 28, 4, 8)
+	_sk_r(g, 3, 15, 26, 8, 14)
+	_sk_r(g, 2, 23, 28, 4, 8)
+	_sk_r(g, 2, 11, 4, 16, 12)
 	_sk_outline(g)
-	var cx: int = x0 + 3 + (w - 3) / 2
-	var cy: int = y0 + h / 2
-	match id:
-		"ledger":
-			_sk_r(g, cx - 5, cy - 7, 10, 7, 14)
-			_sk_r(g, cx - 4, cy - 5, 8, 1, 0)
-			_sk_r(g, cx - 4, cy - 3, 6, 1, 0)
-			_sk_r(g, x0 + 3, y0, 2, 3, trim)
-			_sk_r(g, x0 + w - 2, y0 + h - 3, 3, 3, trim)
-		"atlas":
-			_sk_e(g, cx, cy, 6.0, 6.0, 4)
-			_sk_r(g, cx - 3, cy - 3, 4, 3, 7)
-			_sk_r(g, cx, cy + 1, 3, 3, 7)
-			_sk_r(g, x0 + 3, y0 + h - 2, w - 3, 1, trim)
-		"diary":
-			_sk_r(g, x0 + w - 4, cy - 3, 5, 6, trim)
-			_sk_r(g, x0 + w - 3, cy - 1, 2, 2, 0)
-			_sk_r(g, x0 + 4, cy - 1, w - 7, 2, 12)
-		"hymnal":
-			_sk_r(g, cx - 1, cy - 6, 2, 12, trim)
-			_sk_r(g, cx - 4, cy - 3, 8, 2, trim)
-			_sk_r(g, cx + 3, y0 + h, 2, 2, 13)
-		"almanac":
-			_sk_e(g, cx, cy - 3, 5.0, 5.0, 11)
-			_sk_e(g, cx + 2, cy - 4, 4.0, 4.0, 6)
-			_sk_p(g, cx - 4, cy + 5, 11)
-			_sk_p(g, cx + 1, cy + 7, 11)
-			_sk_p(g, cx + 5, cy + 4, 11)
-		"photo_album":
-			_sk_r(g, cx - 5, cy - 6, 11, 10, 14)
-			_sk_r(g, cx - 4, cy - 5, 9, 8, 4)
-			_sk_e(g, cx, cy - 2, 2.0, 2.0, 15)
-			_sk_p(g, cx - 5, cy - 6, 11)
-			_sk_p(g, cx + 5, cy + 3, 11)
-			_sk_r(g, x0 + 3, cy + 8, w - 3, 1, 13)
-		"herbarium":
-			_sk_l(g, cx - 4, cy + 7, cx + 4, cy - 7, 7)
-			_sk_e(g, cx + 1, cy - 3, 3.0, 2.0, 7)
-			_sk_e(g, cx - 2, cy + 2, 3.0, 2.0, 7)
-			_sk_e(g, cx + 3, cy - 7, 2.0, 2.0, 7)
-			_sk_r(g, x0 + 3, y0 + 1, w - 3, 1, 14)
-		"first_edition":
-			_sk_r(g, x0 + 4, y0 + 2, w - 4, 1, trim)
-			_sk_r(g, x0 + 4, y0 + h - 3, w - 4, 1, trim)
-			_sk_p(g, cx, cy - 4, 11)
-			_sk_r(g, cx - 1, cy - 3, 3, 1, 11)
-			_sk_r(g, cx - 2, cy - 2, 5, 1, 11)
-			_sk_r(g, cx - 1, cy - 1, 3, 1, 11)
-			_sk_p(g, cx, cy, 11)
-			_sk_r(g, cx - 3, cy + 3, 7, 1, 11)
+	_sk_r(g, 2, 11, 28, 1, 9)
+	for y: int in [17, 19, 21]:
+		_sk_r(g, 7, y, 22, 1, 15)
+	_sk_r(g, 6, 15, 23, 1, 13)
+	_sk_r(g, 21, 10, 3, 18, 10)
+	_sk_r(g, 21, 10, 1, 18, 11)
+	_sk_r(g, 20, 17, 5, 4, 11)
+	_sk_r(g, 21, 18, 3, 2, 8)
+	_sk_r(g, 8, 12, 8, 2, 11)
+	_sk_r(g, 2, 11, 2, 2, 11)
+	_sk_r(g, 2, 25, 2, 2, 11)
+	_sk_r(g, 6, 12, 1, 14, 0)
+
+
+## Atlas lying open: two bone pages, sea and green land, a red dotted route and an X.
+static func _sk_bk_atlas(g: Image) -> void:
+	_sk_r(g, 1, 8, 30, 19, 3)
+	_sk_r(g, 2, 8, 14, 17, 14)
+	_sk_r(g, 16, 8, 14, 17, 14)
+	_sk_outline(g)
+	_sk_r(g, 3, 10, 12, 13, 4)
+	_sk_r(g, 17, 10, 12, 13, 4)
+	_sk_e(g, 8, 15, 3.0, 2.0, 7)
+	_sk_r(g, 5, 17, 3, 2, 6)
+	_sk_e(g, 12, 20, 2.0, 1.0, 6)
+	_sk_e(g, 23, 14, 4.0, 3.0, 7)
+	_sk_r(g, 20, 16, 3, 4, 6)
+	_sk_e(g, 26, 20, 2.0, 1.0, 6)
+	for p: Vector2i in [Vector2i(5, 12), Vector2i(8, 12), Vector2i(11, 13), Vector2i(19, 12), Vector2i(21, 12), Vector2i(23, 11), Vector2i(26, 15)]:
+		_sk_p(g, p.x, p.y, 13)
+	_sk_r(g, 26, 17, 3, 1, 13)
+	_sk_r(g, 27, 16, 1, 3, 13)
+	_sk_r(g, 15, 8, 2, 17, 2)
+	_sk_r(g, 3, 24, 12, 1, 13)
+	_sk_r(g, 17, 24, 12, 1, 13)
+	_sk_p(g, 4, 11, 15)
+	_sk_p(g, 18, 11, 15)
+
+
+## Diary: slim upright red book, big gold padlock hanging on a strap across the cover.
+static func _sk_bk_diary(g: Image) -> void:
+	_sk_r(g, 7, 2, 18, 27, 13)
+	_sk_r(g, 25, 3, 2, 25, 14)
+	_sk_r(g, 7, 2, 3, 27, 12)
+	_sk_r(g, 20, 17, 6, 3, 11)
+	_sk_r(g, 13, 11, 2, 7, 14)
+	_sk_r(g, 19, 11, 2, 7, 14)
+	_sk_r(g, 13, 10, 8, 2, 14)
+	_sk_r(g, 11, 17, 12, 10, 11)
+	_sk_outline(g)
+	_sk_r(g, 11, 24, 12, 3, 10)
+	_sk_r(g, 16, 20, 2, 3, 0)
+	_sk_p(g, 17, 22, 0)
+	_sk_p(g, 12, 18, 15)
+	_sk_p(g, 12, 19, 15)
+	_sk_r(g, 15, 11, 4, 1, 4)
+	_sk_p(g, 12, 5, 11)
+	_sk_p(g, 22, 6, 11)
+	_sk_p(g, 14, 7, 11)
+	_sk_r(g, 10, 3, 1, 25, 11)
+
+
+## Hymnal: small tall black book, gold cross, a red ribbon bookmark hanging out of the bottom.
+static func _sk_bk_hymnal(g: Image) -> void:
+	_sk_r(g, 10, 2, 13, 25, 2)
+	_sk_r(g, 10, 2, 3, 25, 1)
+	_sk_r(g, 11, 26, 12, 2, 14)
+	_sk_r(g, 17, 27, 3, 4, 13)
+	_sk_p(g, 18, 30, -1)
+	_sk_outline(g)
+	_sk_r(g, 17, 5, 2, 12, 11)
+	_sk_r(g, 14, 8, 8, 2, 11)
+	_sk_r(g, 15, 21, 6, 1, 10)
+	_sk_p(g, 16, 28, 15)
+	_sk_r(g, 13, 2, 1, 24, 3)
+
+
+## Almanac: floppy stitched paperback with a dog-eared corner, sun above and moon below.
+static func _sk_bk_almanac(g: Image) -> void:
+	_sk_r(g, 7, 3, 19, 26, 4)
+	_sk_r(g, 7, 28, 19, 1, 3)
+	for y: int in range(4):
+		for x: int in range(4):
+			if x - y >= 1:
+				_sk_p(g, 22 + x, 3 + y, -1)
+	_sk_p(g, 25, 28, -1)
+	_sk_p(g, 7, 28, -1)
+	_sk_outline(g)
+	_sk_r(g, 21, 4, 2, 1, 14)
+	_sk_r(g, 21, 5, 3, 1, 14)
+	_sk_r(g, 22, 6, 2, 1, 14)
+	for y: int in range(5, 28, 3):
+		_sk_r(g, 9, y, 1, 2, 15)
+	_sk_e(g, 17, 11, 3.0, 3.0, 11)
+	for p: Vector2i in [Vector2i(17, 5), Vector2i(17, 17), Vector2i(11, 11), Vector2i(23, 11), Vector2i(13, 7), Vector2i(21, 15), Vector2i(21, 7), Vector2i(13, 15)]:
+		_sk_p(g, p.x, p.y, 11)
+	_sk_e(g, 17, 23, 4.0, 4.0, 15)
+	_sk_e(g, 19, 22, 3.5, 3.5, 4)
+	_sk_p(g, 12, 21, 11)
+	_sk_p(g, 13, 26, 11)
+
+
+## Photo album: tall open album, two tiny photographs with corner tabs, caption lines.
+static func _sk_bk_album(g: Image) -> void:
+	_sk_r(g, 2, 4, 28, 24, 9)
+	_sk_r(g, 4, 6, 11, 20, 14)
+	_sk_r(g, 17, 6, 11, 20, 14)
+	_sk_outline(g)
+	_sk_r(g, 15, 5, 2, 22, 8)
+	_sk_r(g, 5, 8, 8, 9, 15)
+	_sk_r(g, 6, 9, 6, 7, 3)
+	_sk_e(g, 9, 12, 1.5, 1.5, 14)
+	_sk_r(g, 7, 15, 4, 1, 14)
+	_sk_r(g, 19, 14, 8, 8, 15)
+	_sk_r(g, 20, 15, 6, 6, 4)
+	_sk_p(g, 24, 16, 11)
+	_sk_r(g, 20, 19, 6, 2, 6)
+	for p: Vector2i in [Vector2i(5, 8), Vector2i(12, 16), Vector2i(19, 14), Vector2i(26, 21)]:
+		_sk_p(g, p.x, p.y, 13)
+	_sk_r(g, 6, 20, 6, 1, 13)
+	_sk_r(g, 6, 22, 4, 1, 13)
+	_sk_r(g, 19, 8, 7, 1, 13)
+	_sk_r(g, 19, 10, 5, 1, 13)
+
+
+## Herbarium: dark green press-book, bone label, fern and leaves poking out of the pages.
+static func _sk_bk_herbarium(g: Image) -> void:
+	_sk_r(g, 5, 8, 19, 21, 5)
+	_sk_r(g, 24, 9, 2, 19, 14)
+	_sk_r(g, 5, 8, 3, 21, 0)
+	_sk_e(g, 28, 13, 3.0, 2.0, 7)
+	_sk_e(g, 28, 22, 3.0, 2.0, 6)
+	_sk_l(g, 14, 8, 14, 1, 7)
+	for y: int in [2, 4, 6]:
+		_sk_r(g, 11, y, 3, 1, 7)
+		_sk_r(g, 15, y, 3, 1, 7)
+	_sk_e(g, 20, 5, 2.0, 3.0, 6)
+	_sk_outline(g)
+	_sk_r(g, 10, 13, 10, 10, 14)
+	_sk_r(g, 10, 13, 10, 1, 15)
+	_sk_l(g, 12, 22, 17, 15, 6)
+	_sk_e(g, 17, 17, 2.0, 1.0, 7)
+	_sk_e(g, 13, 19, 1.0, 1.0, 7)
+	_sk_r(g, 8, 8, 1, 21, 6)
+	_sk_p(g, 27, 13, 5)
+	_sk_p(g, 28, 22, 5)
+
+
+## First edition: upright, brown spine with gold ridged bands, red dust jacket with a bone title panel and crest.
+static func _sk_bk_first_edition(g: Image) -> void:
+	_sk_r(g, 6, 2, 5, 27, 9)
+	_sk_r(g, 11, 2, 15, 27, 12)
+	_sk_r(g, 22, 2, 4, 27, 13)
+	_sk_outline(g)
+	for y: int in [4, 9, 14, 19, 24]:
+		_sk_r(g, 6, y, 5, 1, 11)
+		_sk_r(g, 6, y + 1, 5, 1, 8)
+	_sk_r(g, 22, 2, 1, 27, 0)
+	_sk_r(g, 13, 6, 8, 7, 14)
+	_sk_r(g, 14, 8, 6, 1, 12)
+	_sk_r(g, 14, 10, 4, 1, 12)
+	_sk_r(g, 11, 2, 15, 1, 11)
+	_sk_r(g, 11, 28, 15, 1, 11)
+	_sk_r(g, 16, 17, 3, 3, 11)
+	_sk_p(g, 17, 16, 11)
+	_sk_p(g, 17, 20, 11)
+	_sk_r(g, 13, 23, 8, 1, 11)
 
 
 # ---------------------------------------------------------------- objects: relics
@@ -1047,23 +1210,31 @@ static func _sk_o_taxidermy_owl(g: Image) -> void:
 
 
 static func _sk_o_ship_bottle(g: Image) -> void:
-	_sk_r(g, 2, 11, 21, 16, 6)
-	_sk_r(g, 22, 15, 7, 8, 6)
-	_sk_r(g, 29, 16, 2, 6, 9)
+	_sk_r(g, 1, 8, 22, 18, 6)
+	_sk_r(g, 22, 13, 7, 8, 6)
+	_sk_r(g, 29, 14, 2, 6, 9)
+	_sk_r(g, 2, 9, 20, 16, 1)
+	_sk_r(g, 22, 14, 7, 6, 1)
+	_sk_r(g, 2, 20, 20, 5, 4)
+	_sk_r(g, 22, 20, 1, 1, 6)
+	_sk_r(g, 7, 17, 14, 3, 9)
+	_sk_r(g, 8, 20, 12, 1, 8)
+	_sk_r(g, 5, 15, 3, 2, 9)
+	_sk_r(g, 9, 9, 1, 8, 8)
+	_sk_r(g, 15, 8, 1, 9, 8)
+	_sk_r(g, 10, 10, 5, 6, 15)
+	_sk_r(g, 16, 9, 5, 7, 14)
+	_sk_r(g, 10, 14, 5, 2, 14)
+	_sk_p(g, 15, 8, 13)
+	_sk_p(g, 9, 9, 13)
 	_sk_outline(g)
-	_sk_r(g, 3, 12, 19, 14, 2)
-	_sk_r(g, 3, 22, 19, 4, 4)
-	_sk_r(g, 22, 16, 6, 6, 1)
-	_sk_r(g, 7, 19, 11, 3, 9)
-	_sk_r(g, 5, 18, 3, 2, 9)
-	_sk_r(g, 11, 13, 1, 6, 8)
-	_sk_r(g, 8, 14, 7, 5, 15)
-	_sk_r(g, 13, 16, 5, 3, 14)
-	_sk_p(g, 11, 12, 13)
-	_sk_r(g, 3, 12, 19, 1, 7)
-	_sk_p(g, 4, 14, 7)
-	_sk_p(g, 4, 15, 7)
-	_sk_p(g, 24, 16, 7)
+	_sk_r(g, 2, 8, 20, 1, 7)
+	_sk_r(g, 3, 10, 1, 4, 15)
+	_sk_r(g, 3, 21, 3, 1, 3)
+	_sk_r(g, 12, 22, 4, 1, 3)
+	_sk_r(g, 18, 21, 3, 1, 3)
+	_sk_r(g, 23, 14, 5, 1, 7)
+	_sk_r(g, 30, 15, 1, 4, 10)
 
 
 static func _sk_o_mantel_clock(g: Image) -> void:
