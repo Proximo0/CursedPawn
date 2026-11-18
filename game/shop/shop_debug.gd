@@ -56,9 +56,11 @@ static func sd_event_text(e: Dictionary) -> String:
 		"night_start":
 			return "Night %d begins. Rent due tonight: %d." % [int(e["night"]), int(e["rent"])]
 		"customer":
+			var who: String = str(e.get("type", ""))
+			var said: String = " \"%s\"" % str(e["line"]) if str(e.get("line", "")) != "" else ""
 			if str(e.get("kind", "")) == "seller":
-				return "Seller arrives with %s, asking %d." % [str(e["name"]), int(e["ask"])]
-			return "Buyer arrives, wants %s." % str(e.get("category", "?"))
+				return "%s arrives with %s, asking %d.%s" % [who if who != "" else "Seller", str(e["name"]), int(e["ask"]), said]
+			return "%s arrives, wants %s.%s" % [who if who != "" else "Buyer", str(e.get("category", "?")), said]
 		"inspected":
 			var tell: String = str(e.get("tell", ""))
 			var est: Dictionary = e.get("estimate", {})

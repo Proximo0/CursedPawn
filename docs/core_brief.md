@@ -20,7 +20,7 @@ Pure logic in `game/logic/`, no Node, no clock, seeded RNG. Workers code against
 `{t: "sell", uid}`. Invalid commands return `{e: "invalid", why}` and change nothing but the command count.
 
 ## Events (Dictionary, key `e`)
-`night_start {night, rent}` · `customer {kind: seller|buyer, name, ask | category}` ·
+`night_start {night, rent}` · `customer {kind: seller|buyer, name, ask | category, type (display name), line}` ·
 `inspected {tool, tell, estimate}` · `counter {offer, ask, patience}` · `left {offer}` · `bought {uid, name, price}` ·
 `sold {uid, name, price, imposter}` · `passed {kind}` · `wake {night, dread, broke, closed}` ·
 `night_end {night, rent, cash, curse_cash}` (curse_cash: sum of held curses' `night_cash`, added before rent) · `run_lost {night, cash, rent}` · `run_won {cash}` · `invalid {why}`.

@@ -253,3 +253,25 @@ func test_night_cash_curses_pay_or_eat_at_night_end() -> void:
 	assert_eq(ev[0]["e"], "night_end")
 	assert_eq(int(ev[0]["curse_cash"]), expect)
 	assert_eq(int(ev[0]["cash"]), 1000 + expect)
+
+
+func test_customer_types_shape_customers() -> void:
+	var run := rs_run(11)
+	var seen: Dictionary = {}
+	var guard: int = 0
+	while not run.is_over() and guard < 300:
+		if run.customer.has("type"):
+			seen[run.customer["type"]] = true
+		run.apply({"t": "pass"})
+		guard += 1
+	assert_true(seen.size() >= 3, "several seller types turn up")
+	run = rs_run(11)
+	run.customer = {"kind": RunState.BUYER, "category": "toy", "pay_mult": 1.0, "cursed_mult": 1.4, "imposter": false}
+	var plain: Dictionary = {"uid": 1, "value": 100, "curse": "", "category": "toy"}
+	var cursed: Dictionary = {"uid": 2, "value": 100, "curse": "sleepwalker", "category": "toy"}
+	run.inventory.assign([plain])
+	var base: int = run.sale_price(plain)
+	run.inventory.assign([cursed])
+	var mult: float = run.sale_mult()
+	assert_eq(run.sale_price(cursed), int(round(100.0 * run.tuning.buyer_pay_frac * mult * 1.4)), "ghost hunters pay for curses")
+	assert_true(base > 0)

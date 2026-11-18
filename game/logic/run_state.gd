@@ -96,7 +96,8 @@ func sellable() -> Array[Dictionary]:
 func sale_price(item: Dictionary) -> int:
 	if customer.get("kind", "") != BUYER:
 		return 0
-	return int(round(float(item["value"]) * tuning.buyer_pay_frac * float(customer["pay_mult"]) * sale_mult()))
+	var cursed: float = float(customer.get("cursed_mult", 1.0)) if str(item["curse"]) != "" else 1.0
+	return int(round(float(item["value"]) * tuning.buyer_pay_frac * float(customer["pay_mult"]) * sale_mult() * cursed))
 
 
 ## Product of the sale multipliers of distinct curses held.
@@ -273,28 +274,50 @@ func _next_customer(ev: Array[Dictionary]) -> void:
 		var category: String = cats[rng.randi_range(0, cats.size() - 1)]
 		if rng.randf() < tuning.buyer_match_chance:
 			category = inventory[rng.randi_range(0, inventory.size() - 1)]["category"]
-		customer = {"kind": BUYER, "category": category, "pay_mult": rng.randf_range(0.8, 1.2), "imposter": imposter}
-		ev.append({"e": "customer", "kind": BUYER, "category": category})
+		var bt: Dictionary = _pick_type(BUYER)
+		customer = {"kind": BUYER, "category": category, "imposter": imposter, "type": bt.get("id", ""),
+			"pay_mult": rng.randf_range(0.8, 1.2) * float(bt.get("pay_mult", 1.0)),
+			"cursed_mult": float(bt.get("cursed_mult", 1.0))}
+		ev.append({"e": "customer", "kind": BUYER, "category": category, "type": bt.get("name", ""),
+			"line": bt.get("line", "")})
 		return
+	var st: Dictionary = _pick_type(SELLER)
 	var obj: Dictionary = catalog.objects[rng.randi_range(0, catalog.objects.size() - 1)]
 	var value: float = float(obj["value"]) * rng.randf_range(1.0 - tuning.value_spread, 1.0 + tuning.value_spread)
 	var cid: String = ""
 	if imposter or rng.randf() < tuning.cursed_share:
 		cid = catalog.curses[rng.randi_range(0, catalog.curses.size() - 1)]["id"]
 		value *= tuning.cursed_value_mult
-	var reserve: int = maxi(1, int(round(value * tuning.seller_reserve_frac * rng.randf_range(0.85, 1.15))))
+	var reserve: int = maxi(1, int(round(value * tuning.seller_reserve_frac * rng.randf_range(0.85, 1.15)
+		* float(st.get("reserve_mult", 1.0)))))
 	customer = {
 		"kind": SELLER,
 		"item": {"id": obj["id"], "name": obj["name"], "category": obj["category"], "value": int(round(value)), "curse": cid},
 		"reserve": reserve,
 		"ask": int(round(reserve * tuning.seller_ask_markup)),
-		"patience": int(tuning.patience_base) + rng.randi_range(0, 1),
+		"patience": maxi(1, int(tuning.patience_base) + rng.randi_range(0, 1) + int(st.get("patience", 0))),
+		"type": st.get("id", ""),
 		"noise_u": rng.randf_range(-1.0, 1.0),
 		"tools": [],
 		"tells": [],
 		"imposter": imposter,
 	}
-	ev.append({"e": "customer", "kind": SELLER, "name": obj["name"], "ask": customer["ask"]})
+	ev.append({"e": "customer", "kind": SELLER, "name": obj["name"], "ask": customer["ask"],
+		"type": st.get("name", ""), "line": st.get("line", "")})
+
+
+## A customer type of `kind`, weighted; {} when the catalog has none.
+func _pick_type(kind: String) -> Dictionary:
+	var types: Array[Dictionary] = catalog.customer_types(kind)
+	var total: float = 0.0
+	for t: Dictionary in types:
+		total += float(t.get("weight", 1.0))
+	var r: float = rng.randf() * total
+	for t: Dictionary in types:
+		r -= float(t.get("weight", 1.0))
+		if r < 0.0:
+			return t
+	return types[-1] if not types.is_empty() else {}
 
 
 func _check_wake(ev: Array[Dictionary]) -> void:

@@ -13,6 +13,7 @@ func test_curse_without_tell_is_a_problem() -> void:
 	c.objects = [{"id": "a", "name": "A", "category": "x", "value": 10}]
 	c.curses = [{"id": "k", "name": "K", "dread": 1.0, "sale_mult": 1.0, "imposter_every": 0, "tells": {}}]
 	c.tarot = [{"id": "t", "name": "T", "weight": 1, "mult": 0.5, "dread": 0.0, "text": ""}]
+	c.customers = [{"id": "s", "name": "S", "kind": "seller", "weight": 1, "line": ""}, {"id": "b", "name": "B", "kind": "buyer", "weight": 1, "line": ""}]
 	assert_eq(c.problems(), PackedStringArray(["curse k has no tell"]))
 
 

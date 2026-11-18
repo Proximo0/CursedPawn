@@ -34,7 +34,7 @@ const FIELDS: Array = [
 	["dread_per_night", 2.0, 0.0, 5.0, 0.1, "Curses", "Dread per held cursed object each night, times the curse's dread."],
 	["wake_threshold", 1.5, 1.0, 20.0, 0.5, "Curses", "Dread at which something wakes."],
 	["wake_dread_keep", 0.5, 0.0, 1.0, 0.05, "Curses", "Fraction of Dread left after a wake."],
-	["wake_break_chance", 0.5, 0.0, 1.0, 0.05, "Curses", "Chance a wake breaks one held object."],
+	["wake_break_chance", 0.6, 0.0, 1.0, 0.05, "Curses", "Chance a wake breaks one held object."],
 	["wake_close_chance", 0.6, 0.0, 1.0, 0.05, "Curses", "Chance a wake locks the door and ends the day early."],
 	["box_rare_odds", 0.25, 0.0, 1.0, 0.01, "Estate boxes", "Chance an estate box holds a rare curio (shown to the player before buying)."],
 	["box_legendary_odds", 0.05, 0.0, 1.0, 0.01, "Estate boxes", "Chance an estate box holds a legendary curio (shown before buying)."],

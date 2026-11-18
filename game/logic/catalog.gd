@@ -7,10 +7,14 @@ const TOOLS: PackedStringArray = ["uv", "scale", "listen", "touch"]
 const OBJECTS_PATH: String = "res://game/data/objects.json"
 const CURSES_PATH: String = "res://game/data/curses.json"
 const TAROT_PATH: String = "res://game/data/tarot.json"
+const CUSTOMERS_PATH: String = "res://game/data/customers.json"
 
 var objects: Array[Dictionary] = []
 var curses: Array[Dictionary] = []
 var tarot: Array[Dictionary] = []  ## {id, name, weight, mult, dread, text}: the tarot wager deck
+## Customer types: {id, name, kind (seller|buyer), weight, line}; sellers add patience and reserve_mult, buyers
+## pay_mult and optional cursed_mult (applied to cursed items only).
+var customers: Array[Dictionary] = []
 
 
 static func load_default() -> Catalog:
@@ -18,6 +22,7 @@ static func load_default() -> Catalog:
 	c.objects = _catalog_read(OBJECTS_PATH)
 	c.curses = _catalog_read(CURSES_PATH)
 	c.tarot = _catalog_read(TAROT_PATH)
+	c.customers = _catalog_read(CUSTOMERS_PATH)
 	return c
 
 
@@ -36,6 +41,15 @@ func curse(id: String) -> Dictionary:
 		if c["id"] == id:
 			return c
 	return {}
+
+
+## Customer types of one kind ("seller" or "buyer").
+func customer_types(kind: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for t: Dictionary in customers:
+		if str(t.get("kind", "")) == kind:
+			out.append(t)
+	return out
 
 
 func categories() -> PackedStringArray:
@@ -87,6 +101,9 @@ func problems() -> PackedStringArray:
 		if ids.has(c.get("id", "")):
 			out.append("duplicate id %s" % c.get("id", ""))
 		ids[c.get("id", "")] = true
+	for kind: String in ["seller", "buyer"]:
+		if customer_types(kind).is_empty():
+			out.append("no %s customer types" % kind)
 	if tarot.is_empty():
 		out.append("no tarot deck")
 	elif tarot_return() >= 1.0:

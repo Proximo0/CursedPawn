@@ -14,8 +14,11 @@ func test_both_bots_finish_runs() -> void:
 func test_cautious_walks_away_from_tells() -> void:
 	var tun := Tuning.new()
 	tun.set_value("cursed_share", 1.0)
+	tun.set_value("tell_chance", 1.0)  # every inspect with a matching tool shows the tell
 	var run := RunState.new()
-	run.start(3, Catalog.load_default(), tun)
+	var cat := Catalog.load_default()
+	cat.curses = cat.curses.filter(func(c: Dictionary) -> bool: return (c["tells"] as Dictionary).has("uv"))
+	run.start(3, cat, tun)
 	var bot := ShopBot.new(ShopBot.CAUTIOUS)
 	var guard: int = 0
 	while (run.customer["tells"] as Array).is_empty() and guard < 5:
