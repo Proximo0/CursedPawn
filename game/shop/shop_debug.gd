@@ -30,6 +30,10 @@ var _wake_label: Label
 var _end_box: VBoxContainer
 var _end_label: Label
 var _offer_spin: SpinBox
+var _wager_spin: SpinBox
+var _wager_btn: Button
+var _relics: RelicShopPanel
+var _rewarded: bool = false
 
 
 ## One event Dictionary as a readable log line.
@@ -68,6 +72,9 @@ static func sd_event_text(e: Dictionary) -> String:
 			return "RUN LOST on night %d: cash %d, rent %d." % [int(e["night"]), int(e["cash"]), int(e["rent"])]
 		"run_won":
 			return "RUN WON with %d cash." % int(e["cash"])
+		"wager":
+			return "Tarot: %s. %s Stake %d, payout %d%s." % [str(e["card"]), str(e.get("text", "")), int(e["stake"]),
+				int(e["payout"]), " (dread +%.1f)" % float(e["dread"]) if float(e.get("dread", 0.0)) > 0.0 else ""]
 		"invalid":
 			return "Can't do that: %s." % str(e.get("why", "?"))
 	return "Unknown event %s" % str(e.get("e", "?"))
@@ -102,6 +109,8 @@ func _ready() -> void:
 	add_child(_overlay)
 	add_child(FrameStamp.new())
 	add_child(RenderToggles.new())
+	_relics = RelicShopPanel.new()
+	add_child(_relics)
 	catalog = Catalog.load_default()
 	new_run(Flags.seed_value())
 
@@ -129,6 +138,7 @@ func new_run(seed_in: int) -> void:
 	rec = RunRecording.begin(run, seed_in, catalog, Tuning.shared())
 	log_lines.clear()
 	_end_box.visible = false
+	_rewarded = false
 	_wake_label.visible = false
 	wake_left = 0.0
 	_on_events(run.last_events)
@@ -177,7 +187,15 @@ func _refresh() -> void:
 		lines.append("%s  est %d  tells %d" % [item["name"], int(item["est"]), int(item["tells"])])
 	_inventory_label.text = "\n".join(lines) if not lines.is_empty() else "(empty)"
 	_rebuild_customer()
+	var cap: int = run.max_wager()
+	_wager_spin.max_value = maxi(1, cap)
+	_wager_spin.value = clampi(int(_wager_spin.value), 1, maxi(1, cap))
+	_wager_btn.disabled = cap < 1 or run.customer.is_empty()
 	if run.is_over():
+		if run.won and not _rewarded and _relics != null:
+			_rewarded = true
+			_relics.reward_run(run)
+			_log("A free reliquary appears on the counter.")
 		_end_box.visible = true
 		_end_label.text = "RUN WON, cash %d" % run.cash if run.won else "RUN LOST on night %d" % run.night
 		_end_label.add_theme_color_override("font_color", Color(0.5, 0.9, 0.5) if run.won else Color(1.0, 0.35, 0.35))
@@ -256,6 +274,14 @@ func _build_buyer(cust: Dictionary) -> void:
 	decline.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	decline.pressed.connect(act.bind({"t": "pass"}))
 	_customer_box.add_child(decline)
+
+
+func _on_wager() -> void:
+	act({"t": "wager", "amount": int(_wager_spin.value)})
+
+
+func _on_reliquary() -> void:
+	_relics.toggle()
 
 
 func _on_offer() -> void:
@@ -357,6 +383,21 @@ func _build_ui() -> void:
 	mid.add_child(cust_panel)
 	_customer_box = VBoxContainer.new()
 	cust_panel.add_child(_customer_box)
+	var wager_row := HBoxContainer.new()
+	left.add_child(wager_row)
+	wager_row.add_child(_label_of("Tarot wager stake"))
+	_wager_spin = SpinBox.new()
+	_wager_spin.min_value = 1
+	_wager_spin.max_value = 1
+	wager_row.add_child(_wager_spin)
+	_wager_btn = Button.new()
+	_wager_btn.text = "Draw a card"
+	_wager_btn.pressed.connect(_on_wager)
+	wager_row.add_child(_wager_btn)
+	var relic_btn := Button.new()
+	relic_btn.text = "Reliquary"
+	relic_btn.pressed.connect(_on_reliquary)
+	wager_row.add_child(relic_btn)
 	var right := VBoxContainer.new()
 	right.custom_minimum_size = Vector2(380, 0)
 	cols.add_child(right)

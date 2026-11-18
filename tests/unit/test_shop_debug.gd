@@ -15,6 +15,7 @@ const SD_EVENTS: Array = [
 	{"e": "run_lost", "night": 2, "cash": 5, "rent": 60},
 	{"e": "run_won", "cash": 300},
 	{"e": "invalid", "why": "tool uv"},
+	{"e": "wager", "card": "The Fool", "text": "Luck turns.", "stake": 10, "payout": 20, "dread": 1.0},
 ]
 
 
@@ -39,3 +40,15 @@ func test_overlay_format() -> void:
 	run.start(3, Catalog.load_default(), Tuning.new())
 	var s: String = DebugOverlay.ov_format(run.debug_frame())
 	assert_true(s.contains("night 1") and s.contains("night_start"))
+
+
+func test_wager_text() -> void:
+	var t: String = ShopDebug.sd_event_text(SD_EVENTS[14])
+	assert_true(t.contains("The Fool") and t.contains("Luck turns.") and t.contains("payout 20"))
+
+
+func test_wager_through_run() -> void:
+	var run := RunState.new()
+	var rec := RunRecording.begin(run, 5, Catalog.load_default(), Tuning.new())
+	var ev: Array[Dictionary] = rec.drive(run, {"t": "wager", "amount": maxi(1, run.max_wager())})
+	assert_true(ev.size() > 0 and ShopDebug.sd_event_text(ev[0]) != "" and not ShopDebug.sd_event_text(ev[0]).begins_with("Unknown"))
