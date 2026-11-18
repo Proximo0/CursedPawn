@@ -39,7 +39,18 @@ const FIELDS: Array = [
 	["box_rare_odds", 0.25, 0.0, 1.0, 0.01, "Estate boxes", "Chance an estate box holds a rare curio (shown to the player before buying)."],
 	["box_legendary_odds", 0.05, 0.0, 1.0, 0.01, "Estate boxes", "Chance an estate box holds a legendary curio (shown before buying)."],
 	["box_pity", 30, 1, 200, 1, "Estate boxes", "A legendary is guaranteed by this many boxes without one."],
+	["box_soft_pity_start", 20, 1, 200, 1, "Estate boxes", "From this many boxes without a legendary, its odds rise each box (soft pity)."],
+	["box_soft_pity_step", 0.06, 0.0, 1.0, 0.01, "Estate boxes", "Legendary odds added per box past the soft pity start."],
+	["featured_rate_up", 0.5, 0.0, 1.0, 0.05, "Estate boxes", "Within the featured curio's rarity, the chance the pick is the featured curio."],
+	["shards_common", 1, 0, 100, 1, "Estate boxes", "Shards from a duplicate common curio out of a sealed box."],
+	["shards_rare", 5, 0, 200, 1, "Estate boxes", "Shards from a duplicate rare curio out of a sealed box."],
+	["shards_legendary", 20, 0, 500, 1, "Estate boxes", "Shards from a duplicate legendary curio out of a sealed box."],
+	["craft_common", 10, 1, 500, 1, "Estate boxes", "Shards to craft a chosen common curio."],
+	["craft_rare", 40, 1, 1000, 1, "Estate boxes", "Shards to craft a chosen rare curio."],
+	["craft_legendary", 150, 1, 5000, 1, "Estate boxes", "Shards to craft a chosen legendary curio."],
 	["box_per_won_run", 1, 0, 10, 1, "Estate boxes", "Free estate boxes for surviving a run (every curio can be earned in play)."],
+	["wager_minutes", 10, 0, 60, 1, "Tarot wager", "Day-clock minutes a tarot wager takes."],
+	["wager_max_frac", 0.5, 0.0, 1.0, 0.05, "Tarot wager", "Largest stake, as a fraction of cash on hand."],
 	["secs_per_customer", 25.0, 1.0, 120.0, 1.0, "Pacing", "Estimated real seconds a player spends per customer (lab run length)."],
 	["secs_per_inspect", 5.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per tool use."],
 	["secs_per_haggle", 4.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per offer."],
@@ -77,7 +88,18 @@ var wake_break_chance: float
 var box_rare_odds: float
 var box_legendary_odds: float
 var box_pity: float
+var box_soft_pity_start: float
+var box_soft_pity_step: float
+var featured_rate_up: float
+var shards_common: float
+var shards_rare: float
+var shards_legendary: float
+var craft_common: float
+var craft_rare: float
+var craft_legendary: float
 var box_per_won_run: float
+var wager_minutes: float
+var wager_max_frac: float
 var secs_per_customer: float
 var secs_per_inspect: float
 var secs_per_haggle: float

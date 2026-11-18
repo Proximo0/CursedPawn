@@ -1,0 +1,7 @@
+[
+	{"id": "the_sun", "name": "The Sun", "weight": 10, "mult": 3.0, "dread": 0.0, "text": "Light floods the shop. Triple your stake."},
+	{"id": "wheel_of_fortune", "name": "Wheel of Fortune", "weight": 25, "mult": 2.0, "dread": 0.0, "text": "The wheel turns your way. Double your stake."},
+	{"id": "the_fool", "name": "The Fool", "weight": 15, "mult": 1.0, "dread": 0.0, "text": "Nothing gained, nothing lost."},
+	{"id": "death", "name": "Death", "weight": 38, "mult": 0.0, "dread": 0.0, "text": "Your stake rots in your hand."},
+	{"id": "the_tower", "name": "The Tower", "weight": 12, "mult": 0.0, "dread": 1.0, "text": "The stake is gone and the shelves shudder. Dread rises."}
+]

@@ -37,12 +37,17 @@ the lab's estimate of real seconds per action, used for the run-length target.
 `tests/lab/lab.tscn` (in `check_all` and CI): 300 runs per bot. FAIL on stuck runs, replay or restore divergence, or a
 curse with no tell. WARN on the balance targets in `docs/handoff.md`.
 
-## Estate boxes (paid gacha, US-only design, decided 18 Nov 2026)
-`CurioCollection` (`game/logic/curio_collection.gd`): `create(seed, tuning)`, `odds() -> {common, rare, legendary}`
-(show before every purchase), `pity_left()`, `add_boxes(n)` (purchase or reward), `reward_run(run)`, `open_box() ->
-{id, name, rarity, new, pity}`, `to_dict()`/`from_dict()`. Curios (`game/data/curios.json`, placeholder) are cosmetic:
-shop decor and a collection book, and they never change run numbers (Washington "extension of play").
-Trading (pending Curtis's pick, 18 Nov): curios from PAID boxes are never tradeable; curios from free boxes, run
-drops or fixed-price purchases (`grant(id)`) are, via `tradeable` and `take_tradeable(id)`. `add_boxes(n, paid)`;
-free boxes open first. New curios come before duplicates. Payments: Steam microtransactions; the web store needs a payment
-provider that allows paid random items (Paddle's AUP bans "games of chance").
+## Reliquaries, relics and tarot (gacha plan, 18 Nov 2026; doc https://claude.ai/artifact/HeWHGkv8j31YYkXppPvAsR)
+Washington gambling = paying + chance + a thing of value; each way to get a curio drops one of the three.
+- `CurioCollection` (`game/logic/curio_collection.gd`): `odds()` (next box, soft and hard pity included),
+  `pity_left()`, `add_boxes(n, paid)`, `boxes()`, `open_box() -> {id, name, rarity, new, pity, tradeable, shards}`
+  (free boxes first; paid-box curios are locked; paid duplicates become locked shards), `appraised_offer()` /
+  `buy_appraised()` (scried reliquary: contents shown before buying, tradeable), `set_featured(id)`, `grant(id)`,
+  `craft(id)`, `craft_cost(id)`, `take_tradeable(id)`, `receive_trade(id)`, `sets()`, `claim_completed_sets()`,
+  `reward_run(run)`, fields `owned, tradeable, free_boxes, paid_boxes, shards_free, shards_locked, featured_id`.
+- `RelicStore` (`game/logic/relic_store.gd`): `set_age(years, consent)`, `is_open()`, `quote(id)` (dollars, odds,
+  pity, what a scried or bound relic contains), `fulfill(id, payment_ref)` after payment, `refund(n)`, `log`.
+  Products in `game/data/store.json`. Display names: sealed reliquary, scried reliquary, bound relic, curios.
+- Tarot wager (`RunState`): `{t: "wager", amount}` up to `max_wager()`; event `wager {card, text, stake, payout,
+  dread}`. Deck in `game/data/tarot.json`; `Catalog.tarot_return()` must stay below 1. Run cash is never sold for
+  real money and nothing from the store changes a run.

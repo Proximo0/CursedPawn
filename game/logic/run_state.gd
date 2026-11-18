@@ -111,7 +111,8 @@ func sale_mult() -> float:
 	return m
 
 
-## Commands: {t: "inspect", tool}, {t: "offer", amount}, {t: "buy"}, {t: "pass"}, {t: "sell", uid}.
+## Commands: {t: "inspect", tool}, {t: "offer", amount}, {t: "buy"}, {t: "pass"}, {t: "sell", uid},
+## {t: "wager", amount} (a tarot draw for run cash; the customer waits).
 func apply(cmd: Dictionary) -> Array[Dictionary]:
 	var ev: Array[Dictionary] = []
 	if phase == PHASE_OVER:
@@ -132,6 +133,8 @@ func apply(cmd: Dictionary) -> Array[Dictionary]:
 		_buy_at(int(customer["ask"]), ev)
 	elif t == "sell" and kind == BUYER:
 		_sell(int(cmd.get("uid", -1)), ev)
+	elif t == "wager" and kind != "":
+		_wager(int(cmd.get("amount", 0)), ev)
 	else:
 		ev.append({"e": "invalid", "why": "cannot %s now" % t})
 	last_events = ev
@@ -209,6 +212,37 @@ func _sell(uid: int, ev: Array[Dictionary]) -> void:
 		_next_customer(ev)
 		return
 	ev.append({"e": "invalid", "why": "cannot sell %d" % uid})
+
+
+## Largest stake allowed now.
+func max_wager() -> int:
+	return int(cash * tuning.wager_max_frac)
+
+
+## Tarot wager: stake run cash on one card from the deck. Run cash is never bought with real money and is worth
+## nothing outside the run, which keeps this legal. The card's mult sets the payout; some cards add Dread.
+func _wager(amount: int, ev: Array[Dictionary]) -> void:
+	if amount <= 0 or amount > max_wager() or catalog.tarot.is_empty():
+		ev.append({"e": "invalid", "why": "wager %d" % amount})
+		return
+	clock -= tuning.wager_minutes
+	play_secs += tuning.secs_per_haggle
+	var total: float = 0.0
+	for card: Dictionary in catalog.tarot:
+		total += float(card["weight"])
+	var r: float = rng.randf() * total
+	var pick: Dictionary = catalog.tarot[catalog.tarot.size() - 1]
+	for card: Dictionary in catalog.tarot:
+		r -= float(card["weight"])
+		if r < 0.0:
+			pick = card
+			break
+	var payout: int = int(round(amount * float(pick["mult"])))
+	cash += payout - amount
+	dread += float(pick.get("dread", 0.0))
+	ev.append({"e": "wager", "card": pick["name"], "text": pick.get("text", ""), "stake": amount, "payout": payout,
+		"dread": float(pick.get("dread", 0.0))})
+	_check_wake(ev)
 
 
 ## Every nth customer is an imposter while a curse with imposter_every = n is held (0 = none).

@@ -1,0 +1,6 @@
+[
+	{"id": "sealed_1", "kind": "sealed", "count": 1, "price_cents": 199, "label": "Sealed reliquary", "blurb": "A curio of unknown power waits inside. Odds below."},
+	{"id": "sealed_10", "kind": "sealed", "count": 10, "price_cents": 1799, "label": "Coven of 10 sealed reliquaries", "blurb": "Ten reliquaries for the price of nine."},
+	{"id": "scried_1", "kind": "scried", "count": 1, "price_cents": 399, "label": "Scried reliquary", "blurb": "The crystal shows exactly which curio is inside. Tradeable."},
+	{"id": "bound_relic", "kind": "featured", "count": 1, "price_cents": 499, "label": "Bound relic", "blurb": "This fortnight's featured curio, bought outright. Tradeable."}
+]

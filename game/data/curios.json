@@ -1,12 +1,14 @@
 [
-	{"id": "curio_01", "name": "Placeholder curio 1", "rarity": "common"},
-	{"id": "curio_02", "name": "Placeholder curio 2", "rarity": "common"},
-	{"id": "curio_03", "name": "Placeholder curio 3", "rarity": "common"},
-	{"id": "curio_04", "name": "Placeholder curio 4", "rarity": "common"},
-	{"id": "curio_05", "name": "Placeholder curio 5", "rarity": "common"},
-	{"id": "curio_06", "name": "Placeholder curio 6", "rarity": "common"},
-	{"id": "curio_07", "name": "Placeholder curio 7", "rarity": "rare"},
-	{"id": "curio_08", "name": "Placeholder curio 8", "rarity": "rare"},
-	{"id": "curio_09", "name": "Placeholder curio 9", "rarity": "rare"},
-	{"id": "curio_10", "name": "Placeholder curio 10", "rarity": "legendary"}
+	{"id": "curio_01", "name": "Placeholder curio 1", "rarity": "common", "set": "parlor"},
+	{"id": "curio_02", "name": "Placeholder curio 2", "rarity": "common", "set": "parlor"},
+	{"id": "curio_03", "name": "Placeholder curio 3", "rarity": "common", "set": "parlor"},
+	{"id": "curio_04", "name": "Placeholder curio 4", "rarity": "common", "set": "attic"},
+	{"id": "curio_05", "name": "Placeholder curio 5", "rarity": "common", "set": "attic"},
+	{"id": "curio_06", "name": "Placeholder curio 6", "rarity": "common", "set": "attic"},
+	{"id": "curio_07", "name": "Placeholder curio 7", "rarity": "rare", "set": "parlor"},
+	{"id": "curio_08", "name": "Placeholder curio 8", "rarity": "rare", "set": "attic"},
+	{"id": "curio_09", "name": "Placeholder curio 9", "rarity": "rare", "set": "cellar"},
+	{"id": "curio_10", "name": "Placeholder curio 10", "rarity": "legendary", "set": "cellar"},
+	{"id": "curio_11", "name": "Placeholder curio 11", "rarity": "rare", "set": "cellar"},
+	{"id": "curio_12", "name": "Placeholder curio 12", "rarity": "legendary", "set": "cellar"}
 ]

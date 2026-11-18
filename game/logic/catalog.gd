@@ -6,15 +6,18 @@ extends RefCounted
 const TOOLS: PackedStringArray = ["uv", "scale", "listen", "touch"]
 const OBJECTS_PATH: String = "res://game/data/objects.json"
 const CURSES_PATH: String = "res://game/data/curses.json"
+const TAROT_PATH: String = "res://game/data/tarot.json"
 
 var objects: Array[Dictionary] = []
 var curses: Array[Dictionary] = []
+var tarot: Array[Dictionary] = []  ## {id, name, weight, mult, dread, text}: the tarot wager deck
 
 
 static func load_default() -> Catalog:
 	var c := Catalog.new()
 	c.objects = _catalog_read(OBJECTS_PATH)
 	c.curses = _catalog_read(CURSES_PATH)
+	c.tarot = _catalog_read(TAROT_PATH)
 	return c
 
 
@@ -41,6 +44,16 @@ func categories() -> PackedStringArray:
 		if not out.has(str(o["category"])):
 			out.append(str(o["category"]))
 	return out
+
+
+## Expected payout per coin staked on a tarot wager (below 1 = the house wins on average).
+func tarot_return() -> float:
+	var total: float = 0.0
+	var paid: float = 0.0
+	for card: Dictionary in tarot:
+		total += float(card["weight"])
+		paid += float(card["weight"]) * float(card["mult"])
+	return paid / total if total > 0.0 else 0.0
 
 
 ## Data problems, one line each. Empty when the catalog is usable. Every curse needs at least one tell.
@@ -74,4 +87,8 @@ func problems() -> PackedStringArray:
 		if ids.has(c.get("id", "")):
 			out.append("duplicate id %s" % c.get("id", ""))
 		ids[c.get("id", "")] = true
+	if tarot.is_empty():
+		out.append("no tarot deck")
+	elif tarot_return() >= 1.0:
+		out.append("tarot deck pays %.2f per coin staked; it must stay below 1" % tarot_return())
 	return out

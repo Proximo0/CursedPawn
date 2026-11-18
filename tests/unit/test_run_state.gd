@@ -206,3 +206,36 @@ func test_wake_without_break_keeps_stock() -> void:
 	run.apply({"t": "buy"})
 	assert_eq(run.wake_nights.size(), 1)
 	assert_eq(run.inventory.size(), 1)
+
+
+func test_wager_pays_by_card_and_costs_time() -> void:
+	var run := rs_run(31)
+	var clock: float = run.clock
+	var cash: int = run.cash
+	var stake: int = 20
+	var ev: Array[Dictionary] = run.apply({"t": "wager", "amount": stake})
+	assert_eq(ev[0]["e"], "wager")
+	assert_eq(run.cash, cash - stake + int(ev[0]["payout"]))
+	assert_near(run.clock, clock - run.tuning.wager_minutes)
+
+
+func test_wager_limits() -> void:
+	var run := rs_run(31)
+	assert_eq(run.apply({"t": "wager", "amount": run.max_wager() + 1})[0]["e"], "invalid", "over max")
+	assert_eq(run.apply({"t": "wager", "amount": 0})[0]["e"], "invalid", "zero")
+
+
+func test_tarot_house_edge() -> void:
+	var cat := Catalog.load_default()
+	assert_true(cat.tarot_return() < 1.0, "return %.2f" % cat.tarot_return())
+	var run := rs_run(1)
+	var won: int = 0
+	var staked: int = 0
+	for i: int in range(3000):
+		run.cash = 1000
+		run.clock = 10000.0
+		run.dread = 0.0
+		var ev: Array[Dictionary] = run.apply({"t": "wager", "amount": 10})
+		staked += 10
+		won += int(ev[0]["payout"])
+	assert_near(float(won) / staked, cat.tarot_return(), 0.06, "measured return")
