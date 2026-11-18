@@ -5,7 +5,9 @@ name: checks
 on:
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "**/*.md"]  # doc-only pushes skip CI; drop this if a check becomes required
   pull_request:
+    paths-ignore: ["docs/**", "**/*.md"]
   workflow_dispatch:
 
 concurrency:

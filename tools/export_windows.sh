@@ -7,12 +7,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_NAME="Cursed Pawn"
 PROJECT_SLUG="Cursed-Pawn"  # no spaces: used for file names
 GODOT_VERSION="4.7.2"
-TEMPLATE_TAG="4.7.2-stable"
 TEMPLATE_DIR="${HOME}/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
 TEMPLATE_EXE="${TEMPLATE_DIR}/windows_release_x86_64.exe"
-TPZ_URL="https://github.com/godotengine/godot/releases/download/${TEMPLATE_TAG}/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
-CACHE_DIR="${HOME}/.cache/godot-templates"
-TPZ_PATH="${CACHE_DIR}/export_templates.tpz"
 EXE_OUT="build/windows/${PROJECT_SLUG}.exe"
 ZIP_OUT="build/${PROJECT_SLUG}-windows.zip"
 
@@ -24,20 +20,13 @@ fail() {
 command -v godot >/dev/null 2>&1 || fail "godot not found on PATH"
 command -v unzip >/dev/null 2>&1 || fail "unzip not found on PATH"
 command -v zip >/dev/null 2>&1 || fail "zip not found on PATH"
-command -v curl >/dev/null 2>&1 || fail "curl not found on PATH"
+command -v python3 >/dev/null 2>&1 || fail "python3 not found on PATH"
 
 if [[ ! -f "${TEMPLATE_EXE}" ]]; then
-	mkdir -p "${TEMPLATE_DIR}" "${CACHE_DIR}"
-	if [[ ! -f "${TPZ_PATH}" ]]; then
-		curl -sSfL --retry 3 -o "${TPZ_PATH}.part" "${TPZ_URL}" || fail "template download failed"
-		mv "${TPZ_PATH}.part" "${TPZ_PATH}"
-	fi
-	# The tpz is a zip with a templates/ folder. Extract only the Windows templates.
-	unzip -q -o -j "${TPZ_PATH}" 'templates/windows_*' -d "${TEMPLATE_DIR}" >/dev/null 2>&1 \
-		|| fail "template extract failed"
-	unzip -q -o -j "${TPZ_PATH}" 'templates/version.txt' -d "${TEMPLATE_DIR}" >/dev/null 2>&1 || true
-	rm -f "${TPZ_PATH}"
-	[[ -f "${TEMPLATE_EXE}" ]] || fail "windows_release_x86_64.exe missing after extract"
+	# Range-reads just the Windows templates (x86_64 only) out of the 1.28 GB tpz (tools/fetch_templates.py).
+	python3 -I "${ROOT}/tools/fetch_templates.py" "${GODOT_VERSION}" "${TEMPLATE_DIR}" 'windows_*_x86_64*' >/dev/null \
+		|| fail "template download failed"
+	[[ -f "${TEMPLATE_EXE}" ]] || fail "windows_release_x86_64.exe missing after fetch"
 fi
 
 cd "${ROOT}"

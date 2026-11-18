@@ -8,11 +8,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_NAME="Cursed Pawn"
 PROJECT_SLUG="Cursed-Pawn"  # no spaces: used for file names
 GODOT_VERSION="4.7.2"
-TEMPLATE_TAG="4.7.2-stable"
 TEMPLATE_DIR="${HOME}/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
-TPZ_URL="https://github.com/godotengine/godot/releases/download/${TEMPLATE_TAG}/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
-CACHE_DIR="${HOME}/.cache/godot-templates"
-TPZ_PATH="${CACHE_DIR}/export_templates.tpz"
 SDK="${ANDROID_SDK_ROOT:-${HOME}/android-sdk}"
 JDK="${JAVA_HOME_17:-${HOME}/jdk-17}"
 BUILD_TOOLS_VER="35.0.1"
@@ -26,19 +22,15 @@ fail() {
 	exit 1
 }
 
-for c in godot unzip curl python3; do
+for c in godot unzip python3; do
 	command -v "$c" >/dev/null 2>&1 || fail "$c not found on PATH"
 done
 
-# 1. Export templates (keep the cached tpz; Windows script may have removed it, so redownload only if needed).
+# 1. Export templates.
 if [[ ! -f "${TEMPLATE_DIR}/android_release.apk" || ! -f "${TEMPLATE_DIR}/android_debug.apk" ]]; then
-	mkdir -p "${TEMPLATE_DIR}" "${CACHE_DIR}"
-	if [[ ! -f "${TPZ_PATH}" ]]; then
-		curl -sSfL --retry 3 -o "${TPZ_PATH}.part" "${TPZ_URL}" || fail "template download failed"
-		mv "${TPZ_PATH}.part" "${TPZ_PATH}"
-	fi
-	unzip -q -o -j "${TPZ_PATH}" 'templates/android_*' 'templates/version.txt' -d "${TEMPLATE_DIR}" \
-		|| fail "template extract failed"
+	# Range-reads just the Android templates out of the 1.28 GB tpz (tools/fetch_templates.py).
+	python3 -I "${ROOT}/tools/fetch_templates.py" "${GODOT_VERSION}" "${TEMPLATE_DIR}" 'android_*.apk' >/dev/null \
+		|| fail "template download failed"
 fi
 
 # 2. JDK 17 and the SDK tools. dl.google.com is not reachable from the cloud sandbox, so on Debian/Ubuntu the

@@ -1,0 +1,55 @@
+# Playable web build. Every PR and push exports the Web preset (Compatibility, single-threaded) and keeps it as a
+# `web` artifact; pushes to main also deploy it to GitHub Pages, so the newest main is one tap away on a phone.
+# One-time setup by the repo owner: Settings > Pages > Build and deployment > Source: "GitHub Actions".
+# Until then the deploy job fails and the artifact still works.
+name: web
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:
+    paths-ignore: ["docs/**", "**/*.md"]
+  workflow_dispatch:
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-godot
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates
+          key: godot-templates-web-${{ env.GODOT_VERSION }}
+      - name: Export
+        run: tools/export_web.sh
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+          name: web
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: web

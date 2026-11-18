@@ -14,7 +14,7 @@ JOBS="${JOBS:-$(nproc)}"
 OUT=$(mktemp -d "/tmp/check.$(basename "$PWD").XXXXXX")  # per run, so two check_all runs never share logs
 FILTER='^(Godot Engine v|$|WARNING: .*audio|   at: )'
 start=$(date +%s)
-(flock 9; "$GODOT" --headless --path . --import) 9>"/tmp/$(basename "$PWD")_import.lock" >"$OUT/import.log" 2>&1 || { cat "$OUT/import.log"; echo "CHECK_ALL FAIL (import)"; exit 1; }
+tools/import.sh >"$OUT/import.log" 2>&1 || { cat "$OUT/import.log"; echo "CHECK_ALL FAIL (import)"; exit 1; }
 
 # One command per line: name|command.
 BOT_SHARDS=3
