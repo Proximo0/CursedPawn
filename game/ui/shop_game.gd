@@ -12,6 +12,7 @@ const RECORDING_PATH: String = "user://last_run.json"
 const CARD_SECS: float = 2.0
 const PENDULUM_KEY: int = KEY_Q  ## the Altar tool: is it cursed, yes or no
 const COLLECTOR_CARD_SECS: float = 4.6
+const EVENT_CARD_SECS: float = 4.2
 const CARD_SKIP_AFTER: float = 0.35
 const REPLAY_BEFORE: int = 4
 const REPLAY_STEP_SECS: float = 0.9
@@ -32,10 +33,18 @@ var tell_texts: Dictionary = {}  ## tool -> tell text for the current seller
 var log_lines: Array[String] = []
 var log_age: Array[float] = []  ## seconds since each log line was written (the HUD writes the newest in like ink)
 var offer_amount: int = 1
+const OFFER_RAISE: float = 0.25  # the counter box opens this far above the buyer's offer
+const OFFER_CAP_MULT: int = 3
+const COUNTER_KEY: int = KEY_C
 var stake_amount: int = 1
 var stake_open: bool = false
 var selected_uid: int = -1  ## buyer: the shelf item picked (click again to sell)
 var cards: Array[Dictionary] = []  ## title cards waiting to show: {title, sub, tone, age}
+var ending_id: String = ""  ## how a won run ended (UiEndings.IDS)
+var patience_start: int = 3  ## the seller's patience when they walked in (the candle's full height)
+var mood: String = "calm"
+var mood_known: bool = false  ## true after the first counter-offer shows it
+var item_tells: Dictionary = {}  ## held item uid -> {tool: tell text} found before it was bought
 var gift_text: String = ""
 var gift_status: String = ""
 var handle: String = ""
@@ -55,6 +64,14 @@ var daily_no: int = 0
 var ecto_earned: int = 0  ## ectoplasm the finished run earned (shown at the run end)
 var carried_cash: int = 0  ## cash a lost run carries to the next one
 var unlocked_text: String = ""  ## "HAUNTING 3 UNLOCKED" once a won run earned it
+var pad_focus: String = ""  ## the widget a controller has focused
+var test_active: bool = false  ## a test-menu scene is up: nothing is saved, Esc returns to the menu
+var test_slider: bool = false  ## the Dread slider tile
+var test_menu: TestMenu
+var _test_overlay: TestOverlay
+var _test_screen: TsScreen  ## the altar, journal or run setup a tile opened
+var _test_token: int = 0
+var _test_store: RelicStore  ## the real profile, set aside while the menu is open
 var _saved: Dictionary = {}  ## a run saved by an earlier launch, offered as Continue on the title
 
 var _overlay: DebugOverlay
@@ -73,6 +90,7 @@ var _daily_done: Dictionary = {}  ## {key, line}: today's daily played in this s
 var _last_invalid: bool = false
 var _toasted: PackedStringArray = PackedStringArray()  ## deeds already toasted this run
 var _deeds_gd: GDScript
+var _diag_context: Callable = Callable()  ## the run summary this screen gave DiagLog; taken back when the screen leaves
 
 
 # ---------------------------------------------------------------- pure helpers (unit-tested)
@@ -127,8 +145,13 @@ static func ui_key_command(key: int, state: RunState, offer: int, picked: int) -
 			KEY_P:
 				return {"t": "pass"}
 	elif kind == RunState.BUYER:
+		var offering: bool = not (state.customer.get("offer", {}) as Dictionary).is_empty()
+		if offering and key == COUNTER_KEY:
+			return {"t": "counter", "amount": offer}
 		match key:
 			KEY_ENTER, KEY_KP_ENTER:
+				if offering:
+					return {"t": "accept"}
 				return {"t": "sell", "uid": picked} if picked >= 0 else {}
 			KEY_P:
 				return {"t": "pass"}
@@ -172,6 +195,9 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sfx = SfxPlayer.new()
 	add_child(sfx)
+	_diag_context = func() -> String:
+		return "night %d cash %d dread %.1f seed %d" % [run.night, run.cash, run.dread, run.seed_used] if run != null else "no run"
+	DiagLog.context = _diag_context
 	sfx.start_ambient()
 	add_child(TuningPanel.new())
 	_overlay = DebugOverlay.new()
@@ -196,6 +222,7 @@ func _ready() -> void:
 	pause.profile = _relics.store if _relics != null else null
 	add_child(pause)
 	pause.quit_to_title.connect(_show_title)
+	pause.replay_seed.connect(replay_seed)
 	# Scripted runs (tests, captures) skip the title and play straight away.
 	new_run(Flags.seed_value(), {})
 	if Flags.get_arg("bot") != "":
@@ -206,9 +233,21 @@ func _ready() -> void:
 		_show_title()
 
 
+## DiagLog.context is static, so it would outlive this screen: a lambda bound to a freed node corrupts the heap when the
+## script statics are torn down at exit.
+func _exit_tree() -> void:
+	if DiagLog.context == _diag_context:
+		DiagLog.context = Callable()
+	_diag_context = Callable()
+
+
 ## Shows the title over a dimmed shop. New run starts fresh (with a friend's gift if the page carries one);
 ## Continue resumes the run saved by an earlier launch.
 func _show_title() -> void:
+	if room != null:
+		room.set_title_mode(true)
+	if sfx != null and sfx.music != null:
+		sfx.music.play_track("title")
 	if title != null:
 		title.queue_free()
 	title = TitleScreen.new()
@@ -220,6 +259,10 @@ func _show_title() -> void:
 	title.altar_ecto = UiAltar.store_ecto(_relics.store if _relics != null else null)
 	title.profile = _relics.store if _relics != null else null
 	title.tutorial_on = tutorial_pending()
+	title.preview = TitleScreen.ts_preview_of(_saved.get("run") if not _saved.is_empty() else (run if rec != null and not rec.commands.is_empty() and not run.is_over() else null))
+	title.test_on = TitleScreen.ts_test_allowed()
+	title.notice = _save_notice()
+	title.open_test_menu.connect(open_test_menu)
 	title.daily_on = UiEngage.daily_available()
 	if title.daily_on:
 		title.daily_number = UiEngage.daily_number(UiEngage.today())
@@ -229,6 +272,7 @@ func _show_title() -> void:
 		title.hide()
 		_begin_setup(true))
 	title.open_altar.connect(_open_altar)
+	title.replay_seed.connect(replay_seed)
 	title.skip_tutorial.connect(skip_tutorial)
 	title.start_daily.connect(func() -> void:
 		title.hide()
@@ -241,8 +285,27 @@ func _show_title() -> void:
 			_saved = {}
 		_refresh())
 	title.quit.connect(get_tree().quit)
-	title.visibility_changed.connect(func() -> void: _hud_view.visible = not title.visible and setup == null)
+	title.visibility_changed.connect(func() -> void:
+		_hud_view.visible = not title.visible and setup == null
+		if room != null:
+			room.set_title_mode(title.visible))
 	_hud_view.visible = false  # the title owns the screen; the shop shows dimly behind it
+
+
+## A journal run entry's "replay seed": a new run on the same seed, haunting and omen.
+func replay_seed(entry: Dictionary) -> void:
+	if title != null:
+		title.hide()
+	if pause != null:
+		pause.close()
+	_saved = {}
+	gift_text = ""
+	new_run(int(entry.get("seed", 1)), {}, UiJournalLog.replay_opts(entry))
+	_log("Seed %d again. The shop remembers." % int(entry.get("seed", 1)))
+
+
+func _journal() -> UiJournalLog:
+	return UiJournalLog.shared()
 
 
 ## The Altar over the title: spend ectoplasm on upgrades. Closing returns to the title with the new count.
@@ -276,6 +339,7 @@ func _build_hud() -> void:
 	hud.game = self
 	hud.table.sfx = sfx
 	hud.found.sfx = sfx
+	hud.inspect.sfx = sfx
 	hud.toasts.sfx = sfx
 	_hud_vp.add_child(hud)
 	var layer := CanvasLayer.new()
@@ -346,6 +410,10 @@ func new_run(seed_in: int, gift: Dictionary = {}, opts: Dictionary = {}) -> void
 	log_age.clear()
 	cards.clear()
 	tell_texts.clear()
+	ending_id = ""
+	item_tells.clear()
+	if hud != null:
+		hud.inspect.close()
 	_rewarded = false
 	_banked = false
 	stake_open = false
@@ -443,7 +511,8 @@ func act(cmd: Dictionary) -> void:
 		return
 	_on_events(rec.drive(run, cmd))
 	if not Flags.is_scripted_run():
-		PlayerProfile.save_run(run, rec.to_dict())
+		if not test_active:
+			PlayerProfile.save_run(run, rec.to_dict())
 	_refresh()
 
 
@@ -467,6 +536,18 @@ static func ui_event_line(e: Dictionary) -> String:
 			return "A request slipped away unfilled."
 		"run_opts", "tutorial_step", "regular_pending":
 			return ""
+		"night_event":
+			return "Tonight: %s." % str(e.get("name", "something odd"))
+		"curse_copied":
+			return "The curse crept from the %s into the %s." % [str(e.get("from", "old piece")).to_lower(), str(e.get("name", "new piece")).to_lower()]
+		"curse_shift":
+			return "The %s changed. It is a %s now." % [str(e.get("name", "piece")).to_lower(), str(e.get("to", "thing")).to_lower()]
+		"whispered_away":
+			return "A lullaby drifted out. Someone turned back at the door."
+		"debt_taken":
+			return "%s took %d coins from the till." % [str(e.get("who", "Someone")), int(e.get("amount", 0))]
+		"buyer_offer":
+			return "They offer %d for the %s." % [int(e.get("offer", 0)), str(e.get("name", "piece")).to_lower()]
 		"regular":
 			return "%s walks in. Chapter %d." % [str(e.get("name", "A regular")), maxi(int(e.get("chapter", 1)), 1)]
 		"regular_done":
@@ -486,11 +567,29 @@ static func ui_event_line(e: Dictionary) -> String:
 	return "Unknown event %s" % str(e.get("e", "?"))
 
 
+## Sounds for events the audio lane has no mapping for (reusing its existing names), so nothing the player does or
+## suffers is silent. Silent-in-audio events: request_due, regular_done, regular_refused, debt_taken.
+const FEEDBACK_SOUNDS: Dictionary = {"request_due": "request_pinned", "regular_done": "deed",
+	"regular_refused": "customer_left", "debt_taken": "wrong_note"}
+
+
+func _feedback_sounds(events: Array[Dictionary]) -> void:
+	for e: Dictionary in events:
+		var name: String = str(FEEDBACK_SOUNDS.get(str(e.get("e", "")), ""))
+		if name == "":
+			continue
+		if name == "request_pinned" or name == "deed":
+			sfx.ui(name)
+		else:
+			sfx.play(name)
+
+
 func _on_events(events: Array[Dictionary]) -> void:
 	if room != null:
 		room.apply_events(events)
 	if sfx != null:
 		sfx.on_events(events)
+		_feedback_sounds(events)
 	_last_invalid = false
 	if hud != null:
 		hud.feed(events)
@@ -503,22 +602,52 @@ func _on_events(events: Array[Dictionary]) -> void:
 			"table_open":
 				push_card("THE MIDNIGHT TABLE", "STAKE WHAT YOU DARE", 11)
 			"customer":
+				if not test_active:
+					_journal().note_customer(str(e.get("tid", "")))
 				tell_texts.clear()
 				selected_uid = -1
 				stake_open = false
+				mood = str(e.get("mood", "calm"))
+				mood_known = false
+				patience_start = int(run.customer.get("patience", 3))
+				if str(e.get("mood_line", "")) != "":
+					_log(str(e["mood_line"]))
 				if str(e.get("kind", "")) == RunState.SELLER:
 					offer_amount = clampi(int(e["ask"]) / 2, 1, maxi(1, run.cash))
+			"counter":
+				mood = str(e.get("mood", mood))
+				mood_known = true
+				if UiHaggle.counter_line(e) != "":
+					_log(UiHaggle.counter_line(e))
+			"buyer_offer":
+				mood = str(e.get("mood", mood))
+				mood_known = mood_known or bool(e.get("counter", false))
+				var quoted: int = int(e.get("offer", 1))
+				offer_amount = quoted + maxi(1, int(round(float(quoted) * OFFER_RAISE)))
+				if str(e.get("tell", "")) != "":
+					_log(str(e["tell"]))
+			"bought":
+				item_tells[int(e["uid"])] = tell_texts.duplicate()
 			"inspected":
 				if str(e["tell"]) != "":
 					tell_texts[str(e["tool"])] = str(e["tell"])
+					_note_curse_known()
 			"night_start":
 				var relief: float = float(e.get("dread_relief", 0.0))
 				push_card("NIGHT %d" % int(e["night"]), "RENT DUE: %d" % int(e["rent"]) + ("   THE CANDLE EASES DREAD BY %.1f" % relief if relief > 0.0 else ""), 11)
+			"debt_taken":
+				if int(e.get("amount", 0)) > 0:
+					push_card("THE TILL IS LIGHTER", "%s TOOK %d" % [UiEngage.ascii_up(str(e.get("who", "SOMEONE"))), int(e["amount"])], 13)
 			"night_end":
 				push_card("NIGHT %d DONE" % int(e["night"]), "RENT %d PAID. CASH %d" % [int(e["rent"]), int(e["cash"])], 14)
 			"wake":
 				var broke: String = str(e.get("broke", ""))
 				push_card("SOMETHING WOKE", ("THE %s SHATTERED" % broke.to_upper()) if broke != "" else "NOTHING LEFT TO BREAK", 13)
+			"night_event":
+				var nd: Dictionary = UiNightEvent.data(str(e.get("id", "")))
+				push_card(UiEngage.ascii_up(str(e.get("name", nd["name"]))), UiEngage.ascii_up(str(e.get("text", nd["text"]))), 11,
+					{"style": "event", "event_id": str(e.get("id", "")), "secs": EVENT_CARD_SECS,
+					"rules": UiNightEvent.rule_lines(nd.get("mods", {}) as Dictionary)})
 			"collector_arrives":
 				push_card("THE COLLECTOR", UiEngage.ascii_up(str(e.get("line", ""))), 14, {"style": "collector", "secs": COLLECTOR_CARD_SECS,
 					"sub2": "HE WANTS: " + UiEngage.ascii_up(str(e.get("want_text", "")))})
@@ -527,7 +656,9 @@ func _on_events(events: Array[Dictionary]) -> void:
 			"collector_refused":
 				push_card("HE IS NOT PLEASED", "A CURSE, AND HIS TOLL", 13)
 			"run_won":
+				ending_id = UiEndings.ending_of(run, e)
 				push_card("YOU SURVIVED", "%d COINS IN HAND" % int(e["cash"]), 7)
+				cards.append(UiEndings.card_for(ending_id, int(e["cash"]), e))
 			"run_lost":
 				push_card("THE SHOP IS LOST", "NIGHT %d. RENT %d. CASH %d" % [int(e["night"]), int(e["rent"]), int(e["cash"])], 13)
 		if UiOccult.OCCULT_EVENTS.has(str(e["e"])):
@@ -540,6 +671,17 @@ func _on_events(events: Array[Dictionary]) -> void:
 			var extra_line: String = ui_event_line(e)
 			if extra_line != "":
 				_log(extra_line)
+
+
+## A tell that matches the counter object's curse identifies that curse for the bestiary.
+func _note_curse_known() -> void:
+	if test_active or str(run.customer.get("kind", "")) != RunState.SELLER:
+		return
+	var curse: String = str((run.customer.get("item", {}) as Dictionary).get("curse", ""))
+	var label: String = UiInspect.curse_label(curse, tell_texts, catalog)
+	if curse != "" and label != "" and not label.begins_with("CURSED,") and not label.begins_with("CLEAN"):
+		if _journal().note_curse(curse):
+			_journal().save_player()
 
 
 func _log(line: String) -> void:
@@ -562,7 +704,7 @@ func _refresh() -> void:
 	stake_amount = clampi(stake_amount, 1, maxi(1, cap))
 	if cap < 1 or r.customer.is_empty():
 		stake_open = false
-	offer_amount = clampi(offer_amount, 1, maxi(1, r.cash))
+	offer_amount = clamp_offer(r, offer_amount)
 	if selected_uid >= 0 and not _held(selected_uid):
 		selected_uid = -1
 	if hud != null:
@@ -583,9 +725,11 @@ func _refresh() -> void:
 ## Hands the finished run to the profile (best cash, Haunting unlocks, daily record, ectoplasm) and notes a new Haunting.
 ## A scripted run saves nothing.
 func _record_result() -> void:
-	if Flags.is_scripted_run():
+	if Flags.is_scripted_run() or test_active:
 		ecto_earned = Upgrades.ecto_for(run)  # shown, never saved
 		return
+	_journal().record_run(run, ending_id, daily_run)
+	_journal().save_player()
 	var before: int = _profile_int("haunting_unlocked")
 	var res: Dictionary = PlayerProfile.record_result(run, _relics.store)
 	if res.get("deeds_new") is PackedStringArray or res.get("deeds_new") is Array:
@@ -643,7 +787,15 @@ func _daily_played_line() -> String:
 
 ## New run flow: the Haunting picker (when one is unlocked) and the Omen draw, then the run. Scripted runs, and
 ## logic without hauntings or omens, start at once with today's behaviour.
+## A short title notice when the profile file was damaged and moved to its backup.
+func _save_notice() -> String:
+	var ll: Dictionary = PlayerProfile.last_load
+	return "YOUR SAVE WAS DAMAGED. A COPY IS KEPT AS A BACKUP." if str(ll.get("status", "")) == "reset" else ""
+
+
 func _begin_setup(from_title: bool) -> void:
+	if room != null:
+		room.set_title_mode(false)
 	var seed_next: int = seed_now + 1
 	if tutorial_pending():  # the very first run is the guided night: fixed seed, no picker
 		_saved = {}
@@ -704,6 +856,28 @@ func start_daily() -> void:
 	_log("Daily Seance #%d. Everyone gets this shop today." % daily_no)
 
 
+## Opens the detail card: the counter object (uid -1), a shelf object, or (uid -2) the buyer's picked item.
+func open_inspect(uid: int) -> void:
+	if hud == null or is_replaying():
+		return
+	if uid == -2:
+		uid = selected_uid
+		if buyer_offering(view_run()):
+			uid = int((view_run().customer["offer"] as Dictionary).get("uid", -1))
+		if uid < 0:
+			return
+	if uid == -1:
+		if str(view_run().customer.get("kind", "")) != RunState.SELLER:
+			return
+		hud.inspect.open_counter()
+	elif _held(uid):
+		hud.inspect.open_held(uid)
+	else:
+		return
+	if sfx != null:
+		sfx.ui("click")
+
+
 func _held(uid: int) -> bool:
 	for item: Dictionary in view_run().inventory:
 		if int(item["uid"]) == uid:
@@ -760,6 +934,8 @@ func activate(id: String) -> void:
 		_pick_item(int(id.trim_prefix("item:")))
 	elif id.begins_with("spell:"):
 		cast_spell(id.trim_prefix("spell:"))
+	elif id.begins_with("look:"):
+		open_inspect(int(id.trim_prefix("look:")))
 	elif id.begins_with("pick:"):
 		pick_held(int(id.trim_prefix("pick:")))
 	elif id.begins_with("pair:"):
@@ -768,6 +944,8 @@ func activate(id: String) -> void:
 		_activate_table(id)
 	else:
 		match id:
+			"look":
+				open_inspect(-1)
 			"offer":
 				act({"t": "offer", "amount": offer_amount})
 			"buy":
@@ -775,9 +953,13 @@ func activate(id: String) -> void:
 			"pass":
 				act({"t": "pass"})
 			"dec":
-				offer_amount = clampi(offer_amount - 1, 1, maxi(1, r.cash))
+				offer_amount = clamp_offer(r, offer_amount - 1)
 			"inc":
-				offer_amount = clampi(offer_amount + 1, 1, maxi(1, r.cash))
+				offer_amount = clamp_offer(r, offer_amount + 1)
+			"accept":
+				act({"t": "accept"})
+			"counter_go":
+				act({"t": "counter", "amount": offer_amount})
 			"sell":
 				if selected_uid >= 0:
 					act({"t": "sell", "uid": selected_uid})
@@ -884,6 +1066,9 @@ func toggle_tarot() -> void:
 func _pick_item(uid: int) -> void:
 	if view_run().customer.get("kind", "") != RunState.BUYER:
 		return
+	if buyer_offering(view_run()):
+		open_inspect(uid)  # the offered piece: look closer before answering
+		return
 	var ok: bool = false
 	for item: Dictionary in view_run().sellable():
 		ok = ok or int(item["uid"]) == uid
@@ -895,12 +1080,25 @@ func _pick_item(uid: int) -> void:
 		selected_uid = uid
 
 
+## True while an ordinary buyer has an offer on the table (accept or counter it).
+static func buyer_offering(r: RunState) -> bool:
+	return str(r.customer.get("kind", "")) == RunState.BUYER and not (r.customer.get("offer", {}) as Dictionary).is_empty()
+
+
+## The offer or counter amount kept in range: a seller offer is capped by cash, a buyer counter sits above their offer.
+static func clamp_offer(r: RunState, v: int) -> int:
+	if buyer_offering(r):
+		var cur: int = int((r.customer["offer"] as Dictionary).get("price", 1))
+		return clampi(v, cur + 1, maxi(cur + 1, cur * OFFER_CAP_MULT))
+	return clampi(v, 1, maxi(1, r.cash))
+
+
 ## Left/Right: adjust the offer or stake, or step the buyer's shelf pick.
 func step_value(dir: int) -> void:
 	var r: RunState = view_run()
 	if stake_open:
 		stake_amount = clampi(stake_amount + dir, 1, maxi(1, r.max_wager()))
-	elif r.customer.get("kind", "") == RunState.BUYER:
+	elif r.customer.get("kind", "") == RunState.BUYER and not buyer_offering(r):
 		var items: Array[Dictionary] = r.sellable()
 		if items.is_empty():
 			return
@@ -910,7 +1108,7 @@ func step_value(dir: int) -> void:
 				at = i
 		selected_uid = int(items[posmod(at + dir, items.size())]["uid"])
 	else:
-		offer_amount = clampi(offer_amount + dir, 1, maxi(1, r.cash))
+		offer_amount = clamp_offer(r, offer_amount + dir)
 
 
 func paste_gift(text: String) -> void:
@@ -1012,11 +1210,17 @@ func _view_pos(p: Vector2) -> Vector2:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	TsPad.note(event)
+	if TsPad.is_pad_event(event) and _pad_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	if pause != null:
-		pause.blocked = stake_open or not cards.is_empty() or (title != null and title.visible) or _occult_modal()
+		pause.blocked = test_active or (hud != null and hud.inspect.is_open()) or stake_open or not cards.is_empty() or (title != null and title.visible) or _occult_modal()
 		pause.known = _known_spells()
 	var mb := event as InputEventMouseButton
 	if mb != null:
+		if test_active and test_slider and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and test_slider_click(_view_pos(mb.position)):
+			return
 		_on_mouse_button(mb)
 		return
 	var mm := event as InputEventMouseMotion
@@ -1027,7 +1231,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			sfx.ui("hover")
 		return
 	var key := event as InputEventKey
-	if key != null and key.pressed and not key.echo and key.keycode == KEY_M and sfx != null and not end_panel_visible():
+	if key != null and key.pressed and not key.echo and TsKeys.canonical(key.keycode) == KEY_M and sfx != null and not end_panel_visible():
 		settings.muted = not settings.muted
 		settings.apply(sfx, room)
 		settings.save_player()
@@ -1044,6 +1248,10 @@ func _on_mouse_button(mb: InputEventMouseButton) -> void:
 			step_value(1 if mb.button_index == MOUSE_BUTTON_WHEEL_UP else -1)
 		return
 	if mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if mb.pressed and hud != null and hud.inspect.is_open():
+		hud.inspect.close()
+		get_viewport().set_input_as_handled()
 		return
 	if mb.pressed:
 		if not cards.is_empty() and float(cards[0]["age"]) > CARD_SKIP_AFTER:
@@ -1069,6 +1277,14 @@ func _on_mouse_button(mb: InputEventMouseButton) -> void:
 
 func _on_key(key: InputEventKey) -> void:
 	var k: int = key.keycode
+	if test_active and not key.echo and k == KEY_ESCAPE and (hud == null or not hud.found.active()):
+		exit_test_tile()
+		get_viewport().set_input_as_handled()
+		return
+	if test_active and test_slider and (k == KEY_LEFT or k == KEY_RIGHT):
+		test_set_dread(_test_overlay.frac + (0.05 if k == KEY_RIGHT else -0.05))
+		get_viewport().set_input_as_handled()
+		return
 	if k == KEY_F11 and not key.echo:
 		if room != null:
 			room.dither_enabled = not room.dither_enabled
@@ -1092,6 +1308,16 @@ func _on_key(key: InputEventKey) -> void:
 			hud.found.dismiss()
 		get_viewport().set_input_as_handled()
 		return
+	if hud != null and hud.inspect.is_open():
+		if not key.echo and (k == KEY_ESCAPE or k == KEY_ENTER or TsKeys.canonical(k) == KEY_I or k == KEY_SPACE):
+			hud.inspect.close()
+		get_viewport().set_input_as_handled()
+		return
+	var ck: int = TsKeys.canonical(k)  # the key's action, whatever it is bound to
+	if ck == KEY_I and not key.echo and cards.is_empty():
+		open_inspect(-2 if view_run().customer.get("kind", "") == RunState.BUYER else -1)
+		get_viewport().set_input_as_handled()
+		return
 	if not cards.is_empty() and k == KEY_ENTER:
 		cards.pop_front()
 		return
@@ -1099,21 +1325,21 @@ func _on_key(key: InputEventKey) -> void:
 		return
 	if k == KEY_LEFT or k == KEY_RIGHT:
 		step_value(1 if k == KEY_RIGHT else -1)
-	elif k == KEY_T and not key.echo:
+	elif ck == KEY_T and not key.echo:
 		toggle_tarot()
-	elif k == KEY_R and not key.echo:
+	elif ck == KEY_R and not key.echo:
 		start_replay()
 	elif k == KEY_ESCAPE:
 		stake_open = false
 		if hud != null:
 			hud.spell_bar.pending_item_spell = ""
 			hud.table.picker_open = false
-	elif UiOccult.spell_for_key(k, UiOccult.known_spells(run)) != "" and not key.echo:
-		cast_spell(UiOccult.spell_for_key(k, UiOccult.known_spells(run)))
+	elif UiOccult.spell_for_key(ck, UiOccult.known_spells(run)) != "" and not key.echo:
+		cast_spell(UiOccult.spell_for_key(ck, UiOccult.known_spells(run)))
 	elif k == KEY_ENTER and stake_open and not key.echo:
 		act({"t": "wager", "amount": stake_amount})
 	elif not key.echo:
-		var cmd: Dictionary = ui_key_command(k, run, offer_amount, selected_uid)
+		var cmd: Dictionary = ui_key_command(ck, run, offer_amount, selected_uid)
 		if not cmd.is_empty():
 			act(cmd)
 			return
@@ -1135,3 +1361,305 @@ func _end_key(key: InputEventKey) -> void:
 	elif key.unicode >= 32 and key.unicode < 127 and handle.length() < PassLink.MAX_HANDLE:
 		handle += char(key.unicode)
 	get_viewport().set_input_as_handled()
+
+
+# ---------------------------------------------------------------- the test menu (TestMenu, TestScenes)
+
+## The Dread slider spans 0 to this multiple of the wake threshold.
+const TEST_DREAD_SPAN: float = 1.2
+
+
+## Opens the menu over the title. The real profile is set aside for a throwaway one until the menu is left.
+func open_test_menu() -> void:
+	if _relics != null and _test_store == null:
+		_test_store = _relics.store
+		_relics.store = RelicStore.create(CurioCollection.create(SEED_TEST, Tuning.shared()))
+		_relics.no_save = true
+	if title != null:
+		title.hide()
+	_hud_view.visible = false
+	if test_menu != null:
+		test_menu.queue_free()
+	test_menu = TestMenu.new()
+	test_menu.sfx = sfx
+	test_menu.room = room
+	add_child(test_menu)
+	test_menu.picked.connect(run_test_tile)
+	test_menu.closed.connect(leave_test_menu)
+	if _test_overlay == null:
+		_test_overlay = TestOverlay.new()
+		_test_overlay.game = self
+		add_child(_test_overlay)
+	_test_overlay.visible = false
+
+
+const SEED_TEST: int = 77
+
+
+## Back to the title: the real profile returns and a fresh run waits behind it.
+func leave_test_menu() -> void:
+	if test_menu != null:
+		test_menu.queue_free()
+		test_menu = null
+	if _relics != null and _test_store != null:
+		_relics.store = _test_store
+		_relics.no_save = false
+	_test_store = null
+	test_active = false
+	if _test_overlay != null:
+		_test_overlay.visible = false
+	new_run(seed_now)
+	if title != null:
+		title.show()
+	_hud_view.visible = title == null  # scripted runs have no title: the shop is what shows
+
+
+## Opens one tile of the menu.
+func run_test_tile(id: String) -> void:
+	if test_menu == null:
+		return
+	var opt: Dictionary = test_menu.opts()
+	opt["regular"] = test_menu.regular
+	_close_test_screen()
+	test_menu.hide()
+	test_active = true
+	test_slider = false
+	_test_token += 1
+	pause.blocked = true
+	_hud_view.visible = true
+	_test_overlay.label = TestScenes.label_of(id)
+	_test_overlay.note = TestScenes.note_of(id)
+	_test_overlay.slider = false
+	_test_overlay.visible = true
+	TestScenes.build(id, self, opt)
+	_test_overlay.slider = test_slider
+	if test_slider:
+		test_set_dread(0.0)
+
+
+## Esc inside a tile: everything it opened is dropped and the menu comes back.
+func exit_test_tile() -> void:
+	_test_token += 1
+	_close_test_screen()
+	test_active = false
+	test_slider = false
+	_hud_view.visible = false
+	_test_overlay.visible = false
+	if hud != null:
+		hud.found.popups.clear()
+		hud.toasts.clear()
+		hud.tutorial.clear()
+	cards.clear()
+	new_run(seed_now)
+	if test_menu != null:
+		test_menu.show()
+		test_menu.focus_id = test_menu.last_id if test_menu.ts_menu_ids().has(test_menu.last_id) else test_menu.ts_menu_ids()[0]
+	test_active = false
+
+
+func _close_test_screen() -> void:
+	if _test_screen != null:
+		_test_screen.queue_free()
+		_test_screen = null
+	if setup != null:
+		setup.queue_free()
+		setup = null
+	if altar != null:
+		altar.queue_free()
+		altar = null
+
+
+## A clean seeded run for a tile; the profile is the throwaway one.
+func test_begin(seed_in: int, opts: Dictionary = {}) -> void:
+	new_run(seed_in, {}, opts)
+	cards.clear()
+
+
+## Rebuilds the room and HUD state after a tile edited the run directly.
+func test_sync() -> void:
+	if room != null:
+		room.setup(run)
+	_refresh()
+
+
+## Feeds events as if the run had produced them.
+func test_feed(events: Array[Dictionary]) -> void:
+	_on_events(events)
+	_refresh()
+
+
+## Calls `fn` after `secs` unless the player has left the tile by then.
+func test_later(secs: float, fn: Callable) -> void:
+	if not is_inside_tree():
+		return
+	var token: int = _test_token
+	get_tree().create_timer(secs).timeout.connect(func() -> void:
+		if token == _test_token and test_active and not run.is_over():
+			fn.call())
+
+
+func test_set_dread(frac: float) -> void:
+	var f: float = clampf(frac, 0.0, 1.0)
+	run.dread = f * TEST_DREAD_SPAN * run.tuning.wake_threshold
+	_test_overlay.frac = f
+	_refresh()
+
+
+## A click on the Dread slider bar sets it. True when the click was on the bar.
+func test_slider_click(p: Vector2) -> bool:
+	var f: float = TestOverlay.frac_at(p)
+	if f < 0.0:
+		return false
+	test_set_dread(f)
+	return true
+
+
+func test_open_setup() -> void:
+	setup = UiRunSetup.new()
+	setup.sfx = sfx
+	setup.room = room
+	setup.unlocked = 10
+	setup.omen_ids = UiEngage.omen_offer(seed_now + 1)
+	add_child(setup)
+	_hud_view.visible = false
+	setup.chosen.connect(func(opts: Dictionary) -> void:
+		setup.queue_free()
+		setup = null
+		_hud_view.visible = true
+		test_begin(seed_now + 1, opts))
+	setup.cancelled.connect(exit_test_tile)
+
+
+func test_open_altar(ecto: int) -> void:
+	_relics.store.ecto = ecto
+	altar = UiAltar.new()
+	altar.sfx = sfx
+	altar.room = room
+	altar.store = _relics.store
+	add_child(altar)
+	_hud_view.visible = false
+	altar.closed.connect(exit_test_tile)
+
+
+func test_open_journal() -> void:
+	var st: RelicStore = _relics.store
+	var ids := PackedStringArray()
+	for d: Dictionary in UiLedger.deed_defs():
+		ids.append(str(d["id"]))
+	st.deeds = ids
+	for d: Dictionary in UiLedger.regular_defs():
+		st.regulars[str(d["id"])] = Regulars.chapter_count(str(d["id"]))
+	var host := TestJournalHost.new()
+	host.sfx = sfx
+	host.room = room
+	host.profile = st
+	add_child(host)
+	var lg := UiJournalLog.new()  # a full one: every curse known, every customer met, a few runs
+	for cu: Dictionary in catalog.curses:
+		lg.note_curse(str(cu["id"]))
+	for ct: Dictionary in catalog.customers:
+		lg.note_customer(str(ct["id"]))
+	for i: int in range(7):
+		lg.runs.append({"n": 7 - i, "seed": 100 + i, "omen": "", "omen_name": "", "haunting": i % 4, "nights": 5 if i % 2 == 0 else 3,
+			"cash": 40 + i * 31, "won": i % 2 == 0, "ending": UiEndings.IDS[i % 4] if i % 2 == 0 else "", "daily": i == 2})
+	lg.counter = 7
+	host.ledger.log = lg
+	_test_screen = host
+	_hud_view.visible = false
+	host.closed.connect(exit_test_tile)
+
+
+# ---------------------------------------------------------------- controller
+
+## A controller event on the shop screen. True when it was used. Stick and d-pad move a focus ring over the widgets,
+## A activates, X passes, Y looks closer, the shoulders step the offer; Start (the pause menu) is left to PauseMenu.
+func _pad_input(event: InputEvent) -> bool:
+	var key: int = TsPad.key_for(event)
+	var button: String = TsPad.shop_button(event)
+	if key == 0 and button == "":
+		return false
+	if key == KEY_ESCAPE and (pause == null or not pause.blocked or test_active) and not test_active:
+		if hud != null and hud.found.active():
+			hud.found.dismiss()
+			return true
+		if hud != null and hud.inspect.is_open():
+			hud.inspect.close()
+			return true
+		if stake_open or not cards.is_empty():
+			stake_open = false
+			return true
+		return false  # Start or B: the pause menu opens
+	if key == KEY_ESCAPE and test_active:
+		exit_test_tile()
+		return true
+	if not cards.is_empty():
+		if key == KEY_ENTER and float(cards[0]["age"]) > CARD_SKIP_AFTER:
+			cards.pop_front()
+		return true
+	if hud != null and hud.found.active():
+		if key == KEY_ENTER:
+			hud.found.dismiss()
+		return true
+	if hud != null and hud.inspect.is_open():
+		if key == KEY_ENTER:
+			hud.inspect.close()
+		return true
+	if end_panel_visible():
+		if key == KEY_ENTER:
+			if pad_focus != "" and pad_focus != "newrun":
+				activate(pad_focus)
+			else:
+				start_next_run()
+		else:
+			_pad_move(key)
+		return true
+	if _replay_run != null or (title != null and title.visible) or setup != null or altar != null or _test_screen != null:
+		return false
+	match button:
+		"pass":
+			activate("pass")
+			return true
+		"look":
+			open_inspect(-2 if view_run().customer.get("kind", "") == RunState.BUYER else -1)
+			return true
+		"prev", "next":
+			step_value(1 if button == "next" else -1)
+			return true
+	if key == KEY_ENTER:
+		if pad_focus == "":
+			pad_focus = _pad_default()
+		if pad_focus != "":
+			activate(pad_focus)
+		return true
+	return _pad_move(key)
+
+
+func _pad_move(key: int) -> bool:
+	var dir: Vector2 = {KEY_UP: Vector2.UP, KEY_DOWN: Vector2.DOWN, KEY_LEFT: Vector2.LEFT, KEY_RIGHT: Vector2.RIGHT}.get(key, Vector2.ZERO)
+	if dir == Vector2.ZERO or hud == null:
+		return false
+	var nxt: String = TsPad.next_widget(hud.widgets, pad_focus, dir)
+	if pad_focus == "" or (nxt == "" and not _pad_has(pad_focus)):
+		nxt = _pad_default()
+	if nxt != "":
+		pad_focus = nxt
+		if sfx != null:
+			sfx.ui("hover")
+	return true
+
+
+func _pad_has(id: String) -> bool:
+	for w: Dictionary in hud.widgets:
+		if str(w["id"]) == id and bool(w["enabled"]):
+			return true
+	return false
+
+
+## Where a controller's focus starts: the main button of the moment, else the first widget.
+func _pad_default() -> String:
+	if hud == null:
+		return ""
+	for id: String in ["offer", "sell", "t_dice_high", "t_leave", "newrun"]:
+		if _pad_has(id):
+			return id
+	return TsPad.next_widget(hud.widgets, "", Vector2.RIGHT)

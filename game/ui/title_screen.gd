@@ -13,6 +13,7 @@ signal continue_run
 signal start_daily
 signal open_altar
 signal skip_tutorial
+signal open_test_menu
 signal quit
 
 const TITLE: String = "Cursed Pawn"  ## small caps after the capitals, so the letters read as deliberate
@@ -47,13 +48,16 @@ var daily_on: bool = false  ## offer the Daily Seance (the logic for it exists)
 var daily_number: int = 0  ## today's Seance number
 var altar_on: bool = false  ## offer the Altar (the logic for upgrades exists)
 var altar_ecto: int = 0  ## ectoplasm waiting to be spent: a green number beside the entry
+var test_on: bool = false  ## debug and dev builds: offer the TEST MENU
 var tutorial_on: bool = false  ## a first-time player: offer SKIP TUTORIAL
+var notice: String = ""  ## a short line under the menu (a damaged save was reset)
+var preview: Dictionary = {}  ## the saved run, for the Continue card: see ts_preview_of
 var daily_line: String = ""  ## when today's was already played: its short result, shown under the menu
 var _own_room: bool = false
 
 
 ## The menu entries top to bottom: [{id, label}]. Continue needs a saved run; Quit is not offered on the web.
-static func ts_entries(has_save_in: bool, web_in: bool, daily_in: bool = false, daily_no: int = 0, altar_in: bool = false, ledger_in: bool = false, skip_in: bool = false) -> Array[Dictionary]:
+static func ts_entries(has_save_in: bool, web_in: bool, daily_in: bool = false, daily_no: int = 0, altar_in: bool = false, ledger_in: bool = false, skip_in: bool = false, test_in: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if has_save_in:
 		out.append({"id": "continue", "label": "CONTINUE"})
@@ -65,11 +69,29 @@ static func ts_entries(has_save_in: bool, web_in: bool, daily_in: bool = false, 
 	if altar_in:
 		out.append({"id": "altar", "label": "THE ALTAR"})
 	if ledger_in:
-		out.append({"id": "ledger", "label": "LEDGER"})
+		out.append({"id": "ledger", "label": "JOURNAL"})
 	out.append({"id": "settings", "label": "SETTINGS"})
+	if test_in:
+		out.append({"id": "test", "label": "TEST MENU"})
 	if not web_in:
 		out.append({"id": "quit", "label": "QUIT"})
 	return out
+
+
+## The test menu shows in debug builds and with --dev, never in a release build otherwise.
+static func ts_test_allowed() -> bool:
+	return OS.is_debug_build() or Flags.dev_menu()
+
+
+## What the Continue card shows for a saved run: {night, nights, cash, dread, items: [names], badge}.
+static func ts_preview_of(r: RunState) -> Dictionary:
+	if r == null:
+		return {}
+	var names: Array[String] = []
+	for item: Dictionary in r.inventory:
+		names.append(str(item.get("name", "?")))
+	return {"night": r.night, "nights": int(r.tuning.nights), "cash": r.cash, "dread": clampf(r.dread / maxf(r.tuning.wake_threshold, 0.1), 0.0, 1.0),
+		"items": names, "badge": str(UiEngage.badge_info(r).get("text", ""))}
 
 
 ## True when the page URL carries a gift (`#gift=`). Always false off the web.
@@ -112,7 +134,7 @@ func ts_ready() -> void:
 
 func ts_menu_ids() -> Array[String]:
 	var ids: Array[String] = []
-	for e: Dictionary in ts_entries(has_save, web, daily_on, daily_number, altar_on, true, tutorial_on):
+	for e: Dictionary in ts_entries(has_save, web, daily_on, daily_number, altar_on, true, tutorial_on, test_on):
 		ids.append(str(e["id"]))
 	return ids
 
@@ -135,6 +157,8 @@ func ts_activate_menu(id: String) -> void:
 			skip_tutorial.emit()
 		"settings":
 			ts_open_settings()
+		"test":
+			open_test_menu.emit()
 		"quit":
 			quit.emit()
 
@@ -209,7 +233,7 @@ func _ts_draw_eyes(c: TsCanvas, at: Vector2, w: float, o: float, rim: int, core:
 
 
 func ts_draw_menu(c: TsCanvas) -> void:
-	var entries: Array[Dictionary] = ts_entries(has_save, web, daily_on, daily_number, altar_on, true, tutorial_on)
+	var entries: Array[Dictionary] = ts_entries(has_save, web, daily_on, daily_number, altar_on, true, tutorial_on, test_on)
 	var many: bool = entries.size() > 7
 	var step: float = BTN_STEP if entries.size() <= 5 else (BTN_STEP_TIGHT if not many else 21.0)
 	var y: float = 186.0 if entries.size() <= 5 else (176.0 if not many else 168.0)
@@ -219,7 +243,8 @@ func ts_draw_menu(c: TsCanvas) -> void:
 	for i: int in range(entries.size()):
 		var e: Dictionary = entries[i]
 		var u: float = UiMotion.ui_out((c.t - MENU_AT - MENU_STEP * float(i)) / 0.35)
-		var rect := Rect2(MENU_X - BTN_W * 0.5, y + step * float(i), BTN_W, BTN_H)
+		var bw: float = BTN_W + (46.0 if settings.text_scale == 2 else 0.0)
+		var rect := Rect2(MENU_X - bw * 0.5, y + step * float(i), bw, BTN_H)
 		if u <= 0.0:
 			c.add(str(e["id"]), rect, false)
 			continue
@@ -230,8 +255,35 @@ func ts_draw_menu(c: TsCanvas) -> void:
 			c.text(Vector2(rect.end.x + 8.0, rect.position.y + 6.0), "%d" % altar_ecto, glow, 1)  # ectoplasm to spend
 		if is_focused(str(e["id"])) and u >= 1.0:
 			c.cursor_flame(Vector2(rect.position.x - 15.0, rect.position.y + 6.0))
+	if not preview.is_empty() and focus_id == "continue" and c.t > MENU_AT + 0.4:
+		_ts_draw_preview(c)
 	if daily_line != "" and c.t > MENU_AT + 0.6:
 		var dy: float = y + step * float(entries.size()) + 1.0
 		c.text_c(MENU_X, dy, "PLAYED TODAY: " + daily_line, 14, 1)
+	if notice != "" and c.t > MENU_AT + 0.3:
+		c.text_c(MENU_X, 326.0, notice, 13, 1)
 	if c.t > MENU_AT + 0.8 and not many:
 		c.text_c(MENU_X, 340.0, "UP DOWN ENTER, OR CLICK", 4, 1)
+
+
+## The Continue card: a note pinned over the dark with the saved run's night, cash, Dread candle and what is on the shelf.
+func _ts_draw_preview(c: TsCanvas) -> void:
+	var rc := Rect2(28.0, 168.0, 196.0, 96.0)
+	c.frame(rc, "note")
+	c.fill(Rect2(rc.position.x + 94.0, rc.position.y - 2.0, 3.0, 3.0), 13)  # the pin
+	var x: float = rc.position.x + 10.0
+	var y: float = rc.position.y + 9.0
+	c.text(Vector2(x, y), "YOUR RUN, WAITING", 0, 1, false)
+	c.text(Vector2(x, y + 12.0), "NIGHT %d OF %d" % [int(preview["night"]), int(preview["nights"])], 9, 1, false)
+	c.text(Vector2(x + 100.0, y + 12.0), "%d COINS" % int(preview["cash"]), 8, 1, false)
+	var dread: float = float(preview["dread"])
+	c.text(Vector2(x, y + 26.0), "DREAD", 9, 1, false)
+	c.fill(Rect2(x + 36.0, y + 27.0, 100.0, 6.0), 1)
+	c.fill(Rect2(x + 36.0, y + 27.0, 100.0 * dread, 6.0), 13 if dread > 0.7 else 10)
+	var items: Array = preview["items"] as Array
+	var line: String = ", ".join(PackedStringArray(items.slice(0, 3))).to_upper() if not items.is_empty() else "THE SHELF IS BARE"
+	var wrapped: PackedStringArray = UiPixelFont.ui_wrap(line, 176)
+	for i: int in range(mini(wrapped.size(), 2)):
+		c.text(Vector2(x, y + 40.0 + float(i * UiPixelFont.LINE_H)), wrapped[i], 0, 1, false)
+	if str(preview["badge"]) != "":
+		c.text(Vector2(x, y + 66.0), str(preview["badge"]), 9, 1, false)

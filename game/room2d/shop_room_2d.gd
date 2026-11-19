@@ -12,6 +12,10 @@ extends Node
 signal wake_finished
 ## A letter of speech was typed: `pitch` is a per-customer blip pitch (the lead may wire it to a sound).
 signal bubble_blip(pitch: float)
+## Step 36 beats, for Lane D's sounds: the door bell rings, an object lands on the counter or a shelf, a coin lands.
+signal bell_rang
+signal object_landed
+signal coin_landed
 
 const VIEW_SIZE := Vector2i(640, 360)
 const WAKE_SECS: float = 4.0
@@ -179,6 +183,9 @@ var _regular_pending: bool = false
 var _motes: Array[Dictionary] = []
 var _eye_open: float = 0.0
 var _flash: float = 0.0
+var shake_scale: float = 1.0  ## the settings' screen-shake slider, 0..1 (0 = no shake)
+var flash_reduce: bool = false  ## the settings' flash reduction: wake and lightning flashes at a third
+const FLASH_REDUCED: float = 0.35
 var _art_cache: Dictionary = {}
 var _prev_v: Dictionary = {}
 var _squash: Dictionary = {}
@@ -204,6 +211,22 @@ var _doomed: RigidBody2D
 
 var _customer: Sprite2D
 var _look_id: String = ""
+var _look_mood: String = "calm"
+var _wake_type: String = ""  ## drift, topple, lights_out, door_lock, possession or "" (see RoomScenes)
+var _night_event: String = ""  ## blackout, storm, auction, full_moon or ""
+var _poss: RigidBody2D  ## the object a possession wake floats
+var _title: bool = false  ## the title's live shop: slow drift, a customer shadow at the window, a moth at the lamp
+var _cust_walk: Array[ImageTexture] = []
+var _rim_cache: Dictionary = {}
+var _bell_a: float = 0.0
+var _bell_v: float = 0.0
+var _bell_ring: float = 0.0
+var _land_t: float = -1.0
+var _land_base_y: float = 0.0
+var _land_dust: bool = false
+var _coins: Array[Dictionary] = []
+var _settles: Array[Dictionary] = []
+var _bang: float = 0.0  ## the auction gavel, 1 right after a sale
 var _cust_state: String = "none"  ## none, enter, here, leave
 var _cust_x: float = DOOR_X
 var _walk_t: float = 0.0
@@ -310,6 +333,7 @@ func setup(run_in: RunState) -> void:
 	for item: Dictionary in run.inventory:
 		_add_prop(int(item["uid"]), str(item["name"]), str(item["category"]), str(item.get("id", item["name"])), false)
 	set_dread(run.dread)
+	set_night_event(str(run.night_event.get("id", "")))
 	if not run.customer.is_empty() and not run.is_over():
 		var cat: String = ""
 		var oname: String = ""
@@ -321,7 +345,7 @@ func setup(run_in: RunState) -> void:
 		if bool(run.customer.get("boss", false)) or tid == "collector_boss":
 			_set_collector_look()
 		else:
-			_set_customer_look(tid)
+			_set_customer_look(tid, str(run.customer.get("mood", "calm")))
 		_line = ""
 		_seller_here = str(run.customer.get("kind", "")) == RunState.SELLER
 		_cust_start_enter(oname, cat)
@@ -329,6 +353,28 @@ func setup(run_in: RunState) -> void:
 		_cust_x = STAND_X
 		_show_counter_object()
 		_place_customer()
+
+
+## The night event the room is showing ("" none): blackout, storm, auction or full_moon.
+func set_night_event(id: String) -> void:
+	_night_event = id if RoomScenes.NIGHT_EVENTS.has(id) else ""
+
+
+## The title scene: no customer, the camera drifts on its own, a shadow passes the window and a moth circles the lamp.
+func set_title_mode(on: bool) -> void:
+	_title = on
+
+
+func title_mode() -> bool:
+	return _title
+
+
+func night_event() -> String:
+	return _night_event
+
+
+func wake_type() -> String:
+	return _wake_type
 
 
 func set_dread(v: float) -> void:
@@ -358,7 +404,8 @@ func regular_here() -> bool:
 func _cabinet_icon(id: String) -> Texture2D:
 	if not _display_tex.has(id):
 		var img: Image = SpriteKit.curio_icon(id).get_image()
-		img.resize(CABINET_ICON, CABINET_ICON, Image.INTERPOLATE_NEAREST)
+		if img.get_width() != CABINET_ICON:
+			img = ArtContent.downscale_mode(img, CABINET_ICON)
 		_display_tex[id] = ImageTexture.create_from_image(img)
 	return _display_tex[id] as Texture2D
 
@@ -421,6 +468,7 @@ func apply_events(events: Array[Dictionary]) -> void:
 	for e: Dictionary in events:
 		match str(e.get("e", "")):
 			"night_start":
+				_night_event = RoomScenes.event_of(e)
 				_level_target = 1.0
 				_hide_card()
 				_table = false
@@ -445,7 +493,7 @@ func apply_events(events: Array[Dictionary]) -> void:
 					_coll_pending = false
 					_set_collector_look()
 				else:
-					_set_customer_look(tid)
+					_set_customer_look(tid, str(e.get("mood", "calm")))
 				_line = str(e.get("line", ""))
 				if _line == "":
 					_line = str(_look_row(tid).get("line", ""))
@@ -454,10 +502,12 @@ func apply_events(events: Array[Dictionary]) -> void:
 				_hexed = false
 				_cust_start_leave()
 			"bought":
+				_bang = 1.0
 				_hexed = false
 				_on_bought(e)
 				_cust_start_leave()
 			"sold":
+				_bang = 1.0
 				_hexed = false
 				_on_sold(e)
 				_cust_start_leave()
@@ -474,6 +524,8 @@ func apply_events(events: Array[Dictionary]) -> void:
 				_glam_t = GLAMOUR_SECS
 			"banished":
 				_on_banished(e)
+			"night_event", "dusk_event":
+				_night_event = RoomScenes.event_of(e)
 			"collector_arrives":
 				_on_collector_arrives()
 			"summoned":
@@ -499,6 +551,7 @@ func apply_events(events: Array[Dictionary]) -> void:
 			"wake":
 				_on_wake_event(e)
 			"night_end":
+				_night_event = ""
 				_hexed = false
 				_sealed_on = false
 				_cust_start_leave()
@@ -624,8 +677,10 @@ func _lv() -> float:
 
 ## Deterministic chaos for about WAKE_SECS: shelf props are unfrozen and thrown, one shelf tears off the wall and
 ## tips, the lights die and come back red, the door slams, the screen shakes. Same seed and props, same result.
-func wake(seed_value: int) -> void:
+func wake(seed_value: int, wtype: String = "") -> void:
 	_wake_rng.seed = seed_value
+	_wake_type = wtype if RoomScenes.WAKE_TYPES.has(wtype) else ""
+	_poss = null
 	_wake_plan.clear()
 	_plan_i = 0
 	_wake_tick = 0
@@ -641,6 +696,13 @@ func wake(seed_value: int) -> void:
 		bodies.append((_props[uid] as Dictionary)["body"] as RigidBody2D)
 	if _doomed != null:
 		bodies.append(_doomed)
+	if _wake_type == "possession":
+		var low: int = -1
+		for uid2: Variant in _props:
+			if low < 0 or int(uid2) < low:
+				low = int(uid2)
+		if low >= 0:
+			_poss = (_props[low] as Dictionary)["body"] as RigidBody2D
 	for body: RigidBody2D in bodies:
 		body.freeze = false
 		var delay: float = _wake_rng.randf_range(0.95, 2.6)
@@ -650,11 +712,27 @@ func wake(seed_value: int) -> void:
 		var skip: float = _wake_rng.randf()
 		if skip < 0.1 and body != _doomed:
 			continue
-		_plan_add(int(delay * TICKS_PER_SEC), "shove", body, Vector2(vx, -vy) * PROP_MASS, spin)
+		if body == _poss:
+			continue
+		var shove: Vector2 = Vector2(vx, -vy) * PROP_MASS
+		if _wake_type == "drift":
+			shove = Vector2(vx * 0.1, -vy * 0.16) * PROP_MASS
+		_plan_add(int(delay * TICKS_PER_SEC), "shove", body, shove, spin * (0.2 if _wake_type == "drift" else 1.0))
 	var pick: int = _wake_rng.randi_range(0, maxi(_units.size() - 1, 0))
-	_plan_add(int(1.6 * TICKS_PER_SEC), "topple", null, Vector2(float(pick), 0.0), 0.0)
-	_plan_add(int(1.25 * TICKS_PER_SEC), "slam", null, Vector2.ZERO, 0.0)
-	_plan_add(BEAT_TICKS, "burst", null, Vector2.ZERO, 0.0)
+	if _wake_type == "topple":
+		for ui: int in range(_units.size()):
+			_plan_add(int((1.1 + 0.55 * float(ui)) * TICKS_PER_SEC), "topple", null, Vector2(float(ui), 0.0), 0.0)
+	elif _wake_type != "drift" and _wake_type != "lights_out":
+		_plan_add(int(1.6 * TICKS_PER_SEC), "topple", null, Vector2(float(pick), 0.0), 0.0)
+	if _wake_type == "door_lock":
+		_plan_add(BEAT_TICKS, "lock", null, Vector2.ZERO, 0.0)
+	elif _wake_type == "drift":
+		_plan_add(BEAT_TICKS, "lift", null, Vector2.ZERO, 0.0)
+	else:
+		_plan_add(int(1.25 * TICKS_PER_SEC), "slam", null, Vector2.ZERO, 0.0)
+		_plan_add(BEAT_TICKS, "burst", null, Vector2.ZERO, 0.0)
+	if _poss != null:
+		_plan_add(BEAT_TICKS + 12, "possess", null, Vector2.ZERO, 0.0)
 	if _doomed != null:
 		var shards: Array = []
 		for i: int in range(10):
@@ -816,6 +894,14 @@ func _rebuild_world() -> void:
 	_squash.clear()
 	_fx_sys.clear()
 	_doomed = null
+	_night_event = ""
+	_title = false
+	_wake_type = ""
+	_poss = null
+	_coins.clear()
+	_settles.clear()
+	_land_t = -1.0
+	_cust_walk = []
 	_wake_tick = -1
 	_settle_tick = -1
 	_wake_plan.clear()
@@ -1055,7 +1141,7 @@ func _build_customer() -> void:
 	_customer.add_child(_cust_occ)
 	_rim = Sprite2D.new()  # the same figure one pixel up and left, in unshaded amber, peeking out behind it
 	_rim.centered = false
-	_rim.z_index = -1
+	_rim.z_index = 1  # on the figure's lit edge, over it
 	_rim.visible = false
 	var rim_mat := CanvasItemMaterial.new()
 	rim_mat.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
@@ -1164,7 +1250,7 @@ func _look_row(tid: String) -> Dictionary:
 		for t: Dictionary in run.catalog.customers:
 			if str(t.get("id", "")) == tid:
 				return t
-	return {}
+	return {"id": tid}
 
 
 func _category_of_name(item_name: String) -> String:
@@ -1257,6 +1343,7 @@ func _on_bought(e: Dictionary) -> void:
 		id = str(_counter_item.get("id", _id_of_name(str(e.get("name", "?")))))
 	_add_prop(uid, str(e.get("name", "?")), cat, id, true)
 	_hide_counter_object()
+	_throw_coins(false, int(e.get("price", 20)))
 
 
 func _on_sold(e: Dictionary) -> void:
@@ -1269,6 +1356,7 @@ func _on_sold(e: Dictionary) -> void:
 		_counter_cat = _category_of_name(str(e.get("name", "")))
 		_counter_item = {"id": _id_of_name(str(e.get("name", ""))), "category": _counter_cat}
 	_show_counter_object()
+	_throw_coins(true, int(e.get("price", 20)))
 	_fx_sys.emit("sparkle", _counter_obj.position, 16)  # coin sparkle burst
 
 
@@ -1289,24 +1377,47 @@ func _update_slides(delta: float) -> void:
 		body.position = p
 		if t >= 1.0:
 			body.position = s["to"] as Vector2
+			_settles.append({"body": body, "at": s["to"] as Vector2, "t": 0.0})
+			_fx_sys.emit("dust", (s["to"] as Vector2) + Vector2(0.0, 14.0), 5)
+			object_landed.emit()
 			_slides.remove_at(i)
 
 
 # ---------------------------------------------------------------- customer and counter object
 
 func _set_customer_texture(look: Dictionary) -> void:
+	_cust_walk = []
+	_rim_cache.clear()
 	_cust_frames = SpriteKit.customer_frames(look)
 	if _cust_frames.is_empty():
 		_cust_frames = [SpriteKit.customer_texture(look)]
 	_apply_customer_frame(0)
 
 
-func _apply_customer_frame(i: int) -> void:
-	var tex: ImageTexture = _cust_frames[clampi(i, 0, _cust_frames.size() - 1)]
+## The rim-light mask of a customer frame, cached per frame texture.
+func _rim_tex(tex: ImageTexture) -> ImageTexture:
+	var key: int = tex.get_instance_id()
+	if not _rim_cache.has(key):
+		_rim_cache[key] = ImageTexture.create_from_image(ArtContent.rim_mask(tex.get_image()))
+	return _rim_cache[key] as ImageTexture
+
+
+## The 4-frame walk cycle, built from the standing frame the first time the figure walks.
+func _apply_walk_frame() -> void:
+	if _cust_walk.is_empty() and not _cust_frames.is_empty():
+		_cust_walk = ArtContent.walk_frames(_cust_frames[0].get_image())
+	if _cust_walk.is_empty():
+		return
+	_apply_customer_frame(int(_walk_t * 8.0) % 4, _cust_walk)
+
+
+func _apply_customer_frame(i: int, frames: Array[ImageTexture] = []) -> void:
+	var src: Array[ImageTexture] = frames if not frames.is_empty() else _cust_frames
+	var tex: ImageTexture = src[clampi(i, 0, src.size() - 1)]
 	_customer.texture = tex
 	_customer.offset = Vector2(-float(tex.get_width()) * 0.5, -float(tex.get_height()))
 	if _rim != null:
-		_rim.texture = tex
+		_rim.texture = _rim_tex(tex)
 		_rim.offset = _customer.offset
 	if _customer.get_meta("occ_h", -1) != tex.get_height():
 		_customer.set_meta("occ_h", tex.get_height())
@@ -1329,11 +1440,14 @@ func _idle_frame_index() -> int:
 
 
 ## Dresses the figure as customer type `tid` (unchanged if same type).
-func _set_customer_look(tid: String) -> void:
-	if tid == _look_id or _customer == null:
+func _set_customer_look(tid: String, mood: String = "calm") -> void:
+	if (tid == _look_id and mood == _look_mood) or _customer == null:
 		return
 	_look_id = tid
-	_set_customer_texture(_look_row(tid))
+	_look_mood = mood
+	var look: Dictionary = _look_row(tid).duplicate()
+	look["mood"] = mood
+	_set_customer_texture(look)
 
 
 func _start_walk(from_x: float, to_x: float) -> void:
@@ -1393,10 +1507,11 @@ func _place_customer() -> void:
 	_customer.flip_h = _cust_state == "leave"
 	if _rim != null:
 		_rim.flip_h = _customer.flip_h
-		_rim.position = Vector2(2.0 if _customer.flip_h else -2.0, -1.0)
-		_rim.visible = _regular_here and _customer.visible
+		_rim.position = Vector2.ZERO
+		_rim.visible = (_regular_here or _night_event == "full_moon") and _customer.visible
 		var pulse: float = 0.8 + 0.2 * sin(_t * 2.4)
-		_rim.modulate = Color(RIM_COLOR.r, RIM_COLOR.g, RIM_COLOR.b, RIM_COLOR.a * pulse)
+		var rc: Color = RIM_COLOR if _regular_here else Color(0.78, 0.88, 1.0, 0.85)
+		_rim.modulate = Color(rc.r, rc.g, rc.b, rc.a * pulse)
 
 
 func _show_counter_object() -> void:
@@ -1407,7 +1522,12 @@ func _show_counter_object() -> void:
 	_counter_obj.texture = RoomNormals.canvas_texture("obj:%s:%s" % [str(_counter_item["id"]), str(_counter_item["category"])], tex, 1.2, false)
 	_counter_obj.position = Vector2(COUNTER_OBJ_X, COUNTER_TOP - float(tex.get_height()) * 0.5)
 	_counter_obj.rotation = 0.0
+	_counter_obj.scale = Vector2.ONE
 	_counter_obj.visible = true
+	_land_base_y = _counter_obj.position.y
+	_land_t = 0.0
+	_land_dust = false
+	_counter_obj.position.y = _land_base_y - 16.0
 
 
 func _hide_counter_object() -> void:
@@ -1419,7 +1539,7 @@ func _hide_counter_object() -> void:
 func _show_overlay() -> void:
 	if _counter_item.is_empty() or not _seller_here or not _counter_obj.visible:
 		return
-	_overlay.texture = SpriteKit.object_cursed_overlay(str(_counter_item["id"]))
+	_overlay.texture = SpriteKit.object_cursed_overlay(str(_counter_item["id"]), str(_counter_item.get("category", "")))
 	_overlay_on = true
 
 
@@ -1510,6 +1630,9 @@ func _process(delta: float) -> void:
 	_t += delta
 	_update_customer(delta)
 	_update_slides(delta)
+	_update_landing(delta)
+	_update_coins(delta)
+	_update_settles(delta)
 	_update_fx(delta)
 	_update_card(delta)
 	_update_door(delta)
@@ -1536,6 +1659,7 @@ func _update_customer(delta: float) -> void:
 			_walk_t += delta
 			var k: float = clampf(_walk_t / _walk_dur, 0.0, 1.0)
 			_cust_x = lerpf(_walk_from, _walk_to, _ease(k))
+			_apply_walk_frame()
 			if k >= 1.0:
 				_cust_x = STAND_X
 				_cust_state = "here"
@@ -1550,6 +1674,7 @@ func _update_customer(delta: float) -> void:
 			if k2 >= 1.0:
 				_finish_leave()
 			else:
+				_apply_walk_frame()
 				_place_customer()
 		"here":
 			_apply_customer_frame(_idle_frame_index())
@@ -1560,14 +1685,99 @@ func _update_customer(delta: float) -> void:
 
 func _update_door(delta: float) -> void:
 	var rate: float = DOOR_SPEED * (4.0 if _door_fast else 1.0)
+	var prev_open: float = _door_open
 	_door_open = move_toward(_door_open, _door_target, rate * delta)
 	var rattle: float = 0.0
 	if dread_norm() >= 0.9 and _wake_tick < 0:  # something tries the handle from the other side
 		var cyc: float = fposmod(_t, 7.0)
 		if cyc < 0.7:
 			rattle = roundf(sin(_t * 70.0) * 1.5 * (1.0 - cyc / 0.7))
+	if _wake_type == "door_lock" and _wake_tick > BEAT_TICKS:
+		rattle = roundf(sin(_t * 90.0) * 2.5)
 	_door_sprite.position.x = DOOR_RECT.position.x + rattle
 	_door_sprite.scale.x = lerpf(1.0, 0.12, _ease(_door_open))
+	_door_sprite.skew = _ease(_door_open) * 0.22  # the swinging edge leans toward us
+	_update_bell(delta, prev_open)
+
+
+## The brass bell over the door: the door's motion kicks a damped spring, and the first opening past 15% rings it.
+func _update_bell(delta: float, prev_open: float) -> void:
+	var vel: float = (_door_open - prev_open) / maxf(delta, 0.0001)
+	_bell_v += vel * 2.2 * delta * 60.0 * 0.1
+	if prev_open < 0.15 and _door_open >= 0.15:
+		_bell_v += 9.0
+		_bell_ring = 0.6
+		bell_rang.emit()
+	_bell_v += (-60.0 * _bell_a - 5.0 * _bell_v) * delta
+	_bell_a = clampf(_bell_a + _bell_v * delta, -0.9, 0.9)
+	_bell_ring = maxf(_bell_ring - delta, 0.0)
+
+
+## The object dropping onto the counter: a short fall, a squash, one small bounce and a puff of dust.
+func _update_landing(delta: float) -> void:
+	if _land_t < 0.0 or not _counter_obj.visible:
+		return
+	_land_t += delta
+	var t: float = _land_t
+	var off: float = 0.0
+	var sq: float = 0.0
+	if t < 0.22:
+		var k: float = 1.0 - t / 0.22
+		off = -16.0 * k * k
+	elif t < 0.3:
+		sq = 0.22 * sin((t - 0.22) / 0.08 * PI)
+		if not _land_dust:
+			_land_dust = true
+			_fx_sys.emit("dust", Vector2(_counter_obj.position.x, COUNTER_TOP), 6)
+			object_landed.emit()
+	elif t < 0.44:
+		off = -3.0 * sin((t - 0.3) / 0.14 * PI)
+	else:
+		_land_t = -1.0
+	var h: float = _counter_obj.texture.get_height() if _counter_obj.texture != null else 32.0
+	_counter_obj.scale = Vector2(1.0 + sq, 1.0 - sq)
+	_counter_obj.position.y = _land_base_y + off + h * 0.5 * sq
+	if _land_t < 0.0:
+		_counter_obj.scale = Vector2.ONE
+		_counter_obj.position.y = _land_base_y
+
+
+## Coins arcing between the customer's hand and the counter, flipping as they fly. from_customer: a sale pays the player.
+func _throw_coins(from_customer: bool, price: int) -> void:
+	var n: int = clampi(price / 20 + 1, 1, 5)
+	var hand: Vector2 = Vector2(_cust_x - 14.0, COUNTER_TOP - 26.0)
+	var desk: Vector2 = Vector2(COUNTER_OBJ_X - 34.0, COUNTER_TOP - 3.0)
+	for i: int in range(n):
+		_coins.append({"from": hand if from_customer else desk, "to": (desk if from_customer else hand) + Vector2(float(i) * 5.0, 0.0),
+			"t": -0.09 * float(i), "to_customer": not from_customer})
+
+
+func _update_coins(delta: float) -> void:
+	for i: int in range(_coins.size() - 1, -1, -1):
+		var c: Dictionary = _coins[i]
+		c["t"] = float(c["t"]) + delta / 0.6
+		if float(c["t"]) >= 1.0:
+			_fx_sys.emit("sparkle", c["to"] as Vector2, 4)
+			coin_landed.emit()
+			_coins.remove_at(i)
+
+
+func _update_settles(delta: float) -> void:
+	for i: int in range(_settles.size() - 1, -1, -1):
+		var s: Dictionary = _settles[i]
+		var body: RigidBody2D = s["body"] as RigidBody2D if is_instance_valid(s["body"]) else null
+		if body == null or _wake_tick >= 0:
+			_settles.remove_at(i)
+			continue
+		s["t"] = float(s["t"]) + delta
+		var k: float = float(s["t"]) / 0.45
+		if k >= 1.0:
+			body.rotation = 0.0
+			body.position = s["at"] as Vector2
+			_settles.remove_at(i)
+			continue
+		body.rotation = sin(k * 22.0) * 0.14 * (1.0 - k)
+		body.position = (s["at"] as Vector2) + Vector2(0.0, -2.5 * absf(sin(k * 9.0)) * (1.0 - k))
 
 
 func _update_light_level(delta: float) -> void:
@@ -1612,6 +1822,57 @@ func _update_watcher(delta: float) -> void:
 	sp.rotation = e * (0.2 + sin(_t * 1.7) * 0.015)
 
 
+## Night event lighting on top of the ambient: a blackout leaves only the candle pools, a storm goes cold and flashes,
+## a full moon pours silver light through the window.
+## How far through the night the run is, 0 (the first customer) to 1 (the last): the day clock used up.
+func _night_progress() -> float:
+	if run == null:
+		return 0.3
+	var day: float = 280.0
+	if run.tuning != null:
+		day = maxf(run.tuning.day_minutes, 1.0)
+	return clampf(1.0 - run.clock / day, 0.0, 1.0)
+
+
+func _window_phase() -> Dictionary:
+	return RoomScenes.window_phase(_night_progress())
+
+
+func _apply_event_light(lv: float) -> void:
+	_bang = maxf(_bang - get_process_delta_time() * 2.5, 0.0)
+	var ph: Dictionary = _window_phase()
+	_moon.color = ph["light"] as Color
+	_moon.energy *= float(ph["energy"])
+	match _night_event:
+		"blackout":
+			_modulate.color = _modulate.color * 0.16
+			_modulate.color.a = 1.0
+			for tl: PointLight2D in _torch_lights:
+				tl.energy = 0.0
+			for el: CPUParticles2D in _embers:
+				el.emitting = false
+			_moon.energy = 0.0
+			for cl: PointLight2D in _lights:
+				cl.energy *= 1.7
+				cl.texture_scale = 2.2
+		"storm":
+			var fl: float = _storm_flash()
+			var cold: Color = Color(0.5, 0.62, 0.9)
+			_modulate.color = _modulate.color.lerp(cold * 0.8, 0.5).lerp(Color(0.9, 0.95, 1.0), fl * 0.7)
+			_modulate.color.a = 1.0
+			_moon.energy = lv * 0.35 + fl * 3.0
+			_moon.color = Color(0.75, 0.82, 1.0)
+		"full_moon":
+			_moon.energy = lv * 2.6
+			_moon.color = Color(0.82, 0.9, 1.0)
+			_moon.texture_scale = 4.6
+		_:
+			_moon.texture_scale = 3.4
+	if _night_event != "blackout":
+		for cl2: PointLight2D in _lights:
+			cl2.texture_scale = 2.7
+
+
 func _apply_ambient() -> void:
 	var lv: float = _lv()
 	var tone: Color = NIGHT_TONE.lerp(CALM_TONE, lv)
@@ -1634,14 +1895,14 @@ func _apply_ambient() -> void:
 		if _coll_t > 0.0:  # the Collector: flames flutter low and nearly die
 			var ck: float = clampf(minf(collector_gutter() * 5.0, 1.0), 0.0, 1.0)
 			flick *= lerpf(1.0, 0.1 + 0.3 * absf(sin(_t * (13.0 + float(i) * 3.0))), ck)
-		l.color = AMBER_LIGHT.lerp(RED_LIGHT, clampf(_red, 0.0, 1.0))
+		l.color = RoomScenes.dread_tint(AMBER_LIGHT, n).lerp(RED_LIGHT, clampf(_red, 0.0, 1.0))
 		l.energy = lv * 2.0 * flick * (1.0 + 1.6 * _red)
 		i += 1
 	var ti: int = 0
 	for tl: PointLight2D in _torch_lights:
-		var tf: float = 1.0 + (sin(_t * (11.0 + float(ti) * 3.1)) * 0.5 + sin(_t * (27.0 + float(ti) * 4.3)) * 0.5) * (0.09 + 0.16 * n)
+		var tf: float = RoomScenes.torch_flicker(71 + ti * 977, _t, n)  # a seeded noise curve per torch
 		tf *= 1.0 - 0.5 * gut * _ease((sin(_t * (2.3 + float(ti)) + 1.0) - 0.75) / 0.25)
-		tl.color = TORCH_LIGHT.lerp(RED_LIGHT, clampf(_red, 0.0, 1.0))
+		tl.color = RoomScenes.dread_tint(TORCH_LIGHT, n).lerp(RED_LIGHT, clampf(_red, 0.0, 1.0))
 		tl.energy = lv * 2.4 * tf * (1.0 + 1.2 * _red)
 		tl.position = TORCHES[ti] + Vector2(0.0, -12.0) + _far_off
 		_embers[ti].emitting = lv > 0.25
@@ -1653,6 +1914,7 @@ func _apply_ambient() -> void:
 		var hp: Vector2 = (TORCHES[hi] + Vector2(0.0, -12.0) + _far_off) if hi < 2 else (CANDLES[3] + Vector2(0.0, -12.0))
 		_shader_mat.set_shader_parameter("heat%d" % hi, Vector4(hp.x / float(VIEW_SIZE.x), hp.y / float(VIEW_SIZE.y), 0.07, hs))
 	_moon.energy = lv * (1.15 + 0.1 * sin(_t * 0.4)) * (1.0 - clampf(_red, 0.0, 1.0) * 0.8)
+	_apply_event_light(lv)
 	_shader_mat.set_shader_parameter("vignette", 0.32 + 0.4 * clampf(n, 0.0, 1.2))
 
 
@@ -1673,7 +1935,7 @@ func _on_wake_event(e: Dictionary) -> void:
 	var seed_value: int = int(e.get("night", 0)) * 7919 + int(round(float(e.get("dread", 0.0)) * 100.0)) * 31
 	if run != null:
 		seed_value += run.seed_used * 104729
-	wake(seed_value)
+	wake(seed_value, RoomScenes.wake_type_of(e))
 
 
 func _plan_add(tick: int, kind: String, body: Variant, v: Vector2, w: float, shards: Array = []) -> void:
@@ -1690,7 +1952,7 @@ func _physics_process(_delta: float) -> void:
 	var off := Vector2.ZERO
 	if _shake > 0.4:
 		var tk: float = float(Engine.get_physics_frames())
-		off = Vector2(roundf(sin(tk * 2.9) * _shake), roundf(cos(tk * 3.7) * _shake))
+		off = Vector2(roundf(sin(tk * 2.9) * _shake * shake_scale), roundf(cos(tk * 3.7) * _shake * shake_scale))
 	_cam.offset = off
 
 
@@ -1710,6 +1972,18 @@ func _wake_step() -> void:
 					_shake = maxf(_shake, 1.5)
 			"topple":
 				_topple(int((step["v"] as Vector2).x))
+			"lock":  # the bolt shoots home: the door stays shut and the whole room shakes against it
+				_door_target = 0.0
+				_shake = maxf(_shake, 5.0)
+				_fx_sys.emit("dust", Vector2(24.0, 250.0), 12)
+			"lift":  # gravity lets go
+				for b2: RigidBody2D in all_bodies():
+					b2.gravity_scale = 0.06
+					b2.linear_damp = 0.6
+			"possess":
+				if is_instance_valid(_poss):
+					_poss.freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
+					_poss.freeze = true
 			"burst":  # the beat is over: the door flies open and the room erupts
 				_door_target = 1.0
 				_door_fast = true
@@ -1729,13 +2003,25 @@ func _wake_step() -> void:
 	if _wake_tick <= BEAT_TICKS:  # blackout, then a single red flicker showing who stands behind the counter
 		_level = 0.0
 		_red = 0.0
-		_flash = _wake_flash(_wake_tick)
+		_flash = _wake_flash(_wake_tick) * (FLASH_REDUCED if flash_reduce else 1.0)
 		return
 	_flash = 0.0
 	var t2: float = t - float(BEAT_TICKS) / float(TICKS_PER_SEC)
 	_level = 0.05
 	_red = clampf(t2 * 3.0, 0.0, 1.0) * (0.8 + 0.2 * sin(t * 11.0))
 	_shake = maxf(_shake, 1.2)
+	match _wake_type:
+		"lights_out":
+			_level = 0.0
+			_red = 0.0
+			_shake = 0.3
+		"drift":
+			_level = 0.4
+			_red = 0.0
+			_shake = 0.2
+		"door_lock":
+			_shake = maxf(_shake, 2.2 + sin(t * 40.0))
+	_possess_step(t2)
 
 
 ## Flash strength 0..1 for the silhouette beat. Full scares strobe hard; gentle shows it dimly without any flash.
@@ -1751,6 +2037,20 @@ func _wake_flash(tick: int) -> float:
 
 
 ## Two-frame squash on impact: a prop that lands hard flattens for a moment and puffs dust.
+func _possess_step(k: float) -> void:
+	if _poss == null or not is_instance_valid(_poss) or not _poss.freeze:
+		return
+	var target: Vector2 = Vector2(300.0 + 150.0 * sin(k * 1.3), 150.0 + 45.0 * sin(k * 2.1))
+	if is_inside_tree() and not _scripted:  # follows the cursor, as the plan says
+		var win: Vector2 = get_viewport().get_visible_rect().size
+		var r: Rect2 = fit_rect(win)
+		var mp: Vector2 = (get_viewport().get_mouse_position() - r.position) / maxf(fit_scale(win), 0.001)
+		if mp.x >= 0.0 and mp.y >= 0.0 and mp.x <= float(VIEW_SIZE.x) and mp.y <= float(VIEW_SIZE.y):
+			target = mp
+	_poss.position = _poss.position.lerp(target, 0.12)
+	_poss.rotation = sin(k * 3.0) * 0.25
+
+
 func _squash_step() -> void:
 	for uid: Variant in _props:
 		var rec: Dictionary = _props[uid]
@@ -1846,6 +2146,12 @@ func _shatter(body: RigidBody2D, shards: Array) -> void:
 
 func _end_wake() -> void:
 	_wake_tick = -1
+	_wake_type = ""
+	for gb: RigidBody2D in all_bodies():
+		gb.gravity_scale = 1.0
+	if is_instance_valid(_poss):
+		_poss.freeze = false
+	_poss = null
 	_settle_tick = 0
 	_level_target = 1.0
 	_door_target = 0.0
@@ -1864,7 +2170,9 @@ func _end_wake() -> void:
 ## Far layer drifts with the mouse, the near layer against it, both with a slow camera breathe. Whole pixels only.
 func _update_parallax(delta: float) -> void:
 	var m := Vector2.ZERO
-	if is_inside_tree() and not _scripted:
+	if _title:
+		m = RoomScenes.title_pan(_t)
+	elif is_inside_tree() and not _scripted:
 		var vp: Viewport = get_viewport()
 		var sz: Vector2 = vp.get_visible_rect().size
 		if sz.x > 0.0 and sz.y > 0.0:
@@ -1997,6 +2305,26 @@ func _draw_hall() -> void:
 	_hall.draw_rect(Rect2(r.position.x + 5.0, r.end.y - 9.0, r.size.x - 10.0, 9.0), pal[8])
 
 
+## The door bell: a brass bell on a curled iron bracket above the door, swinging on its spring; rings show while it sounds.
+func _draw_bell(pal: PackedColorArray) -> void:
+	var pv: Vector2 = Vector2(DOOR_X + 8.0, DOOR_RECT.position.y - 4.0)
+	_decor.draw_rect(Rect2(pv.x - 8.0, pv.y - 3.0, 12.0, 2.0), pal[0])
+	_decor.draw_rect(Rect2(pv.x - 2.0, pv.y - 3.0, 2.0, 4.0), pal[0])
+	var bp: Vector2 = pv + Vector2(sin(_bell_a) * 7.0, cos(_bell_a) * 7.0)
+	_decor.draw_line(pv, bp, pal[2], 1.0)
+	_decor.draw_rect(Rect2(roundf(bp.x) - 3.0, roundf(bp.y) - 2.0, 6.0, 5.0), pal[10])
+	_decor.draw_rect(Rect2(roundf(bp.x) - 4.0, roundf(bp.y) + 2.0, 8.0, 2.0), pal[11])
+	_decor.draw_rect(Rect2(roundf(bp.x) - 3.0, roundf(bp.y) - 2.0, 1.0, 4.0), pal[15])
+	_decor.draw_rect(Rect2(roundf(bp.x), roundf(bp.y) + 4.0, 1.0, 1.0), pal[0])
+	if _bell_ring > 0.0:
+		var rc: Color = pal[11]
+		rc.a = _bell_ring / 0.6
+		for r: int in range(2):
+			var rr: float = 7.0 + float(r) * 4.0 + (0.6 - _bell_ring) * 10.0
+			_decor.draw_arc(bp, rr, -2.4, -0.7, 8, rc, 1.0)
+			_decor.draw_arc(bp, rr, 0.7, 2.4, 8, rc, 1.0)
+
+
 func _draw_decor() -> void:
 	var pal: PackedColorArray = RoomPalette.colors()
 	var vw: float = float(VIEW_SIZE.x)
@@ -2033,6 +2361,9 @@ func _draw_decor() -> void:
 		_decor.draw_rect(Rect2(tc.x - 3.0, tc.y - 4.0, 6.0, 14.0), pal[8])
 		_decor.draw_rect(Rect2(tc.x - 5.0, tc.y - 6.0, 10.0, 3.0), pal[9])
 		_decor.draw_rect(Rect2(tc.x - 1.0, tc.y + 10.0, 2.0, 6.0), pal[0])
+	_draw_bell(pal)
+	if _night_event == "auction":
+		RoomScenes.draw_podium(_decor, pal, _t, _bang)
 	# depth haze: the far wall sits in a cold murk that the shelves and counter stand out from
 	var haze: Color = pal[2]
 	haze.a = 0.12
@@ -2050,18 +2381,30 @@ func _draw_decor() -> void:
 		_decor.draw_rect(Rect2(-12.0, FLOOR_Y + 1.0 + float(i) * 6.0, vw + 24.0, 6.0), black)
 
 
+## Lightning strength this frame (0 with Scares gentle: the pane only swells a little).
+func _storm_flash() -> float:
+	if _night_event != "storm":
+		return 0.0
+	return RoomScenes.lightning(_t) * (1.0 if scare_level != 0 else 0.3) * (FLASH_REDUCED if flash_reduce else 1.0)
+
+
 func _draw_outside() -> void:
 	var pal: PackedColorArray = RoomPalette.colors()
 	var w: Rect2 = WINDOW_RECT
 	var n: float = dread_norm()
-	# moon, drifting cloud and a few stars
-	_outside.draw_circle(w.position + Vector2(64.0, 30.0), 10.0, pal[15])
-	_outside.draw_circle(w.position + Vector2(69.0, 27.0), 9.0, pal[2])
+	# moon, drifting cloud and a few stars; dusk and the pre-dawn grey wash the glass
+	var wph: Dictionary = _window_phase()
+	var moon_a: float = float(wph["moon"])
+	_outside.draw_circle(w.position + Vector2(64.0, 30.0 + (1.0 - moon_a) * 10.0), 10.0, pal[15] if moon_a > 0.5 else pal[14])
+	_outside.draw_circle(w.position + Vector2(69.0, 27.0 + (1.0 - moon_a) * 10.0), 9.0, pal[2])
+	RoomScenes.draw_sky_wash(_outside, pal, w, wph)
 	for s: int in range(5):
 		_outside.draw_rect(Rect2(w.position.x + 8.0 + float(s * 17 % 70), w.position.y + 8.0 + float(s * 29 % 40), 1.0, 1.0), pal[14] if int(_t * 1.5 + float(s)) % 3 != 0 else pal[4])
 	var cx: float = fposmod(_t * 3.0, w.size.x + 40.0) - 30.0
 	_outside.draw_rect(Rect2(w.position.x + cx, w.position.y + 46.0, 28.0, 4.0), pal[3])
 	_outside.draw_rect(Rect2(w.position.x + cx + 6.0, w.position.y + 42.0, 16.0, 4.0), pal[3])
+	if _night_event == "storm" or _night_event == "full_moon":
+		RoomScenes.draw_window_event(_outside, pal, w, _night_event, _t, _storm_flash())
 	# a moth at the glass
 	var mc: Vector2 = w.position + Vector2(30.0, 96.0)
 	var mp := Vector2(mc.x + sin(_t * 1.7) * 22.0 + sin(_t * 5.3) * 4.0, mc.y + sin(_t * 2.3) * 14.0 + sin(_t * 7.1) * 3.0)
@@ -2073,6 +2416,8 @@ func _draw_outside() -> void:
 		_outside.draw_rect(Rect2(mp.x - 1.0, mp.y - 1.0, 2.0, 3.0), pal[14])
 		_outside.draw_rect(Rect2(mp.x - 4.0, mp.y - 2.0 + float(flap) * 2.0, 3.0, 2.0), pal[4])
 		_outside.draw_rect(Rect2(mp.x + 1.0, mp.y - 2.0 + float(flap) * 2.0, 3.0, 2.0), pal[4])
+	if _title:
+		RoomScenes.draw_title_shadow(_outside, pal, w, RoomScenes.title_shadow_k(_t))
 	# 0.7: a shadow passes the window
 	if n >= 0.7 and _wake_tick < 0:
 		var cyc: float = fposmod(_t, 11.0)
@@ -2194,7 +2539,7 @@ func _draw_fx() -> void:
 	# wall torches: the same loop at 2x on iron brackets
 	i = 0
 	for tc: Vector2 in TORCHES:
-		if lv > 0.08:
+		if lv > 0.08 and _night_event != "blackout":
 			var tp: Vector2 = tc + _far_off
 			var dip2: int = int(gut * _ease((sin(_t * (2.3 + float(i)) + 1.0) - 0.75) / 0.25) * 3.0)
 			_draw_flame(_fx, tp + Vector2(0.0, -6.0), int(_t * FLAME_FPS + float(i) * 2.0), 2.0, dip2, red)
@@ -2210,6 +2555,25 @@ func _draw_fx() -> void:
 			var mc: Color = pal[int(m["col"])]
 			mc.a = a
 			_fx.draw_rect(Rect2(roundf(mp.x), roundf(mp.y), 1.0, 1.0), mc)
+	for c: Dictionary in _coins:
+		var ct: float = float(c["t"])
+		if ct < 0.0 or ct >= 1.0:
+			continue
+		var cp: Vector2 = (c["from"] as Vector2).lerp(c["to"] as Vector2, ct)
+		cp.y -= sin(ct * PI) * 30.0
+		var cw: float = maxf(roundf(absf(cos(ct * TAU * 2.5)) * 3.0), 1.0)
+		_fx.draw_rect(Rect2(roundf(cp.x) - cw * 0.5, roundf(cp.y) - 1.0, cw, 3.0), pal[11])
+		_fx.draw_rect(Rect2(roundf(cp.x) - cw * 0.5, roundf(cp.y) + 1.0, cw, 1.0), pal[10])
+		if cw >= 3.0:
+			_fx.draw_rect(Rect2(roundf(cp.x) - 1.0, roundf(cp.y) - 1.0, 1.0, 1.0), pal[15])
+	if _title:
+		var mt2: Texture2D = _art("moth")
+		var mp2: Vector2 = RoomScenes.title_moth_pos(_t)
+		if mt2 != null:
+			_fx.draw_texture(mt2, mp2 - Vector2(4.0, 3.0))
+			var halo: Color = pal[11]
+			halo.a = 0.12
+			_fx.draw_circle(RoomScenes.TITLE_LAMP, 9.0, halo)
 	# 0.5: a pair of eyes in the dark corner (shut while the customer speaks)
 	_draw_eyes(pal, n)
 	# 0.7: the portraits' eyes follow the customer
@@ -2232,6 +2596,9 @@ func _draw_fx() -> void:
 		_draw_fog(pal, vs, n, breathe)
 	_draw_occult(pal)
 	_fx_sys.draw(_fx, pal)
+	if _wake_type != "" and _wake_tick > BEAT_TICKS:
+		var pat: Vector2 = _poss.position if is_instance_valid(_poss) else Vector2.ZERO
+		RoomScenes.draw_wake(_fx, pal, vs, _wake_type, _t, float(_wake_tick - BEAT_TICKS) / float(TICKS_PER_SEC), scare_level, pat)
 	# the wake beat: red flicker and the tall silhouette behind the counter
 	if _flash > 0.0:
 		var full: bool = scare_level != 0

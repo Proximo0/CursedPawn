@@ -86,7 +86,9 @@ static func _sk_draw_object(g: Image, id: String, category: String) -> void:
 		"taxidermy_owl": _sk_o_taxidermy_owl(g)
 		"ship_bottle": _sk_o_ship_bottle(g)
 		"mantel_clock": _sk_o_mantel_clock(g)
-		_: _sk_o_fallback(g, category, id)
+		_:
+			if not ArtContent.draw_object(g, id, category):
+				_sk_o_fallback(g, category, id)
 
 
 ## Customer figure, 64x96 at height 1.0 (taller or shorter types stretch the torso band, never the pixels).
@@ -98,6 +100,8 @@ static func customer_texture(look: Dictionary) -> ImageTexture:
 
 static func _sk_cust_image(look: Dictionary, frame: int) -> Image:
 	var g: Image = _sk_cust_draw(look, frame)
+	if str(look.get("id", "")) == "twin_b":
+		g.flip_x()  # the second twin is the first one mirrored: the ghost hood falls on the other side
 	var h: float = clampf(float(look.get("height", 1.0)), 0.7, 1.3)
 	return _sk_cust_stretch(g, roundi(float(SK_CUST_H) * h))
 
@@ -150,7 +154,7 @@ static func _sk_cust_draw(look: Dictionary, frame: int) -> Image:
 	var sh2: int = SK_DARK[sh]
 	var hsh: int = absi(hash(id))
 	var lean: float = [-3.0, -1.0, 2.0, -2.0, 1.0, -4.0, 0.0][hsh % 7]
-	var plan: PackedStringArray = str(look.get("plan", SK_PLAN.get(id, "normal"))).split(",")
+	var plan: PackedStringArray = str(look.get("plan", ArtContent.plan_for(id, str(SK_PLAN.get(id, ""))))).split(",")
 	var body: String = plan[0]
 	var acc: String = plan[1] if plan.size() > 1 else ""
 	var wf: float = 1.0
@@ -270,8 +274,11 @@ static func _sk_cust_draw(look: Dictionary, frame: int) -> Image:
 					_sk_p(g, x, y, SK_DARK[cur])
 	elif acc == "hat":
 		_sk_cust_hat(g, hx, hy - 11, str(look.get("hat", SK_HAT.get(id, "soft"))), base, lit, sh, sh2)
-	var style: String = str(SK_EYE_STYLE.get(id, SK_STYLES[hsh % SK_STYLES.size()]))
+	var style: String = ArtContent.eye_style_for(id, str(SK_EYE_STYLE.get(id, "")), SK_STYLES[hsh % SK_STYLES.size()])
 	_sk_cust_eyes(g, hx, hy, eyes, style, frame == 2)
+	ArtContent.mood_face(g, hx, hy, ArtContent.mood_for(look), frame, _sk_eye_centers(style))
+	if acc == "ledger" or acc == "basket" or acc == "twin":
+		ArtContent.extras(g, acc, hx, hy, wf, base, lit, sh, sh2)
 	if acc == "cane":
 		var cx: int = 32 - roundi(21.0 * wf) - 3
 		_sk_r(g, cx, 60, 2, 36, 9)
@@ -468,7 +475,7 @@ static func _sk_cust_hand(g: Image, x: int, y: int, side: int, base: int, lit: i
 			if k == 3 and i % 2 == 0:
 				tone = knuckle
 			elif k >= ln - 1:
-				tone = 3 if acc == "" else knuckle
+				tone = 15 if acc == "" else knuckle  # a pale nail
 			var splay: int = roundi(float(k) * (float(i) - 1.5) / 5.0)
 			if body == "hunched" and k >= 2:  # arthritic curl, each finger bends toward the thumb
 				splay -= (k - 1) * side
@@ -1928,8 +1935,8 @@ static func customer_frames(look: Dictionary) -> Array[ImageTexture]:
 ## A faint "wrongness" overlay for a cursed object, same size as object_texture(id), shown once a tell is found.
 ## Only covers pixels the object itself covers: a glowing hairline crack, a hidden face, a fingerprint smear or
 ## a scatter of tiny eyes, chosen per id (a few ids have a fixed kind).
-static func object_cursed_overlay(id: String) -> ImageTexture:
-	var base: Image = _sk_object_image(id, "")
+static func object_cursed_overlay(id: String, category: String = "") -> ImageTexture:
+	var base: Image = _sk_object_image(id, category)
 	var w: int = base.get_width()
 	var h: int = base.get_height()
 	var g: Image = _sk_new(w, h)
@@ -3296,7 +3303,11 @@ static func _sk_collector(f: int) -> Image:
 	_sk_p(g, cx + 3, hy + 4, 9)
 	_sk_r(g, cx - 3, hy + 8, 6, 1, 4)
 	_sk_r(g, cx - 1, hy + 2, 2, 4, 4)  # nose
-	_sk_r(g, cx - 2, hy + 6, 5, 1, 13)  # lips, a slight patient curl
+	_sk_r(g, cx - 2, hy + 6, 5, 1, 0)  # a thin patient mouth with a hint of teeth
+	_sk_p(g, cx - 1, hy + 7, 15)
+	_sk_p(g, cx + 1, hy + 7, 15)
+	_sk_r(g, cx - 5, hy + 4, 2, 1, 4)  # hollow, shadowed cheeks
+	_sk_r(g, cx + 3, hy + 4, 2, 1, 2)
 	_sk_p(g, cx + 3, hy + 5, 13)
 	_sk_p(g, cx - 3, hy + 5, 12)
 	_sk_r(g, cx - 5, hy - 1, 4, 1, 3)  # brows
@@ -3314,19 +3325,19 @@ static func _sk_collector(f: int) -> Image:
 	_sk_r(g, cx - 6, hy - 2, 12, 1, 4)  # the brim's shadow across the brow
 	for ex: int in [-3, 2]:
 		var lx: int = _sk_eye_x(cx, ex)
-		_sk_r(g, lx - 1, hy, 5, 4, 14)  # lens glass, then the eye behind it
+		_sk_r(g, lx - 1, hy, 5, 4, 1)  # smoked lens glass over a dark hollow, one red pinprick behind it
 		if f == 2:
 			_sk_r(g, lx, hy + 2, 3, 1, 0)
 		else:
-			_sk_r(g, lx, hy + 1, 3, 2, 15)
-			_sk_r(g, lx + 1, hy + 1, 2, 2, 0)
-			_sk_p(g, lx + 1, hy + 1, 11)
-		_sk_r(g, lx - 2, hy - 1, 7, 1, 10)  # brass rims
-		_sk_r(g, lx - 2, hy + 4, 7, 1, 9)
-		_sk_r(g, lx - 2, hy, 1, 4, 10)
-		_sk_r(g, lx + 4, hy, 1, 4, 9)
+			_sk_r(g, lx - 1, hy + 1, 5, 3, 0)
+			_sk_p(g, lx + 1, hy + 2, 13)
+			_sk_p(g, lx + 2, hy + 2, 12)
+		_sk_r(g, lx - 2, hy - 1, 7, 1, 10)  # brass rims: lit top edge, tarnished sides and bottom
+		_sk_r(g, lx - 2, hy + 4, 7, 1, 8)
+		_sk_r(g, lx - 2, hy, 1, 4, 9)
+		_sk_r(g, lx + 4, hy, 1, 4, 8)
 		_sk_p(g, lx + 3, hy, 15)  # glint on the lens
-	_sk_r(g, cx - 1, hy + 1, 3, 1, 10)  # the bridge
+	_sk_r(g, cx - 1, hy + 1, 3, 1, 9)  # the bridge
 	# the case: a brass-bound box of deep wine velvet drawers, dark wood between them, a bright brass pull on each
 	var by0: int = 60 - up
 	_sk_r(g, 22, by0, 28, 23, 10)  # brass frame
@@ -3337,11 +3348,22 @@ static func _sk_collector(f: int) -> Image:
 	_sk_r(g, 23, by0 + 1, 26, 21, 8)  # dark wood carcass showing between the drawers
 	_sk_p(g, 22, by0, 15)
 	_sk_p(g, 49, by0, 9)
-	for r: int in range(3):
+	_sk_r(g, 23, by0 + 1, 26, 7, 8)  # the lid: a seam, a carrying handle, a brass lock plate and two latches
+	_sk_r(g, 23, by0 + 7, 26, 1, 0)
+	_sk_r(g, 23, by0 + 1, 26, 1, 9)
+	_sk_r(g, 31, by0 - 3, 10, 1, 10)
+	_sk_r(g, 31, by0 - 2, 1, 2, 10)
+	_sk_r(g, 40, by0 - 2, 1, 2, 10)
+	_sk_r(g, 34, by0 + 3, 4, 4, 11)
+	_sk_p(g, 35, by0 + 5, 0)
+	_sk_r(g, 26, by0 + 2, 3, 5, 10)
+	_sk_r(g, 43, by0 + 2, 3, 5, 10)
+	_sk_p(g, 26, by0 + 2, 15)
+	for r: int in range(1, 3):
 		for c: int in range(4):
 			var dx: int = 24 + c * 6
 			var dy: int = by0 + 3 + r * 6
-			var open: bool = f == 3 and r == 0 and c == 2
+			var open: bool = f == 3 and r == 1 and c == 2
 			if open:
 				_sk_r(g, dx, dy, 5, 5, 0)
 				_sk_p(g, dx + 1, dy + 1, 15)
@@ -3938,6 +3960,25 @@ static func regular_portrait(id: String) -> ImageTexture:
 		_sk_r(g, ex + 1, yy, 2 if e == 0 else 1, 2, 0)
 		_sk_p(g, ex + 1, yy, 11)  # a pinprick of candle in each eye
 		_sk_r(g, ex - 1, yy - 2, 4, 1, 3)
+	# face modelling: a shadowed far cheek and jaw, bags under the eyes, a lit nose bridge and brow, lips with a highlight
+	for fy: int in range(ey - tall + 1, ey + tall):
+		for fx: int in range(cx - 6, cx + 7):
+			var cur: int = _sk_idx(g, fx, fy)
+			if cur != int(skin[0]) and cur != int(skin[1]):
+				continue
+			var side: float = float(fx - cx) / 6.0
+			if side > 0.7 or (side > 0.35 and (fx + fy) % 2 == 0) or (fy > ey + tall - 3 and (fx + fy) % 2 == 0):
+				_sk_p(g, fx, fy, int(skin[2]))
+	for e2: int in range(2):
+		var bx: int = cx - 3 + e2 * 5
+		_sk_p(g, bx, ey + 2, int(skin[2]))
+		_sk_p(g, bx + 1, ey + 2, int(skin[2]))
+		_sk_p(g, bx, ey - 3, int(skin[1]))
+	_sk_p(g, cx - 1, ey + 1, 15)  # nose bridge catches the candle
+	_sk_p(g, cx, ey + 4, int(skin[2]))
+	_sk_r(g, cx - 4, ey + 3, 2, 1, int(skin[2]))  # hollow under the cheekbone
+	_sk_r(g, cx - 1, ey + 6, 3, 1, 13)  # lower lip
+	_sk_p(g, cx, ey + 6, 15 if kind != "tophat" else 13)
 	match kind:
 		"veil":  # a black bonnet and a net veil to the chin
 			_sk_e(g, float(cx), float(ey) - 6.0, 8.0, 5.0, 0)

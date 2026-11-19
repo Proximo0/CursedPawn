@@ -1,0 +1,12 @@
+[
+	{"id": "calm", "name": "Calm", "weight": 5.0, "move": 0.5, "bluff": 0.0, "patience_add": 0, "reserve_mult": 1.0, "flee_below": 0.0, "buyer_open": 0.85,
+		"lines": ["They stand square to the counter, patient as a clock.", "Steady hands, steady eyes, slow breaths."],
+		"tells": []},
+	{"id": "nervous", "name": "Nervous", "weight": 2.5, "move": 0.75, "bluff": 0.0, "patience_add": 0, "reserve_mult": 0.92, "flee_below": 0.45, "buyer_open": 0.92,
+		"lines": ["Their hands will not stay still.", "They keep glancing at the door.", "A damp thumb leaves a print on the glass."],
+		"tells": ["They flinch at the number.", "They glance at the door again.", "A swallow, audible across the counter."]},
+	{"id": "greedy", "name": "Greedy", "weight": 2.5, "move": 0.25, "bluff": 0.3, "bluff_tell": 0.7, "slip_tell": 0.15, "patience_add": 1,
+		"reserve_mult": 1.08, "flee_below": 0.0, "buyer_open": 0.72,
+		"lines": ["They tally on their fingers while you look away.", "A gold tooth shows in a smile that stays too long.", "They tap the counter in time with your breathing."],
+		"tells": ["A gold tooth glints.", "Their smile reaches only the front teeth.", "A finger taps twice, then stops."]}
+]

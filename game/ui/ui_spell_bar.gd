@@ -149,7 +149,7 @@ func draw(hud: UiHud, r: RunState, hover: String) -> void:
 		var tex: ImageTexture = icon(id)
 		var tint: Color = Color.WHITE if on else hud._c(3)
 		hud.draw_texture(tex, rc.position + Vector2(3.0, 3.0 + lift), tint)
-		hud._text(rc.position + Vector2(25.0, 4.0 + lift), UiOccult.key_label(id), 15 if on else 4)
+		hud._text(rc.position + Vector2(25.0, 4.0 + lift), TsKeys.label_of("spell_" + id).left(2), 15 if on else 4)
 		for p: int in range(clampi(maxi(left, 1), 1, 5)):
 			var pc: int = 11 if p < left and on else 3
 			hud._rect(Rect2(rc.position.x + 25.0 + float(p) * 4.0, rc.position.y + 15.0 + lift, 3.0, 3.0), pc)

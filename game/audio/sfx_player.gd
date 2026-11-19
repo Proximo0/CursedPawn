@@ -14,6 +14,9 @@ const PITCH_JITTER: float = 0.04
 const BLIP_DB: float = -18.0  ## speech-bubble typing blips sit well under the other sounds
 const TOOL_SOUNDS: Dictionary = {"uv": "uv_lamp", "scale": "scale_clank", "listen": "listen", "touch": "touch"}
 const TELL_DELAY_MAX: float = 0.9
+const HEAVY_BUILD_MS: float = 25.0
+const HEAVY_GAP_FRAMES: int = 30
+const WARM_MAX_DELTA: float = 0.04  ## no warming after a frame slower than this
 ## Every event kind in docs/core_brief.md. Kinds with no entry here are a mapping bug (see unit test).
 const EVENT_KINDS: PackedStringArray = [
 	"night_start", "customer", "inspected", "counter", "left", "bought", "sold", "passed", "wager", "wake",
@@ -21,7 +24,17 @@ const EVENT_KINDS: PackedStringArray = [
 	"cast", "backfire", "found", "found_hint", "dice", "hand_card", "hand_end", "wheel", "pairs_deal", "pairs_flip",
 	"pairs_match", "pairs_miss", "pairs_end", "item_staked", "lot", "table_open", "request_done", "request_failed",
 	"collector_omen", "collector_arrives", "collector_pleased", "collector_refused",
+	"curse_shift", "curse_copied", "whispered_away", "night_event", "buyer_offer",
 ]
+## Keyword -> sound for the ids Lane A's events carry (night_event id, wake_type, run_won ending, customer mood). Matched as
+## a substring of the id, so "full_moon" and "fullmoon" both work; an id with no match plays nothing extra.
+const NIGHT_EVENT_SOUNDS: Dictionary = {"blackout": "event_blackout", "storm": "event_storm", "auction": "event_auction",
+	"moon": "event_fullmoon"}
+const WAKE_TYPE_SOUNDS: Dictionary = {"drift": "wake_drift", "topple": "wake_topple", "light": "wake_lights_out",
+	"door": "wake_door_lock", "lock": "wake_door_lock", "possess": "wake_possession"}
+const ENDING_SOUNDS: Dictionary = {"debt": "ending_debt_free", "cursed": "ending_cursed_shop", "collector": "ending_collector",
+	"regular": "ending_regulars"}
+const MOOD_SOUNDS: Dictionary = {"nervous": "mood_nervous", "greedy": "mood_greedy"}
 ## UI-only sounds, played with ui(kind): the screens call these where no run event exists.
 const UI_SOUNDS: Dictionary = {"click": "ui_click", "omen_flip": "omen_flip", "altar_buy": "altar_buy",
 	"haunt_unlock": "haunt_unlock", "request_pinned": "request_pinned", "deed": "deed", "regular": "regular"}
@@ -33,6 +46,9 @@ var seed_value: int = 1
 var build_ms: float = 0.0  ## total time spent building streams so far
 var played: Array[String] = []  ## names started since creation (kept short; for tests and the debug overlay)
 
+var sfx_volume: float = 1.0  ## linear 0..1, the settings' sound-effects slider (one-shots only)
+var music_volume: float = 1.0  ## linear 0..1, the settings' music slider
+var music: MusicPlayer  ## procedural music (music_player.gd); driven from on_events and set_dread
 var _streams: Dictionary = {}
 var _pool: Array[AudioStreamPlayer] = []
 var _next: int = 0
@@ -42,10 +58,12 @@ var _dread_target: float = 0.0
 var _dread_level: float = 0.0
 var _pending: Array[Dictionary] = []  ## {t, name, vol_db}
 var _warm_i: int = 0
+var _warm_wait: int = 0
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	DiagLog.install()  ## every game screen owns a SfxPlayer, so this is where engine errors start going into the diagnostics ring
 	_rng.seed = hash(["sfx_player", seed_value])
 	for i: int in range(POOL_SIZE):
 		var p: AudioStreamPlayer = AudioStreamPlayer.new()
@@ -55,13 +73,18 @@ func _ready() -> void:
 	_dread = AudioStreamPlayer.new()
 	add_child(_ambient)
 	add_child(_dread)
+	music = MusicPlayer.new()
+	music.seed_value = seed_value
+	add_child(music)
 	set_process(true)
 
 
+func _exit_tree() -> void:
+	DiagLog.uninstall()
+
+
 func _process(delta: float) -> void:
-	if _warm_i < SfxSynth.NAMES.size():
-		stream_for(SfxSynth.NAMES[_warm_i])
-		_warm_i += 1
+	_warm(delta)
 	var i: int = 0
 	while i < _pending.size():
 		_pending[i]["t"] = float(_pending[i]["t"]) - delta
@@ -75,6 +98,23 @@ func _process(delta: float) -> void:
 
 
 # ---------------------------------------------------------------- streams
+
+## Warms one sound per calm frame. A build that took HEAVY_BUILD_MS (a hitch on the single-threaded web build) is followed by
+## HEAVY_GAP_FRAMES of nothing, so hitches stay a few percent of frames; whatever is not warm yet builds on first use.
+func _warm(delta: float) -> void:
+	if _warm_i >= SfxSynth.NAMES.size():
+		return
+	if _warm_wait > 0:
+		_warm_wait -= 1
+		return
+	if delta > WARM_MAX_DELTA:
+		return
+	var before: float = build_ms
+	stream_for(SfxSynth.NAMES[_warm_i])
+	_warm_i += 1
+	if build_ms - before >= HEAVY_BUILD_MS:
+		_warm_wait = HEAVY_GAP_FRAMES
+
 
 ## The stream for a sound name, built on first use and cached. Null for an unknown name.
 func stream_for(name: String) -> AudioStreamWAV:
@@ -115,8 +155,16 @@ func play(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
 	_next = (_pool.find(p) + 1) % POOL_SIZE
 	p.stream = w
 	p.pitch_scale = pitch * (1.0 + (_rng.randf() * 2.0 - 1.0) * PITCH_JITTER)
-	p.volume_db = _db(vol_db)
+	p.volume_db = _db(vol_db) + linear_to_db(maxf(sfx_volume, 0.001))
 	p.play()
+
+
+## The sound whose keyword is a substring of `id` ("" when none).
+func _keyed(table: Dictionary, id: String) -> String:
+	for key: String in table:
+		if id.contains(key):
+			return str(table[key])
+	return ""
 
 
 func _queue(name: String, delay: float, vol_db: float = 0.0) -> void:
@@ -144,9 +192,13 @@ func on_events(events: Array[Dictionary]) -> void:
 		match kind:
 			"night_start":
 				play("footsteps", -6.0)
+				music.play_track("shop")
 			"customer":
 				play("door_bell")
 				_queue("footsteps", 0.45, -8.0)
+				var mood_sound: String = _keyed(MOOD_SOUNDS, str(ev.get("mood", "")))
+				if mood_sound != "":
+					_queue(mood_sound, 0.9, -6.0)
 			"inspected":
 				var tool_sound: String = str(TOOL_SOUNDS.get(str(ev.get("tool", "")), "ui_click"))
 				play(tool_sound)
@@ -174,13 +226,22 @@ func on_events(events: Array[Dictionary]) -> void:
 				var win: bool = int(ev.get("payout", 0)) > int(ev.get("stake", 0))
 				_queue("tarot_win" if win else "tarot_lose", 0.45)
 			"wake":
+				var wake_sound: String = _keyed(WAKE_TYPE_SOUNDS, str(ev.get("wake_type", "")))
 				play("wake")
+				if wake_sound != "":
+					_queue(wake_sound, 0.0, -2.0)
+				music.duck(-12.0, 3.0, 2.0)
 			"night_end":
 				play("night_end")
 			"run_lost":
 				play("run_lost")
+				music.stop()
 			"run_won":
 				play("run_won")
+				var end_sound: String = _keyed(ENDING_SOUNDS, str(ev.get("ending", "")))
+				if end_sound != "":
+					_queue(end_sound, 1.2)
+				music.stop()
 			"invalid":
 				play("wrong_note", -10.0)
 			"cast":
@@ -223,14 +284,27 @@ func on_events(events: Array[Dictionary]) -> void:
 				play("lot_unwrap")
 			"table_open":
 				play("table_open", -3.0)
+				music.play_track("table")
 			"request_done":
 				play("request_done")
 			"request_failed":
 				play("request_failed")
+			"curse_shift":
+				play("curse_shift")
+			"curse_copied":
+				play("curse_copied")
+			"whispered_away":
+				play("whispered_away")
+			"buyer_offer":
+				play("buyer_offer")
+			"night_event":
+				var ne: String = _keyed(NIGHT_EVENT_SOUNDS, str(ev.get("id", ev.get("event", ""))))
+				play(ne if ne != "" else "table_open", -2.0)
 			"collector_omen":
 				play("collector_arrive", -9.0)
 			"collector_arrives":
 				play("collector_arrive")
+				music.play_track("collector")
 			"collector_pleased":
 				play("collector_pleased")
 			"collector_refused":
@@ -252,10 +326,11 @@ func blip(pitch: float) -> void:
 
 ## Starts the ambient bed (loops until stop_ambient).
 func start_ambient() -> void:
+	if music.track == "":
+		music.play_track("title")
 	_ambient.stream = stream_for("ambient")
 	_ambient.volume_db = _db(AMBIENT_DB)
 	_ambient.play()
-	_dread.stream = stream_for("dread")
 	_apply_dread()
 
 
@@ -267,16 +342,28 @@ func stop_ambient() -> void:
 ## Dread layer volume from 0..1 (the game's Dread over its wake threshold). Eases towards the target.
 func set_dread(norm: float) -> void:
 	_dread_target = clampf(norm, 0.0, 1.0)
+	music.set_intensity(_dread_target)
+
+
+func set_sfx_volume(v: float) -> void:
+	sfx_volume = clampf(v, 0.0, 1.0)
+
+
+func set_music_volume(v: float) -> void:
+	music_volume = clampf(v, 0.0, 1.0)
+	music.set_master_volume(master * music_volume)
 
 
 func set_muted(on: bool) -> void:
 	muted = on
+	music.set_muted(on)
 	_apply_dread()
 	_ambient.volume_db = _db(AMBIENT_DB)
 
 
 func set_master_volume(v: float) -> void:
 	master = clampf(v, 0.0, 1.0)
+	music.set_master_volume(master * music_volume)
 	_apply_dread()
 	_ambient.volume_db = _db(AMBIENT_DB)
 
@@ -284,6 +371,8 @@ func set_master_volume(v: float) -> void:
 func _apply_dread() -> void:
 	if _dread == null:
 		return
+	if _dread.stream == null and _dread_target > 0.05:
+		_dread.stream = stream_for("dread")  ## built when Dread first shows, not at boot
 	var curve: float = pow(_dread_level, 1.5)
 	var db: float = SILENT_DB if curve <= 0.01 else _db(lerpf(-30.0, DREAD_MAX_DB, curve))
 	_dread.volume_db = db

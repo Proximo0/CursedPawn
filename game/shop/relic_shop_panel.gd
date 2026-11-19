@@ -14,6 +14,7 @@ var collection: CurioCollection
 var store: RelicStore
 var payments: int = 0
 var reveal_left: float = 0.0
+var no_save: bool = false  ## the test menu's throwaway profile: nothing is ever written
 
 var _root: Control
 var _age_box: VBoxContainer
@@ -205,7 +206,7 @@ func _log(line: String) -> void:
 
 
 func _refresh() -> void:
-	if not Flags.is_scripted_run():
+	if not Flags.is_scripted_run() and not no_save:
 		PlayerProfile.save(store)
 	if _root == null:
 		return
@@ -272,7 +273,7 @@ func _rebuild_book() -> void:
 
 ## Writes the profile (never for scripted runs).
 func save_profile() -> void:
-	if not Flags.is_scripted_run():
+	if not Flags.is_scripted_run() and not no_save:
 		PlayerProfile.save(store)
 
 

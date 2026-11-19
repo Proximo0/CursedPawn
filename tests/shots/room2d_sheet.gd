@@ -77,6 +77,10 @@ func _go() -> void:
 		if picks.size() < 10 and not picks.has(n):
 			picks.append(n)
 	await _frames(20)
+	if OS.get_cmdline_user_args().has("--c32"):  # lane C steps 32-37: wake types, night events, title, animation, lighting
+		await _lane_c_cells(cat, picks)
+		_save_sheet()
+		return
 	if OS.get_cmdline_user_args().has("--r6"):  # only the round 6 cells (cabinet, regular rim light, low eyes, Collector)
 		await _round6_cells(cat, picks)
 		_save_sheet()
@@ -155,6 +159,65 @@ func _go() -> void:
 		await _snap("wake %.1f s" % (float(target) / 60.0))
 	await _measure(cat, picks)
 	_save_sheet()
+
+
+func _phase_run(cat: Catalog, picks: PackedStringArray, p: float) -> RunState:
+	var run: RunState = _run_with(cat, picks)
+	run.clock = run.tuning.day_minutes * (1.0 - p)
+	return run
+
+
+## Lane C: one cell per wake type, night event, the title scene, the lighting phases and the animation beats.
+func _lane_c_cells(cat: Catalog, picks: PackedStringArray) -> void:
+	_room.scare_level = 1
+	for wt: String in RoomScenes.WAKE_TYPES:
+		_room.setup(_run_with(cat, picks))
+		_room.wake(7, wt)
+		while _room._wake_tick < ShopRoom2D.BEAT_TICKS + 75 and _room.is_waking():
+			await physics_frame
+		await _snap("wake type: " + wt)
+		while _room.is_waking():
+			await physics_frame
+		await _frames(30)
+	for ev: String in RoomScenes.NIGHT_EVENTS:
+		_room.setup(_run_with(cat, picks))
+		_room.apply_events([{"e": "night_start", "night": 2, "rent": 60, "night_event": ev}] as Array[Dictionary])
+		_customer("seller", picks[1], "widow")
+		_room._bubble.hide_now()
+		_room._t = 18.0 if ev == "storm" else 30.0
+		await _frames(30)
+		if ev == "storm":
+			_room._t = 36.0
+		await _snap("night event: " + ev)
+	_room.setup(_run_with(cat, picks))
+	_room.set_title_mode(true)
+	_room._t = 4.0 + 3.5
+	await _frames(20)
+	await _snap("title scene: shadow at the window, moth")
+	_room.set_title_mode(false)
+	for p: float in [0.05, 0.5, 0.97]:
+		_room.setup(_phase_run(cat, picks, p))
+		_room._cust_state = "none"
+		await _frames(20)
+		await _snap("window light at %.2f of the night" % p)
+	_room.setup(_run_with(cat, picks))
+	_room.set_dread(1.0 * Tuning.shared().wake_threshold)
+	await _frames(20)
+	await _snap("dread 1.0: flame tint")
+	_room.set_dread(0.0)
+	_room.setup(_run_with(cat, picks))
+	_room.apply_events([{"e": "customer", "kind": "seller", "name": picks[2], "category": "toy", "ask": 40, "tid": "debt_collector", "line": "Pay.", "mood": "greedy"}] as Array[Dictionary])
+	for i: int in range(34):
+		_room._process(0.05)
+	await _snap("walk cycle + door bell")
+	for i: int in range(60):
+		_room._process(0.05)
+	_room._land_t = 0.2
+	await _snap("object landing on the counter")
+	_room.apply_events([{"e": "sold", "uid": 100, "name": picks[0], "price": 70, "imposter": false}] as Array[Dictionary])
+	for i: int in range(6):
+		_room._process(0.05)
+	await _snap("coin toss")
 
 
 ## Round 6: the curio cabinet (empty, 5 curios, 12), a regular with the warm rim light next to a plain customer, the

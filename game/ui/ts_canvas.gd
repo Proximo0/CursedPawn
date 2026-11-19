@@ -82,7 +82,23 @@ func add(id: String, rect: Rect2, enabled: bool = true) -> void:
 ## A brass button. Highlight follows the screen's focus (keyboard and mouse hover share it).
 func button(id: String, rect: Rect2, label: String, enabled: bool = true, gold: bool = false) -> void:
 	add(id, rect, enabled)
-	UiFrames.ui_button(self, rect, label, enabled, gold, screen.is_focused(id), screen.down_id == id, _foc_age, _down_age)
+	var big: bool = screen.settings.text_scale == 2 and rect.size.y >= 18.0 and UiPixelFont.ui_width(label, 2) <= int(rect.size.x) - 6
+	UiFrames.ui_button(self, rect, "" if big else label, enabled, gold, screen.is_focused(id), screen.down_id == id, _foc_age, _down_age)
+	if big:  # the 2x text size: the label drawn here, centred, in the button's own colours
+		var pressed: bool = enabled and screen.down_id == id
+		var col: int = 3 if not enabled else (0 if gold and not pressed else (11 if gold else 15))
+		var lw: int = UiPixelFont.ui_width(label, 2)
+		UiPixelFont.ui_draw(self, Vector2(rect.position.x + floorf((rect.size.x - float(lw)) * 0.5), rect.position.y + floorf((rect.size.y - 14.0) * 0.5) + (1.0 if pressed else 0.0)),
+			label, c(col), 2, enabled and not gold, c(0))
+	if TsPad.active and enabled and screen.is_focused(id):
+		ring(rect)
+
+
+## The controller focus ring: a pulsing bright outline just outside `rect`.
+func ring(rect: Rect2) -> void:
+	var col: int = 15 if fmod(t, 0.8) < 0.5 else 11
+	draw_rect(rect.grow(2.0), c(col), false, 1.0)
+	draw_rect(rect.grow(3.0), c(0), false, 1.0)
 
 
 ## The menu cursor: a flickering flame beside the focused entry.

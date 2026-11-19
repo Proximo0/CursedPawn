@@ -64,6 +64,22 @@ jobs:
           path: build/web
           name: web
 
+  # Linux download: exported with tools/export_linux.sh, then the exported binary plays a whole run headless (--smoke).
+  # Kept as an artifact only; it is not a required check and publishes nothing.
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-godot
+      - name: Export and smoke
+        run: tools/export_linux.sh --smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: build/Cursed-Pawn-linux.zip
+          if-no-files-found: error
+
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build

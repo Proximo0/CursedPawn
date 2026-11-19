@@ -92,3 +92,50 @@ per-match hitches (a slow match start, a first-use shader compile) that a single
 
 ## This project's numbers
 <!-- One table per pass: before/after per quality level, the scripted worst case, and what was changed. -->
+
+### Pass 1 (19 Nov 2026, Lane D, steps 43 and 44)
+
+Tools: `tools/perf.sh [--frames=N]` (`RES=640x360`, xvfb and software GL, the real ShopGame driven by the greedy bot, 120 frames
+of warm-up, then N timed frames; also the boot phases and the first-call cost of every SpriteKit texture family) and
+`node tools/web_smoke.mjs` (first frame time and requestAnimationFrame gaps in headless Chromium on swiftshader). Headless
+(`godot --headless -s res://tests/perf/perf.gd -- --scripted`) skips the renderer, so it is the script and engine cost alone.
+**Caveat:** the cloud host was shared with other lanes (load average 5 to 10 on 4 cores), so every number below is pessimistic
+and noisy by about 2x; re-run on a quiet machine before quoting a final figure.
+
+| measure (native) | before | after |
+| --- | --- | --- |
+| frame ms p50 / p95 / p99 / max, headless (script only), 600 frames | 6.9 / 19.5 / 69.8 / 170.8 | 6.9 / 12.4 / 54.4 / 92.2 |
+| frames over 30 ms (all of them had an audio stream build in them) | 13 to 17 of 600 | 17 of 600 (spread out, no frame over 100 ms) |
+| frame ms p50 / p95 / max, software GL 640x360 (llvmpipe) | 39 / 100 / 155 | not re-run |
+| draw calls per frame, average / max | 98 to 109 / 116 | same |
+| all 74 sounds, total build | 2.7 s (one 200 ms build in a frame) | 2.1 s; warm-up is paced (see below) |
+| music, build of a whole track (title, shop, table, collector) | n/a | 0.67 s, 0.93 s, 0.24 s, 0.30 s |
+
+Target p95 at or under 20 ms: **met natively on the script side (12.4 ms)**. Not met in software GL (100 ms): llvmpipe on a
+loaded CPU, not the game's cost, because draw calls are about 100 a frame; check on a real GPU.
+
+SpriteKit first-call cost (target under 50 ms): **already met, no cache needed.** Every object texture: avg 1.4 ms, worst 2.3 ms
+(56 objects, 79 ms for all of them); customer textures worst 4.4 ms; tiles under 1.2 ms each; the five tool icons 5 ms in total.
+The callers (ShopRoom2D, ui_inspect, ui_hud) keep their own caches, so a repeat call is free. A cache inside SpriteKit would live in
+game/room2d (Lane C); it is not needed for the budget.
+
+Where the boot time goes (headless, one run, ms): script load and autoloads 300 to 650, then `ShopGame` scene build 1700
+(of which UiHud 650 plus 156 on its first frame, ShopRoom2D 356, Catalog 164, the ambient bed 150). First customer at 2.0 s after
+process start natively. The UI and room numbers belong to Lanes B and C: **a lazy HUD (build the table, found and toast panels
+on first use) is the largest remaining boot cost.**
+
+What changed (all in game/audio, tools):
+- Sounds are warmed one per calm frame, and a build over 25 ms is followed by 30 idle frames, so a hitch is at most about 3 percent
+  of frames. The dread shimmer builds when Dread first appears, not at boot. `au_organ` is one pass instead of four voices.
+- Music builds one stem per calm frame, starting 2 s after boot (the first customer comes first), each stem at the lowest sample
+  rate its content allows (5.5 or 11 kHz). The title track is built while the title is up.
+- Loudness normalisation costs about 25 percent of a sound's build; it samples every third sample to stay cheap.
+
+Web (headless Chromium, swiftshader, same shared host): first shop frame at 5.8 to 8.3 s after page load in three runs (limit 15 s,
+now asserted by `tools/web_smoke.mjs`, override with `SMOKE_FIRST_MS`); engine banner at 0.4 to 0.7 s; download 8.0 MB gzip.
+requestAnimationFrame gaps were 770 to 920 ms (about 1.2 fps): software GL at this load cannot say anything about the web frame
+time on a real GPU, so the p95 figure for the web build is **not measured** (the smoke prints it every run as a trend number).
+Wasm runs GDScript roughly 2 to 3 times slower than native, so a 100 ms native build is a 250 ms hitch there: that is why audio
+warm-up is paced and music is lazy.
+
+Soak (50 matches back to back) is still to do on real hardware.

@@ -1,0 +1,10 @@
+[
+	{"id": "collector", "name": "The Collector's Set", "title": "A set, completed",
+		"text": "The Collector tips his hat and the shop exhales. Somewhere, a shelf you will never see has one less gap."},
+	{"id": "regulars", "name": "The Regulars' Last Chapter", "title": "The story is told",
+		"text": "A regular's tale ends at your counter. The bell rings, the lamp steadies, and nobody asks for change."},
+	{"id": "cursed_shop", "name": "Beyond Saving", "title": "The shop keeps you",
+		"text": "Rent paid, doors open, and the shelves are humming. The shop is cursed past saving, and so, you note, are you."},
+	{"id": "debt_free", "name": "Debt-Free", "title": "Paid in full",
+		"text": "Every rent paid, every lamp lit. You own a pawnshop and nothing owns you. Tonight, at least."}
+]

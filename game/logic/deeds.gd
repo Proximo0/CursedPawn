@@ -4,13 +4,16 @@ extends RefCounted
 ## {id, name, text, secret, check}. `check` is a rule object; every key in it must hold (AND). Kinds:
 ## won, haunting_at_least n, wakes_at_least n, cash_at_least n, spells_cast n, table_wins n, pairs_perfect,
 ## collector "pleased", requests_done n, curios_owned n, set_complete id, regular_finished id, omen id, daily,
-## no_tools, all_cursed_held n (most cursed objects held at once). Run counters come from RunState; curios, sets,
+## no_tools, all_cursed_held n (most cursed objects held at once). Full-game kinds: ending id (needs won), curse_held id,
+## curses_held_count n, wake_type id, wake_types_count n, night_event id (seen), night_events_seen n, whispered_at_least n,
+## copies_at_least n, haggle_wins n (buyer counters paid), twin_sold, unseen_cash n (Bashful purse payouts). Run counters come from RunState; curios, sets,
 ## regulars and earned deeds come from the profile (a RelicStore), plus anything the run just found or advanced.
 
 const PATH: String = "res://game/data/deeds.json"
 const KINDS: PackedStringArray = ["won", "haunting_at_least", "wakes_at_least", "cash_at_least", "spells_cast",
 	"table_wins", "pairs_perfect", "collector", "requests_done", "curios_owned", "set_complete", "regular_finished",
-	"omen", "daily", "no_tools", "all_cursed_held"]
+	"omen", "daily", "no_tools", "all_cursed_held", "ending", "curse_held", "curses_held_count", "wake_type", "wake_types_count",
+	"night_event", "night_events_seen", "whispered_at_least", "copies_at_least", "haggle_wins", "twin_sold", "unseen_cash"]
 
 
 static func all() -> Array[Dictionary]:
@@ -81,6 +84,30 @@ static func holds(rule: Dictionary, run: RunState, profile: RelicStore, curios: 
 				ok = (run.tools_used == 0) == bool(v)
 			"all_cursed_held":
 				ok = run.max_cursed_held >= int(v)
+			"ending":
+				ok = run.ending == str(v)
+			"curse_held":
+				ok = run.curses_held.has(str(v))
+			"curses_held_count":
+				ok = run.curses_held.size() >= int(v)
+			"wake_type":
+				ok = run.wake_types.has(str(v))
+			"wake_types_count":
+				ok = run.wake_types.size() >= int(v)
+			"night_event":
+				ok = run.events_seen.has(str(v))
+			"night_events_seen":
+				ok = run.events_seen.size() >= int(v)
+			"whispered_at_least":
+				ok = run.whispered >= int(v)
+			"copies_at_least":
+				ok = run.copies >= int(v)
+			"haggle_wins":
+				ok = run.haggle_wins >= int(v)
+			"twin_sold":
+				ok = (run.twin_sales > 0) == bool(v)
+			"unseen_cash":
+				ok = run.unseen_cash >= int(v)
 		if not ok:
 			return false
 	return true
@@ -133,6 +160,14 @@ static func problems() -> PackedStringArray:
 				out.append("deed %s: unknown rule kind %s" % [id, key])
 		if rule.has("regular_finished") and Regulars.get_regular(str(rule["regular_finished"])).is_empty():
 			out.append("deed %s: unknown regular" % id)
+		if rule.has("curse_held") and Catalog.load_default().curse(str(rule["curse_held"])).is_empty():
+			out.append("deed %s: unknown curse" % id)
+		if rule.has("night_event") and NightEvents.get_event(str(rule["night_event"])).is_empty():
+			out.append("deed %s: unknown night event" % id)
+		if rule.has("ending") and Endings.get_ending(str(rule["ending"])).is_empty():
+			out.append("deed %s: unknown ending" % id)
+		if rule.has("wake_type") and not Catalog.WAKE_TYPES.has(str(rule["wake_type"])):
+			out.append("deed %s: unknown wake type" % id)
 		if rule.has("omen") and Omens.get_omen(str(rule["omen"])).is_empty():
 			out.append("deed %s: unknown omen" % id)
 	return out

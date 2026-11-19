@@ -136,7 +136,7 @@ func test_cursed_overlays_stay_inside_the_object() -> void:
 	for row: Dictionary in _rows(OBJECTS_PATH):
 		var id: String = str(row["id"])
 		var base: Image = SpriteKit.object_texture(id, str(row["category"])).get_image()
-		var ov: Image = SpriteKit.object_cursed_overlay(id).get_image()
+		var ov: Image = SpriteKit.object_cursed_overlay(id, str(row["category"])).get_image()
 		assert_eq(ov.get_size(), base.get_size(), id)
 		assert_true(_palette_ok(ov), id)
 		var n: int = _opaque_count(ov)
@@ -146,7 +146,7 @@ func test_cursed_overlays_stay_inside_the_object() -> void:
 				if ov.get_pixel(x, y).a > 0.5:
 					assert_true(base.get_pixel(x, y).a > 0.5, id + " overlay outside object")
 		seen[hash(ov.get_data())] = true
-		assert_true(ov.get_data() == SpriteKit.object_cursed_overlay(id).get_image().get_data(), id + " deterministic")
+		assert_true(ov.get_data() == SpriteKit.object_cursed_overlay(id, str(row["category"])).get_image().get_data(), id + " deterministic")
 	assert_true(seen.size() >= 30, "distinct overlays: " + str(seen.size()))
 
 
@@ -201,7 +201,7 @@ func test_customer_body_plans_give_distinct_silhouettes() -> void:
 		var img: Image = SpriteKit.customer_texture(look).get_image()
 		masks[_mask_hash(img)] = true
 		tops[str(row["id"])] = _top_row(img)
-	assert_eq(masks.size(), 12, "every customer type has its own silhouette")
+	assert_eq(masks.size(), _rows(CUSTOMERS_PATH).size(), "every customer type has its own silhouette")
 	assert_true(int(tops["nervous_heir"]) > int(tops["medium"]) + 12, "the child figure stands much shorter")
 	var plain: Image = SpriteKit.customer_texture({"id": "x", "cloak": "#4b2a78", "height": 1.0}).get_image()
 	var broad: Image = SpriteKit.customer_texture({"id": "x", "cloak": "#4b2a78", "height": 1.0, "plan": "broad"}).get_image()
@@ -413,3 +413,101 @@ func test_collector_face_is_lit_and_spectacled() -> void:
 				lips += 1
 	assert_true(brass >= 10, "spectacle rims")
 	assert_true(lips >= 2, "a living mouth")
+
+
+# ---------------------------------------------------------------- lane C: new content art (ArtContent)
+
+func test_sixteen_new_objects_are_drawn_distinct_and_palette_only() -> void:
+	assert_eq(ArtContent.PRIMARY_KINDS.size(), 16)
+	var seen: Dictionary = {}
+	for k: String in ArtContent.OBJ_KINDS:
+		var img: Image = SpriteKit.object_texture(k, str(ArtContent.KIND_CATEGORY[k])).get_image()
+		assert_true(_opaque_count(img) > 100, k + " too empty")
+		assert_true(_palette_ok(img), k + " palette")
+		assert_true(img.get_pixel(0, 0).a < 0.01, k + " corner")
+		var key: int = hash(img.get_data())
+		assert_false(seen.has(key), k + " identical to " + str(seen.get(key, "")))
+		seen[key] = k
+
+
+func test_new_object_ids_map_by_keyword_then_category() -> void:
+	assert_eq(ArtContent.kind_for("cracked_crystal_ball", "relic"), "crystal_ball")
+	assert_eq(ArtContent.kind_for("tin_drum", "instrument"), "snare_drum")
+	assert_eq(ArtContent.KIND_CATEGORY[ArtContent.kind_for("zz_unknown", "book")], "book")
+	assert_eq(ArtContent.kind_for("zz_unknown", "book"), ArtContent.kind_for("zz_unknown", "book"))
+	for id: String in ["wind_up_frog", "kazoo", "wax_seal", "horseshoe", "bestiary"]:
+		assert_eq(ArtContent.kind_for(id, ""), id)
+
+
+func test_detail_render_is_64_square_and_palette_only() -> void:
+	for id: String in ["music_box", "tiara", "skull", "zz_unknown"]:
+		var img: Image = ArtContent.object_detail(id, "relic").get_image()
+		assert_eq(img.get_size(), Vector2i(64, 64), id)
+		assert_true(_opaque_count(img) > 400, id)
+		assert_true(_palette_ok(img), id)
+
+
+func test_new_curse_overlays_cover_only_the_object() -> void:
+	for cid: String in ["costume_change", "copycat", "bashful_purse", "landlord_lullaby"]:
+		var ov: Image = ArtContent.curse_overlay(cid, "tiara", "jewelry").get_image()
+		var base: Image = SpriteKit.object_texture("tiara", "jewelry").get_image()
+		assert_eq(ov.get_size(), base.get_size(), cid)
+		assert_true(_opaque_count(ov) >= 3, cid + " empty")
+		assert_true(_palette_ok(ov), cid)
+	assert_eq(ArtContent.curse_kind("copycat_x"), "echo")
+	var kinds: Dictionary = {}
+	for cid: String in ["costume_change", "copycat", "bashful_purse", "landlord_lullaby"]:
+		kinds[ArtContent.curse_kind(cid)] = true
+	assert_eq(kinds.size(), 4)
+
+
+func test_new_customer_types_have_their_own_bodies() -> void:
+	var seen: Dictionary = {}
+	for tid: String in ["errand_child", "debt_collector", "twin", "seer"]:
+		var img: Image = SpriteKit.customer_texture({"id": tid, "cloak": "#4b2a78", "eyes": "#ffd27a"}).get_image()
+		assert_true(_palette_ok(img), tid)
+		var key: int = hash(img.get_data())
+		assert_false(seen.has(key), tid)
+		seen[key] = tid
+	assert_eq(ArtContent.plan_for("debt_collector", ""), "normal,ledger")
+	assert_eq(ArtContent.plan_for("widow", "hunched,veil"), "hunched,veil")
+
+
+func test_moods_change_the_face_and_keep_four_frames() -> void:
+	var look: Dictionary = {"id": "haggler", "cloak": "#4b2a78", "eyes": "#ffd27a"}
+	var calm: Image = ArtContent.mood_texture(look, "calm").get_image()
+	assert_true(calm.get_data() == SpriteKit.customer_texture(look).get_image().get_data(), "calm is the base")
+	for m: String in ["nervous", "greedy"]:
+		var img: Image = ArtContent.mood_texture(look, m).get_image()
+		assert_false(img.get_data() == calm.get_data(), m)
+		assert_eq(img.get_size(), calm.get_size(), m)
+		assert_true(_palette_ok(img), m)
+		assert_eq(ArtContent.mood_frames(look, m).size(), 4, m)
+	assert_true(ArtContent.mood_texture(look, "furious").get_image().get_data() == calm.get_data(), "unknown mood is calm")
+
+
+func test_rim_mask_lights_only_the_top_left_edge() -> void:
+	var img: Image = SpriteKit.customer_texture({"id": "widow", "cloak": "#4b2a78"}).get_image()
+	var m: Image = ArtContent.rim_mask(img)
+	assert_eq(m.get_size(), img.get_size())
+	assert_true(_palette_ok(m))
+	var lit: int = _opaque_count(m)
+	assert_true(lit > 30 and lit < _opaque_count(img) / 3, "a thin edge: %d" % lit)
+	for y: int in range(m.get_height()):
+		for x: int in range(m.get_width()):
+			if m.get_pixel(x, y).a > 0.5:
+				assert_true(img.get_pixel(x, y).a > 0.5, "inside the figure")
+
+
+func test_downscale_keeps_the_outline_and_the_size() -> void:
+	var big: Image = SpriteKit.curio_icon("tooth").get_image()
+	var small: Image = ArtContent.downscale_mode(big, 16)
+	assert_eq(small.get_size(), Vector2i(16, 16))
+	assert_true(_palette_ok(small))
+	assert_true(_opaque_count(small) > 40)
+	var dark: int = 0
+	for y: int in range(16):
+		for x: int in range(16):
+			if small.get_pixel(x, y).a > 0.5 and small.get_pixel(x, y).is_equal_approx(RoomPalette.colors()[0]):
+				dark += 1
+	assert_true(dark > 10, "the dark outline survives: %d" % dark)

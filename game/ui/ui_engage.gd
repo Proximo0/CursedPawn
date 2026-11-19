@@ -210,6 +210,13 @@ static func daily_result(run: RunState, number: int) -> String:
 static func daily_opts(seed_in: int, d: Dictionary) -> Dictionary:
 	var offer: Array[String] = omen_offer(seed_in)
 	var o: Dictionary = make_opts(0, offer[0] if not offer.is_empty() else "", true)
+	var dl: GDScript = _logic(DAILY_SCRIPT)
+	if dl != null and UiOccult.static_has(dl, "opts_for_date"):  # adds the week's theme
+		var full: Variant = dl.call("opts_for_date", int(d["year"]), int(d["month"]), int(d["day"]))
+		if full is Dictionary:
+			for k: Variant in (full as Dictionary).keys():
+				if not o.has(k):
+					o[k] = (full as Dictionary)[k]
 	o["date"] = date_key(d)
 	o["number"] = daily_number(d)
 	return o

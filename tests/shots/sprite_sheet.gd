@@ -14,6 +14,21 @@ func _initialize() -> void:
 	var sheet: Image = Image.create_empty(SHEET_W, SHEET_H, false, Image.FORMAT_RGBA8)
 	sheet.fill(BG)
 	var y: int = 4
+	if OS.get_cmdline_user_args().has("--c29"):  # lane C steps 29-31: new objects, detail renders, curse overlays, types, moods
+		_lane_c()
+		return
+	if OS.get_cmdline_user_args().has("--c34"):  # lane C step 34: the five ending tableaux at 1x
+		var t0: int = Time.get_ticks_msec()
+		var ts: Image = Image.create_empty(1300, 1120, false, Image.FORMAT_RGBA8)
+		ts.fill(BG)
+		var ti: int = 0
+		for eid: String in EndingArt.IDS:
+			ts.blend_rect(EndingArt.tableau_image(eid), Rect2i(0, 0, 640, 360), Vector2i(4 + (ti % 2) * 650, 4 + (ti / 2) * 370))
+			ti += 1
+		ts.save_png("/tmp/shots/tableaux.png")
+		print("TABLEAUX /tmp/shots/tableaux.png ms=", Time.get_ticks_msec() - t0)
+		quit()
+		return
 	if OS.get_cmdline_user_args().has("--r6"):  # only the round 6 cells: regulars, deed seals, the Collector, two omens
 		_round6(sheet)
 		return
@@ -225,6 +240,53 @@ func _round6(sheet: Image) -> void:
 	DirAccess.make_dir_recursive_absolute("/tmp/shots")
 	sheet.get_region(Rect2i(0, 0, SHEET_W, mini(y, SHEET_H))).save_png("/tmp/shots/sprite_sheet_r6.png")
 	print("SPRITE SHEET r6 /tmp/shots/sprite_sheet_r6.png h=", y)
+	quit()
+
+
+func _lane_c() -> void:
+	var sheet: Image = Image.create_empty(SHEET_W, 1700, false, Image.FORMAT_RGBA8)
+	sheet.fill(BG)
+	var y: int = 4
+	var x: int = 4
+	for k: String in ArtContent.PRIMARY_KINDS:
+		_put(sheet, SpriteKit.object_texture(k, str(ArtContent.KIND_CATEGORY[k])).get_image(), x, y, k.substr(0, 12), 3)
+		x += 132
+		if x > SHEET_W - 132:
+			x = 4
+			y += 116
+	y += 120
+	x = 4
+	for k: String in ArtContent.PRIMARY_KINDS:
+		_put(sheet, ArtContent.object_detail_image(k, str(ArtContent.KIND_CATEGORY[k])), x, y, "d " + k.substr(0, 10), 2)
+		x += 136
+		if x > SHEET_W - 136:
+			x = 4
+			y += 146
+	y += 150
+	x = 4
+	var picks: Array = [["costume_change", "tiepin", "jewelry"], ["copycat", "kazoo", "instrument"], ["bashful_purse", "bestiary", "book"], ["landlord_lullaby", "horseshoe", "relic"],
+		["copycat", "wind_up_frog", "toy"], ["costume_change", "lantern", "relic"]]
+	x = 4
+	for p: Array in picks:
+		var base: Image = SpriteKit.object_texture(str(p[1]), str(p[2])).get_image()
+		base.blend_rect(ArtContent.curse_overlay(str(p[0]), str(p[1]), str(p[2])).get_image(), Rect2i(Vector2i.ZERO, base.get_size()), Vector2i.ZERO)
+		_put(sheet, base, x, y, str(p[0]) + " " + str(p[1]).substr(0, 6), 4)
+		x += 150
+	y += 150
+	x = 4
+	for tid: String in ["errand_child", "debt_collector", "twin", "seer"]:
+		for mood: String in ArtContent.MOODS:
+			var look: Dictionary = {"id": tid, "cloak": "#4b2a78", "eyes": "#ffd27a", "height": 1.0}
+			var tex: Image = ArtContent.mood_texture(look, mood).get_image()
+			_put(sheet, tex, x, y, tid.substr(0, 5) + " " + mood.substr(0, 4), 2)
+			x += 104
+		if x > SHEET_W - 330:
+			x = 4
+			y += 220
+	y += 220
+	DirAccess.make_dir_recursive_absolute("/tmp/shots")
+	sheet.get_region(Rect2i(0, 0, SHEET_W, mini(y, 1700))).save_png("/tmp/shots/sprite_sheet_c.png")
+	print("SPRITE SHEET c /tmp/shots/sprite_sheet_c.png h=", y)
 	quit()
 
 

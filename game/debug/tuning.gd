@@ -25,17 +25,19 @@ const FIELDS: Array = [
 	["value_spread", 0.25, 0.0, 1.0, 0.05, "Customers", "Random spread of an object's true value around its catalog value."],
 	["seller_reserve_frac", 0.55, 0.1, 1.5, 0.05, "Customers", "A seller's lowest price, as a fraction of true value."],
 	["seller_ask_markup", 1.4, 1.0, 3.0, 0.05, "Customers", "A seller's opening ask over their lowest price."],
-	["buyer_pay_frac", 1.5, 0.5, 3.0, 0.05, "Customers", "What a buyer pays, as a fraction of the item's true value."],
+	["buyer_pay_frac", 1.75, 0.5, 3.0, 0.05, "Customers", "What a buyer pays, as a fraction of the item's true value."],
+	["buyer_patience", 1.0, 1.0, 10.0, 1.0, "Customers", "Counter-offers an ordinary buyer entertains before walking out (plus the mood's)."],
+	["buyer_flee_mult", 1.6, 1.0, 5.0, 0.1, "Customers", "A counter above this multiple of the buyer's limit makes them leave at once."],
 	["value_noise", 0.5, 0.0, 1.0, 0.05, "Inspect", "Error of the uninspected value estimate (fraction of value)."],
 	["tell_chance", 0.6, 0.0, 1.0, 0.05, "Inspect", "Chance the right tool shows a cursed object's tell; below 1, careful players can miss curses."],
 	["inspect_noise_cut", 0.6, 0.1, 1.0, 0.05, "Inspect", "Each tool used multiplies the estimate error by this."],
 	["cursed_share", 0.35, 0.0, 1.0, 0.05, "Curses", "Chance a seller's object is cursed."],
-	["cursed_value_mult", 1.8, 1.0, 5.0, 0.1, "Curses", "True-value multiplier for cursed objects (they pay best)."],
+	["cursed_value_mult", 2.5, 1.0, 5.0, 0.1, "Curses", "True-value multiplier for cursed objects (they pay best)."],
 	["dread_on_buy", 1.5, 0.0, 5.0, 0.1, "Curses", "Dread gained when buying a cursed object, times the curse's dread."],
 	["dread_per_night", 2.0, 0.0, 5.0, 0.1, "Curses", "Dread per held cursed object each night, times the curse's dread."],
 	["wake_threshold", 1.5, 1.0, 20.0, 0.5, "Curses", "Dread at which something wakes."],
 	["wake_dread_keep", 0.5, 0.0, 1.0, 0.05, "Curses", "Fraction of Dread left after a wake."],
-	["wake_break_chance", 0.6, 0.0, 1.0, 0.05, "Curses", "Chance a wake breaks one held object."],
+	["wake_break_chance", 0.5, 0.0, 1.0, 0.05, "Curses", "Chance a wake breaks one held object."],
 	["wake_close_chance", 0.6, 0.0, 1.0, 0.05, "Curses", "Chance a wake locks the door and ends the day early."],
 	["box_rare_odds", 0.25, 0.0, 1.0, 0.01, "Estate boxes", "Chance an estate box holds a rare curio (shown to the player before buying)."],
 	["box_legendary_odds", 0.05, 0.0, 1.0, 0.01, "Estate boxes", "Chance an estate box holds a legendary curio (shown before buying)."],
@@ -71,7 +73,7 @@ const FIELDS: Array = [
 	["pairs_tries", 3, 1, 5, 1, "Midnight Table", "Tries (two flips each) in Tarot Pairs."],
 	["pairs_pay_scale", 0.4, 0.0, 2.0, 0.05, "Midnight Table", "Tarot Pairs: stake multiple added per matched card, times its tarot mult."],
 	["spell_dread_mult", 1.0, 0.5, 3.0, 0.1, "Grimoire", "Multiplier on every spell's Dread cost (hauntings raise it)."],
-	["cursed_buyer_mult", 1.0, 0.5, 3.0, 0.05, "Curses", "Extra multiplier on what buyers pay for cursed objects."],
+	["cursed_buyer_mult", 1.15, 0.5, 3.0, 0.05, "Curses", "Extra multiplier on what buyers pay for cursed objects."],
 	["requests_max", 2, 0, 5, 1, "Requests", "Customer requests open at once."],
 	["request_chance", 0.15, 0.0, 1.0, 0.01, "Requests", "Chance a customer slot also brings a new request (when fewer than requests_max are open)."],
 	["request_pay_mult", 2.2, 1.0, 5.0, 0.1, "Requests", "A request pays this multiple of the item's true value."],
@@ -84,8 +86,10 @@ const FIELDS: Array = [
 	["night_dread_relief", 0.0, 0.0, 5.0, 0.1, "Altar", "Dread the altar candle removes at every dawn (an upgrade; 0 without it)."],
 	["regular_chance", 0.8, 0.0, 1.0, 0.05, "Regulars", "Chance a run brings a regular (one visit, night 2-4) whose arc is unfinished."],
 	["regular_pay_mult", 1.6, 0.5, 4.0, 0.1, "Regulars", "A regular buyer pays this multiple of the item's true value."],
+	["ending_cursed_count", 3.0, 1.0, 12.0, 1.0, "Run", "Cursed objects held at the win that make the shop 'cursed beyond saving' (an ending)."],
 	["tutorial_purse", 50.0, 0.0, 500.0, 5.0, "Run", "Extra starting cash in the guided first run (covers night 1's rent)."],
-	["secs_per_customer", 25.0, 1.0, 120.0, 1.0, "Pacing", "Estimated real seconds a player spends per customer (lab run length)."],
+	["night_event_chance", 0.35, 0.0, 1.0, 0.05, "Events", "Chance a night from night 2 on opens with an event (blackout, storm, auction, full moon)."],
+	["secs_per_customer", 27.0, 1.0, 120.0, 1.0, "Pacing", "Estimated real seconds a player spends per customer (lab run length)."],
 	["secs_per_inspect", 5.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per tool use."],
 	["secs_per_haggle", 4.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per offer."],
 	["secs_per_night", 30.0, 0.0, 300.0, 5.0, "Pacing", "Estimated real seconds of night-end and rent screens."],
@@ -109,6 +113,8 @@ var value_spread: float
 var seller_reserve_frac: float
 var seller_ask_markup: float
 var buyer_pay_frac: float
+var buyer_patience: float
+var buyer_flee_mult: float
 var value_noise: float
 var inspect_noise_cut: float
 var tell_chance: float
@@ -168,6 +174,8 @@ var night_dread_relief: float
 var regular_chance: float
 var regular_pay_mult: float
 var tutorial_purse: float
+var ending_cursed_count: float
+var night_event_chance: float
 var secs_per_customer: float
 var secs_per_inspect: float
 var secs_per_haggle: float
