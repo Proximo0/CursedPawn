@@ -1,0 +1,10 @@
+[
+	{"id": "blackout", "name": "Blackout", "weight": 3, "text": "The lamps die at dusk. Every tool costs double the time.",
+		"mods": {"tool_cost_mult": 2.0}},
+	{"id": "storm", "name": "Storm", "weight": 3, "text": "Rain on the glass. Fewer customers brave it; everyone wants more.",
+		"mods": {"customer_minutes_mult": 1.4, "price_mult": 1.15}},
+	{"id": "auction", "name": "Auction night", "weight": 2, "text": "The auctioneer is first through the door, with one fine lot.",
+		"mods": {"auction_value_mult": 1.6, "auction_cursed_odds": 0.5}},
+	{"id": "full_moon", "name": "Full moon", "weight": 2, "text": "Curses double: twice as many arrive, and each weighs twice as much. Buyers pay extra for them.",
+		"mods": {"cursed_share_mult": 2.0, "curse_dread_mult": 2.0, "cursed_pay_mult": 1.3}}
+]

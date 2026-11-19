@@ -52,7 +52,18 @@ try {
   first = Date.now() - t0;
 } catch { /* reported below */ }
 phase.ready = Date.now() - tStart;
-await page.waitForTimeout(2000);  // errors that follow the first frame
+// Frame times over the 3 s after the first frame (requestAnimationFrame gaps), reported not gated: software GL on a shared runner
+// is slow by design, so this is a trend number (docs/performance.md keeps the table).
+const FIRST_LIMIT_MS = Number(process.env.SMOKE_FIRST_MS ?? 15000);  // first shop frame, which is when the first customer walks in
+const frames = first >= 0 ? await page.evaluate(() => new Promise((done) => {
+  const d = []; let last = performance.now(); const end = last + 3000;
+  const tick = (t) => { d.push(t - last); last = t; if (t < end) requestAnimationFrame(tick); else done(d); };
+  requestAnimationFrame(tick);
+})) : [];
+frames.sort((a, b) => a - b);
+const fq = (q) => (frames.length ? Math.round(frames[Math.min(frames.length - 1, Math.floor(frames.length * q))]) : -1);
+if (first > FIRST_LIMIT_MS) problems.push(`first frame at ${first} ms, limit ${FIRST_LIMIT_MS} ms`);
+await page.waitForTimeout(500);  // errors that follow the first frame
 phase.waited = Date.now() - tStart;
 // One screenshot: on a 2-core runner with software GL each one costs seconds while the game keeps rendering.
 const shot = await page.screenshot({ path: join(dir, '..', 'web_smoke.png') });
@@ -102,5 +113,5 @@ if (problems.length) {
   console.log('last console lines:');
   for (const l of log.slice(-15)) console.log(`  ${l}`);
 }
-console.log(`WEB smoke ${problems.length ? 'FAIL' : 'PASS'} banner_ms=${banner} ready_ms=${first} shot_kb=${Math.round(shot.length / 1024)} ${bot ? `bot=${BOT_STYLE}:night${bot.night}:cmds${bot.commands}:hash${bot.hash} ` : ''}problems=${problems.length} phases_ms=${Object.entries(phase).map(([k, v]) => `${k}:${v}`).join(",")}`);
+console.log(`WEB smoke ${problems.length ? 'FAIL' : 'PASS'} banner_ms=${banner} ready_ms=${first} frame_ms_p50=${fq(0.5)} p95=${fq(0.95)} max=${fq(1)} frames=${frames.length} shot_kb=${Math.round(shot.length / 1024)} ${bot ? `bot=${BOT_STYLE}:night${bot.night}:cmds${bot.commands}:hash${bot.hash} ` : ''}problems=${problems.length} phases_ms=${Object.entries(phase).map(([k, v]) => `${k}:${v}`).join(",")}`);
 process.exit(problems.length ? 1 : 0);

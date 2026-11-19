@@ -271,3 +271,20 @@ func test_a_regular_customer_gets_the_warm_rim_and_loses_it_on_leaving() -> void
 	room.apply_events(late)
 	assert_true(room.regular_here(), "a regular event after the customer event also counts")
 	room.free()
+
+
+func test_flash_reduce_dims_lightning_and_shake_scale_stores() -> void:
+	var room := ShopRoom2D.new()
+	room.scare_level = 1
+	room.set_night_event("storm")
+	var full_peak: float = 0.0
+	var reduced_peak: float = 0.0
+	for i: int in range(600):
+		room._t = float(i) * 0.05
+		room.flash_reduce = false
+		full_peak = maxf(full_peak, room._storm_flash())
+		room.flash_reduce = true
+		reduced_peak = maxf(reduced_peak, room._storm_flash())
+	assert_true(full_peak > 0.0, "a storm flashes within 30 s")
+	assert_true(absf(reduced_peak - full_peak * ShopRoom2D.FLASH_REDUCED) < 0.001, "flash reduction scales lightning")
+	room.free()

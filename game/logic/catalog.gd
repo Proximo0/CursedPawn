@@ -3,6 +3,7 @@ extends RefCounted
 ## Object and curse definitions. Placeholder content until the content rounds; data in game/data/*.json.
 ## objects: {id, name, category, value}. curses: {id, name, dread, sale_mult, imposter_every, tells: {tool: text}}.
 
+const WAKE_TYPES: PackedStringArray = ["drift", "topple", "lights_out", "door_lock", "possession"]
 const TOOLS: PackedStringArray = ["uv", "scale", "listen", "touch"]
 const OBJECTS_PATH: String = "res://game/data/objects.json"
 const CURSES_PATH: String = "res://game/data/curses.json"
@@ -123,6 +124,10 @@ func problems() -> PackedStringArray:
 				out.append("curse %s has a tell for unknown tool %s" % [c.get("id", "?"), tool])
 		if n == 0:
 			out.append("curse %s has no tell" % c.get("id", "?"))
+		if c.has("wake") and not WAKE_TYPES.has(str(c["wake"])):
+			out.append("curse %s has an unknown wake type %s" % [c.get("id", "?"), c["wake"]])
+		if float(c.get("rent_mult", 1.0)) <= 0.0 or float(c.get("whisper", 0.0)) < 0.0 or float(c.get("whisper", 0.0)) > 0.9:
+			out.append("curse %s has a bad rent_mult or whisper" % c.get("id", "?"))
 		if ids.has(c.get("id", "")):
 			out.append("duplicate id %s" % c.get("id", ""))
 		ids[c.get("id", "")] = true
@@ -136,8 +141,16 @@ func problems() -> PackedStringArray:
 	out.append_array(_table_problems())
 	out.append_array(Hauntings.problems())
 	out.append_array(Omens.problems())
+	out.append_array(DailyThemes.problems())
 	out.append_array(Upgrades.problems())
+	out.append_array(NightEvents.problems())
+	out.append_array(Endings.problems())
+	out.append_array(Moods.problems())
 	if not curios.is_empty() and not customers.is_empty():  # skipped for a hand-built test catalog
+		for o: Dictionary in objects:
+			if str(o.get("text", "")) == "":
+				out.append("object %s has no text" % o.get("id", "?"))
+		out.append_array(Provenance.problems())
 		out.append_array(Regulars.problems(self))
 		out.append_array(Deeds.problems())
 		out.append_array(Tutorial.problems(self))

@@ -38,6 +38,15 @@ static func opts_for(seed_value: int) -> Dictionary:
 	return {"haunting": 0, "omen": offered[0] if not offered.is_empty() else "", "daily": true}
 
 
+## The run options for a date: the omen of the seed plus the week's theme (`theme` id; see DailyThemes).
+static func opts_for_date(y: int, m: int, d: int) -> Dictionary:
+	var o: Dictionary = opts_for(seed_for(y, m, d))
+	var theme: Dictionary = DailyThemes.theme_for(y, m, d)
+	if not theme.is_empty():
+		o["theme"] = str(theme["id"])
+	return o
+
+
 ## A spoiler-free summary to paste: title, result line, a strip with one symbol per night, and the omen.
 static func result_text(run: RunState, num: int) -> String:
 	var nights: int = int(run.tuning.nights)
@@ -54,5 +63,8 @@ static func result_text(run: RunState, num: int) -> String:
 			strip += STRIP_SURVIVED
 	var verdict: String = "survived" if run.won else "lost"
 	var omen_name: String = str(run.opts.get("omen_name", ""))
-	return "Cursed Pawn Séance #%d\nNight %d/%d %s | %d coins | woke %dx\n%s\nOmen: %s" % [
+	var text: String = "Cursed Pawn Séance #%d\nNight %d/%d %s | %d coins | woke %dx\n%s\nOmen: %s" % [
 		num, reached, nights, verdict, run.cash, run.wake_nights.size(), strip, omen_name if omen_name != "" else "none"]
+	if str(run.opts.get("theme_name", "")) != "":
+		text += "\nTheme: %s" % run.opts["theme_name"]
+	return text

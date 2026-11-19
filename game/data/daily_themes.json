@@ -1,0 +1,10 @@
+[
+	{"id": "cursed_week", "name": "Cursed Week", "text": "Every object that walks in is cursed. Buyers pay 30% more for them.", "set": {}, "mul": {"cursed_buyer_mult": 1.3}, "flags": {"all_cursed": true}},
+	{"id": "lean_week", "name": "Lean Week", "text": "You start with 40% less cash, but every tool takes half the time.", "set": {}, "mul": {"start_cash": 0.6, "inspect_minutes": 0.5}, "flags": {}},
+	{"id": "table_week", "name": "Midnight Table Week", "text": "Two table games a night, and sealed lots cost half.", "set": {}, "mul": {"lot_price": 0.5}, "flags": {"double_table": true}},
+	{"id": "haggle_week", "name": "Haggler's Week", "text": "One seller type only, and sellers wait much longer to settle.", "set": {}, "mul": {"patience_base": 1.67}, "flags": {"one_customer_type": true}},
+	{"id": "storm_season", "name": "Storm Season", "text": "Every night from the second has a dusk event.", "set": {"night_event_chance": 1.0}, "mul": {}, "flags": {}},
+	{"id": "quiet_week", "name": "Quiet Week", "text": "No spells at all, but the wake comes 30% later.", "set": {"spell_casts_per_night": 0}, "mul": {"wake_threshold": 1.3}, "flags": {}},
+	{"id": "long_nights", "name": "Long Nights Week", "text": "Days are 30% longer. Curses stir 50% more each night.", "set": {}, "mul": {"day_minutes": 1.3, "dread_per_night": 1.5}, "flags": {}},
+	{"id": "gift_week", "name": "Inheritance Week", "text": "A cursed object is already on the shelf. Rent is 10% higher.", "set": {}, "mul": {"rent_base": 1.1}, "flags": {"start_cursed": true}}
+]

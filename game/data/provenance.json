@@ -1,0 +1,17 @@
+{
+	"origin": {
+		"toy": ["Found in a nursery that was not anyone's nursery.", "Won at a fair that closed early.", "Kept on a high shelf, by decision.", "Wrapped as a present, never unwrapped.", "Played with, once, loudly.", "Left behind at a birthday with no cake."],
+		"jewelry": ["Taken off in a hurry, before the wedding.", "Passed down, with a warning, to a niece.", "Pawned twice by the same person.", "Found in a coat that was not theirs.", "Polished weekly by someone who denies it.", "Engraved, then the engraving was sanded off."],
+		"instrument": ["Played at a funeral, then at a christening.", "Last heard at an attic window.", "Carried over three borders in a loaf of bread.", "Retired from a band that never reformed.", "Practised at midnight by a neighbour.", "Stored in a church, politely."],
+		"book": ["Borrowed from a library, never returned.", "Annotated in three handwritings.", "Read aloud to an empty room.", "Left on a train seat, still warm.", "Inherited with the house, as a condition.", "Dog-eared at a page nobody admits to."],
+		"relic": ["Dug up while someone was planting beans.", "Hung over a door for luck, then taken down.", "Surrendered at an estate sale, wincing.", "Bequeathed in a will to 'whoever asks'.", "Brought home from a holiday, regretted.", "Kept in a drawer that wouldn't close."]
+	},
+	"owner": ["A widow swears she never owned it.", "Last owner moved away overnight.", "Three owners, one funeral between them.", "The previous owner sent a thank-you note.", "Sold by a very tidy, very nervous man.", "Its last owner insisted on cash.", "Nobody remembers the first owner.", "The family calls it 'the thing'."],
+	"ominous": ["Nobody would say why it was sold.", "The seller wiped their hands afterward.", "Seller left without the receipt.", "The dust avoids it.", "The last owner moved the furniture away from it.", "It was bought, and then bought back."],
+	"history": {
+		"intro": "Passed on by %s.",
+		"reached": "Reached night %d; the shop woke %d times.",
+		"won": "Paid every rent.",
+		"anonymous": "a stranger"
+	}
+}

@@ -145,3 +145,73 @@ func test_counters_survive_snapshot() -> void:
 	back.restore(run.snapshot(), Catalog.load_default())
 	assert_eq([back.spells_cast, back.table_wins, back.pairs_perfect, back.tools_used, back.max_cursed_held], [4, 2, 1, 3, 2])
 	assert_eq(back.state_hash(), run.state_hash())
+
+
+func test_full_game_deeds_exist_and_are_valid() -> void:
+	assert_eq(Deeds.all().size(), 59)
+	for id: String in ["costume_party", "monkey_see", "unwatched_pot", "quiet_landlord", "storm_chaser", "going_twice", "moon_dancer",
+			"lights_down", "paid_in_full", "beyond_saving", "set_complete_ending", "last_chapter", "lights_out_wake", "locked_in",
+			"possessed_ornament", "every_trouble", "haggler_hand", "both_halves", "hush_hush", "night_owl", "curse_sampler", "full_cabinet"]:
+		assert_false(Deeds.get_deed(id).is_empty(), id)
+
+
+func test_curse_and_event_counters_drive_deeds() -> void:
+	var s := de_store()
+	var run := de_run()
+	assert_false(Deeds.holds({"curse_held": "costume_change"}, run, s))
+	run.inventory.append({"id": "x", "name": "T", "category": "toy", "value": 5, "curse": "costume_change", "uid": 800, "est": 1, "tells": 0})
+	run._track_cursed()
+	assert_true(Deeds.holds({"curse_held": "costume_change"}, run, s))
+	assert_true(Deeds.holds({"curses_held_count": 1}, run, s))
+	assert_false(Deeds.holds({"curses_held_count": 2}, run, s))
+	run.events_seen = ["storm", "auction"]
+	assert_true(Deeds.holds({"night_event": "storm"}, run, s))
+	assert_false(Deeds.holds({"night_event": "full_moon"}, run, s))
+	assert_false(Deeds.holds({"night_events_seen": 3}, run, s))
+	run.events_seen.append("blackout")
+	assert_true(Deeds.holds({"night_events_seen": 3}, run, s))
+
+
+func test_wake_and_ending_deeds() -> void:
+	var s := de_store()
+	var run := de_run()
+	run.wake_types = ["lights_out", "drift"]
+	assert_true(Deeds.holds({"wake_type": "lights_out"}, run, s))
+	assert_false(Deeds.holds({"wake_type": "door_lock"}, run, s))
+	assert_false(Deeds.holds({"wake_types_count": 5}, run, s))
+	run.ending = "cursed_shop"
+	run.won = true
+	assert_true(Deeds.holds({"ending": "cursed_shop", "won": true}, run, s))
+	assert_false(Deeds.holds({"ending": "debt_free", "won": true}, run, s))
+
+
+func test_behaviour_counters_drive_deeds() -> void:
+	var s := de_store()
+	var run := de_run()
+	run.copies = 1
+	run.haggle_wins = 3
+	run.whispered = 3
+	run.unseen_cash = 50
+	run.twin_sales = 1
+	for rule: Dictionary in [{"copies_at_least": 1}, {"haggle_wins": 3}, {"whispered_at_least": 3}, {"unseen_cash": 50}, {"twin_sold": true}]:
+		assert_true(Deeds.holds(rule, run, s), str(rule))
+	assert_false(Deeds.holds({"haggle_wins": 4}, run, s))
+
+
+func test_counters_tick_in_play_and_survive_snapshot() -> void:
+	var run := RunState.new()
+	var tun := Tuning.new()
+	tun.set_value("wake_threshold", 1000.0)
+	run.start(5, Catalog.load_default(), tun)
+	run.cash = 1000
+	run.inventory.append({"id": "x", "name": "T", "category": "toy", "value": 5, "curse": "copycat", "uid": 801, "est": 1, "tells": 0})
+	run.customer = {"kind": "seller", "item": {"id": "y", "name": "Spoon", "category": "tool", "value": 30, "curse": "",
+		"hidden": {}}, "reserve": 5, "ask": 5, "patience": 2, "type": "", "noise_u": 0.0, "tools": [], "tells": [], "imposter": false}
+	run._buy_at(5, [] as Array[Dictionary])
+	assert_eq(run.copies, 1)
+	assert_true(run.curses_held.has("copycat"))
+	var b := RunState.new()
+	b.restore(run.snapshot(), run.catalog)
+	assert_eq(b.copies, 1)
+	assert_eq(b.curses_held, run.curses_held)
+	assert_eq(b.state_hash(), run.state_hash())

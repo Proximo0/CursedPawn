@@ -56,6 +56,7 @@ var table := UiTable.new()
 var found := UiFound.new()
 var requests := UiRequests.new()  ## the engagement round: pinned customer requests
 var toasts := UiToasts.new()  ## round 6: deed toasts and the regular's arrival card
+var inspect := UiInspect.new()  ## the detail card
 var tutorial := UiTutorial.new()  ## round 6: the guided first night overlay
 
 
@@ -121,6 +122,7 @@ static func ui_flame_size(frac: float) -> int:
 
 func _process(delta: float) -> void:
 	_t += delta
+	inspect.tick(delta)
 	if game == null or game.run == null:
 		return
 	_hov_age = 0.0 if game.hover_id != _hov_prev else _hov_age + delta
@@ -269,6 +271,10 @@ func _draw_inner() -> void:
 			_draw_buyer(r)
 	else:
 		_text(Vector2(80.0, 240.0), "THE SHOP IS QUIET...", 14)
+	if not game.is_replaying() and str(r.customer.get("kind", "")) != RunState.BUYER:
+		var held_rects: Dictionary = game.shelf_rects()
+		for uid: Variant in held_rects.keys():
+			_add("look:%d" % int(uid), held_rects[uid] as Rect2, true)  # a shelf object: click for its card
 	_draw_log()
 	_draw_side_buttons(r)
 	if not game.is_replaying():
@@ -284,6 +290,10 @@ func _draw_inner() -> void:
 	_draw_pops()
 	if game.cards.is_empty() and not found.active() and not game.is_replaying():
 		tutorial.draw(self, game.shelf_rect_list())
+	_draw_pad()
+	if inspect.is_open():
+		widgets.clear()
+		inspect.draw(self, r, game.tell_texts, game.item_tells)
 	found.draw(self)
 	if found.active():
 		widgets.clear()
@@ -291,6 +301,24 @@ func _draw_inner() -> void:
 		widgets.clear()
 		_draw_card(game.cards[0])
 	toasts.draw(self)
+
+
+## The controller's focus ring and its button prompts, only while a controller was the last thing used.
+func _draw_pad() -> void:
+	if not TsPad.active:
+		return
+	if game.pad_focus != "":
+		for w: Dictionary in widgets:
+			if str(w["id"]) == game.pad_focus and bool(w["enabled"]):
+				var rc: Rect2 = w["rect"] as Rect2
+				draw_rect(rc.grow(2.0), _c(15 if fmod(_t, 0.8) < 0.5 else 11), false, 1.0)
+				draw_rect(rc.grow(3.0), _c(0), false, 1.0)
+	var x: float = 6.0
+	for p: PackedStringArray in TsPad.prompts(true):
+		_rect(Rect2(x, 21.0, 11.0, 9.0), 4)
+		_text(Vector2(x + 2.0, 22.0), p[0].left(1), 15, 1, false)
+		_text(Vector2(x + 14.0, 22.0), p[1], 14, 1, false)
+		x += 18.0 + float(UiPixelFont.ui_width(p[1]))
 
 
 func _draw_top(r: RunState) -> void:
@@ -302,6 +330,7 @@ func _draw_top(r: RunState) -> void:
 	_text(Vector2(221.0, 5.0), "%d" % cash, 11)
 	_text(Vector2(278.0, 5.0), "RENT %d" % r.rent_for(r.night), 15 if cash >= r.rent_for(r.night) else 13)
 	_draw_badge(r)
+	UiNightEvent.draw_tag(self, r, game.hover_id == "night_event_tag")
 
 
 ## The omen and haunting badge by the night label ("HAUNTING 3 + THE MOTH"); hovering it shows their text.
@@ -391,10 +420,17 @@ func _draw_dread(r: RunState) -> void:
 		_rect(Rect2(cx + 7.0, ty, 3.0, 1.0), 9 if frac < f else 13)
 	for d: Dictionary in _drips:
 		_rect(Rect2(floorf(float(d["x"])), floorf(float(d["y"])), 1.0, 2.0), 15)
+	if game.settings.colorblind:  # the number and a danger word, so colour is never the only signal
+		_text_c(cx, DREAD_RECT.end.y - 19.0, "%d%%" % int(round(frac * 100.0)), 15, 1, true)
+		if frac >= 0.75:
+			_text_c(cx, DREAD_RECT.end.y - 10.0, "DANGER", 13, 1, true)
 
 
 func _draw_log() -> void:
 	_frame(LOG_RECT, "ledger")
+	if game.settings.text_scale == 2:
+		_draw_log_big()
+		return
 	var vis: Array[Dictionary] = []
 	var wrap_w: int = int(LOG_RECT.size.x) - UiFrames.LEDGER_TEXT_X - 8
 	for ei: int in range(game.log_lines.size()):
@@ -412,11 +448,25 @@ func _draw_log() -> void:
 		if int(row["e"]) != newest:
 			_text(pos, ln, 8, 1, false)
 			continue
-		var shown: int = int(age * LOG_CPS) - int(row["o"])
+		var shown: int = int(age * game.settings.text_cps()) - int(row["o"])
 		var n: int = clampi(shown, 0, ln.length())
 		if age < 1.0 and n > 0:
 			_rect(Rect2(pos.x - 2.0, pos.y - 1.0, float(UiPixelFont.ui_width(ln.substr(0, n))) + 4.0, 9.0), 11 if age < 0.4 else 15)
 		UiPixelFont.ui_draw_ink(self, pos, ln, _c(0), _c(12), n, shown >= 0 and shown < ln.length(), _c(0), _t)
+
+
+## The 2x text size: the last two lines of the log at double size (no ink animation; the text is the point).
+func _draw_log_big() -> void:
+	var vis: Array[Dictionary] = []
+	var wrap_w: int = int(LOG_RECT.size.x) - UiFrames.LEDGER_TEXT_X - 8
+	for ei: int in range(game.log_lines.size()):
+		for ln: String in UiPixelFont.ui_wrap(game.log_lines[ei], wrap_w, 2):
+			vis.append({"t": ln, "e": ei})
+	var first: int = maxi(vis.size() - 2, 0)
+	var newest: int = game.log_lines.size() - 1
+	for i: int in range(first, vis.size()):
+		var pos := Vector2(LOG_RECT.position.x + float(UiFrames.LEDGER_TEXT_X), LOG_RECT.position.y + 5.0 + float(i - first) * 20.0)
+		UiPixelFont.ui_draw(self, pos, str(vis[i]["t"]), _c(0 if int(vis[i]["e"]) == newest else 8), 2, false)
 
 
 func _draw_side_buttons(r: RunState) -> void:
@@ -441,6 +491,8 @@ func _draw_seller(r: RunState) -> void:
 	var est: Dictionary = r.estimate()
 	_frame(Rect2(78.0, 196.0, 112.0, 22.0), "note")
 	_text_c(134.0, 203.0, ShopGame.ui_estimate_text(est), 0, 1, false)
+	UiHaggle.draw(self, r, game.patience_start, game.mood, game.mood_known, _t)
+	_button("look", Rect2(78.0, 177.0, 112.0, 15.0), "LOOK CLOSER [%s]" % TsKeys.label_of("look"), live)
 	var tool_list: Array[String] = seller_tools(r)
 	for i: int in range(tool_list.size()):
 		var tool: String = tool_list[i]
@@ -454,7 +506,7 @@ func _draw_seller(r: RunState) -> void:
 		var tex: ImageTexture = _tool_icon(tool)
 		var ip: Vector2 = rc.position + ((rc.size - tex.get_size()) * 0.5).floor() + (Vector2(0.0, 1.0) if sunk else Vector2.ZERO)
 		draw_texture(tex, ip, _c(3) if used else Color.WHITE)
-		_text(rc.position + Vector2(3.0, 20.0), "%d" % (i + 1) if tool != "pendulum" else "Q", 15 if not used else 4)
+		_text(rc.position + Vector2(3.0, 20.0), TsKeys.label_of(tool).left(3), 15 if not used else 4)
 	var cap: int = r.max_wager()
 	var card_up: bool = game.room != null and game.room.has_card()
 	if live and not card_up:
@@ -470,7 +522,7 @@ func _draw_seller(r: RunState) -> void:
 		if clear > 0.0:
 			draw_texture(_deck_tex, DECK_RECT.position + Vector2(0.0, -1.0 if hot else 0.0), deck_tint)
 		if clear >= 1.0:
-			_text(DECK_RECT.position + Vector2(-8.0, -11.0), "TAROT [T]", 14 if cap >= 1 else 3)
+			_text(DECK_RECT.position + Vector2(-8.0, -11.0), "TAROT [%s]" % TsKeys.label_of("tarot"), 14 if cap >= 1 else 3)
 	_draw_tells(r)
 	_draw_offer_row(r, live)
 
@@ -522,9 +574,9 @@ func _draw_offer_row(r: RunState, live: bool) -> void:
 	x += 24.0
 	_button("offer", Rect2(x, y, 64.0, h), "OFFER", live, true)
 	x += 70.0
-	_button("buy", Rect2(x, y, 100.0, h), "BUY AT %d [B]" % ask, live and ask <= r.cash)
+	_button("buy", Rect2(x, y, 100.0, h), "BUY AT %d [%s]" % [ask, TsKeys.label_of("buy")], live and ask <= r.cash)
 	x += 106.0
-	_button("pass", Rect2(x, y, 66.0, h), "PASS [P]", live)
+	_button("pass", Rect2(x, y, 66.0, h), "PASS [%s]" % TsKeys.label_of("pass"), live)
 
 
 # ---------------------------------------------------------------- buyer
@@ -532,39 +584,65 @@ func _draw_offer_row(r: RunState, live: bool) -> void:
 func _draw_buyer(r: RunState) -> void:
 	var items: Array[Dictionary] = r.sellable()
 	var live: bool = not game.is_replaying()
+	var offering: bool = ShopGame.buyer_offering(r)
+	var offer: Dictionary = r.customer.get("offer", {}) as Dictionary
+	var offer_uid: int = int(offer.get("uid", -1))
 	var want: String = str(r.customer["category"]).to_upper()
 	if bool(r.customer.get("collector", false)):
 		want = UiEngage.ascii_up(str((r.customer.get("want", {}) as Dictionary).get("text", want)))  # his own words
 	_frame(Rect2(64.0, COUNTER_FRONT_Y, 230.0, 34.0), "note")
 	var want_lines: PackedStringArray = UiPixelFont.ui_wrap("WANTS: %s" % want, 214)
 	_text(Vector2(72.0, COUNTER_FRONT_Y + 6.0), want_lines[0] if not want_lines.is_empty() else "", 0, 1, false)
-	_text(Vector2(72.0, COUNTER_FRONT_Y + 17.0), "CLICK A GLOWING ITEM." if not items.is_empty() else "YOU HOLD NOTHING LIKE THAT.", 8, 1, false)
+	var hint: String = "CLICK A GLOWING ITEM." if not items.is_empty() else "YOU HOLD NOTHING LIKE THAT."
+	if offering:
+		hint = "ACCEPT, OR COUNTER HIGHER."
+	_text(Vector2(72.0, COUNTER_FRONT_Y + 17.0), hint, 8, 1, false)
 	var rects: Dictionary = game.shelf_rects()
 	var pulse: float = 0.5 + 0.5 * sin(_t * 5.0)
 	for item: Dictionary in items:
 		var uid: int = int(item["uid"])
 		if not rects.has(uid):
 			continue
+		if offering and uid != offer_uid:
+			continue
 		var rc: Rect2 = rects[uid] as Rect2
-		var picked: bool = game.selected_uid == uid
+		var picked: bool = game.selected_uid == uid or offering
 		_add("item:%d" % uid, rc, live)
 		draw_rect(rc, _c(15 if picked else (11 if pulse > 0.5 else 10)), false, 2.0 if picked else 1.0)
 		if picked:
 			UiFrames.ui_flame(self, Vector2(rc.get_center().x - 2.0, rc.position.y - 10.0), _t, 0, false, uid)
 		if picked or game.hover_id == "item:%d" % uid:
-			var tag: String = "SELL %d" % r.sale_price(item)
+			var tag: String = ("OFFER %d" % int(offer["price"])) if offering else "SELL %d" % r.sale_price(item)
 			var w: float = float(UiPixelFont.ui_width(tag)) + 14.0
 			var tr := Rect2(rc.position.x + rc.size.x * 0.5 - w * 0.5, rc.position.y - 26.0, w, 14.0)
 			_frame(tr, "note")
 			_text(tr.position + Vector2(7.0, 4.0), tag, 0, 1, false)
 	_frame(OFFER_RECT, "panel")
+	if offering:
+		UiHaggle.draw(self, r, game.patience_start, game.mood, game.mood_known, _t)
+		var x: float = 84.0
+		var y: float = OFFER_Y
+		_button("accept", Rect2(x, y, 92.0, OFFER_H), "ACCEPT %d [%s]" % [int(offer["price"]), TsKeys.label_of("offer")], live, true)
+		x += 98.0
+		_button("dec", Rect2(x, y, 18.0, OFFER_H), "-", live)
+		x += 20.0
+		_frame(Rect2(x, y, 44.0, OFFER_H), "btn_off")
+		_coin(Vector2(x + 8.0, y + 10.0))
+		_text(Vector2(x + 16.0, y + 7.0), "%d" % game.offer_amount, 11)
+		x += 46.0
+		_button("inc", Rect2(x, y, 18.0, OFFER_H), "+", live)
+		x += 22.0
+		_button("counter_go", Rect2(x, y, 84.0, OFFER_H), "COUNTER [%s]" % TsKeys.label_of("counter"), live)
+		x += 90.0
+		_button("pass", Rect2(x, y, 82.0, OFFER_H), "DECLINE [%s]" % TsKeys.label_of("pass"), live)
+		return
 	var sel_price: int = 0
 	for item: Dictionary in items:
 		if int(item["uid"]) == game.selected_uid:
 			sel_price = r.sale_price(item)
-	var label: String = "SELL FOR %d [ENTER]" % sel_price if game.selected_uid >= 0 else "PICK AN ITEM"
+	var label: String = "SELL FOR %d [%s]" % [sel_price, TsKeys.label_of("offer")] if game.selected_uid >= 0 else "PICK AN ITEM"
 	_button("sell", Rect2(84.0, OFFER_Y, 170.0, OFFER_H), label, live and game.selected_uid >= 0, true)
-	_button("pass", Rect2(262.0, OFFER_Y, 112.0, OFFER_H), "DECLINE [P]", live)
+	_button("pass", Rect2(262.0, OFFER_Y, 112.0, OFFER_H), "DECLINE [%s]" % TsKeys.label_of("pass"), live)
 
 
 # ---------------------------------------------------------------- popups and cards
@@ -614,6 +692,9 @@ func _card_cols(tone: int) -> PackedInt32Array:
 ## ink and then twitches; the rest are bevelled display capitals with an ornamental first letter.
 func _draw_card(card: Dictionary) -> void:
 	var age: float = float(card["age"])
+	if str(card.get("style", "")) == "ending":
+		UiEndings.draw_card(self, card)
+		return
 	var open: float = UiMotion.ui_out(age / 0.2)
 	var band_h: float = floorf((124.0 if str(card.get("style", "")) == "collector" else 100.0) * open)
 	var band := Rect2(0.0, 180.0 - floorf(band_h * 0.5), ShopGame.VIEW.x, band_h)
@@ -629,6 +710,9 @@ func _draw_card(card: Dictionary) -> void:
 	var title: String = str(card["title"])
 	if str(card.get("style", "")) == "collector":
 		_draw_collector_card(card, band, age - 0.2)
+		return
+	if str(card.get("style", "")) == "event":
+		UiNightEvent.draw_card(self, card, band, age - 0.2)
 		return
 	var y: float = band.position.y + 24.0
 	var tw: int = UiPixelFont.ui_head_width(title, 3)
@@ -692,7 +776,7 @@ func _draw_end(r: RunState) -> void:
 	_rect(Rect2(Vector2.ZERO, ShopGame.VIEW), 0)
 	_frame(END_RECT, "panel")
 	var cx: float = END_RECT.position.x + END_RECT.size.x * 0.5
-	var title: String = "YOU SURVIVED" if won else "THE SHOP IS LOST"
+	var title: String = (str(UiEndings.info(game.ending_id)["title"]) if game.ending_id != "" else "YOU SURVIVED") if won else "THE SHOP IS LOST"
 	var dw: int = UiPixelFont.ui_display_width(title, 3, true)
 	UiPixelFont.ui_display_draw(self, Vector2(floorf(cx - float(dw) * 0.5), END_RECT.position.y + 34.0), title, 3,
 		_card_cols(7 if won else 13), _t, 0.0, 0.0 if won else 0.6, true)

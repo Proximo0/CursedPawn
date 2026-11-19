@@ -44,3 +44,22 @@ func test_occult_data() -> void:
 	for n: int in range(1, 13):
 		assert_true(not c.curio("curio_%02d" % n).is_empty(), "old id %d kept" % n)
 	assert_true(not c.table.is_empty())
+
+
+func test_fifty_six_objects_each_with_text() -> void:
+	var c := Catalog.load_default()
+	assert_eq(c.objects.size(), 56)
+	for o: Dictionary in c.objects:
+		assert_true(str(o.get("text", "")) != "", "%s has text" % o["id"])
+		assert_true(str(o["text"]).length() <= 80, "%s text is short" % o["id"])
+	var counts: Dictionary = {}
+	for o: Dictionary in c.objects:
+		counts[o["category"]] = int(counts.get(o["category"], 0)) + 1
+	for cat: String in counts:
+		assert_true(int(counts[cat]) >= 10, "%s has at least 10 objects" % cat)
+
+
+func test_object_without_text_is_a_problem() -> void:
+	var c := Catalog.load_default()
+	c.objects[0].erase("text")
+	assert_true(c.problems().size() == 1, "one problem")

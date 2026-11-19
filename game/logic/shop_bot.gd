@@ -9,6 +9,7 @@ const CAUTIOUS: String = "cautious"
 const STYLES: PackedStringArray = ["greedy", "cautious"]
 
 var style: String = GREEDY
+var _counter_key: String = ""  ## the buyer the bot last countered (once per buyer)
 var _cast_key: String = ""  ## the customer the bot last cast hex or glamour on (casts are not repeated)
 
 
@@ -64,6 +65,9 @@ func _bot_cast(run: RunState) -> Dictionary:
 
 
 func _bot_sell(run: RunState) -> Dictionary:
+	var offer: Dictionary = run.customer.get("offer", {})
+	if not offer.is_empty():
+		return _bot_answer_offer(run, offer)
 	var best: Dictionary = {}
 	var keep: int = _bot_collector_keep(run)
 	for item: Dictionary in run.sellable():
@@ -75,6 +79,23 @@ func _bot_sell(run: RunState) -> Dictionary:
 	if best.is_empty():
 		return {"t": "pass"}
 	return {"t": "sell", "uid": best["uid"]}
+
+
+## A buyer's offer on a shelf item. Both bots counter once, then take whatever is on the table. Cautious reads the buyer's
+## mood: a calm buyer is asked for 15% more, a stingy one 35% more, an eager one is left alone (they already open high).
+## Greedy asks every buyer for 15% more and pays for it when the buyer was eager and walks. Neither sells the one
+## item kept for the Collector.
+func _bot_answer_offer(run: RunState, offer: Dictionary) -> Dictionary:
+	var key: String = "%d:%d" % [run.get_instance_id(), run.customers_seen]
+	if int(offer["uid"]) == _bot_collector_keep(run):
+		return {"t": "pass"}
+	var more: float = 1.15
+	if style == CAUTIOUS:
+		more = {"calm": 1.15, "greedy": 1.35}.get(str(run.customer.get("mood", "calm")), 0.0)
+	if more > 0.0 and _counter_key != key:
+		_counter_key = key
+		return {"t": "counter", "amount": int(ceil(float(offer["price"]) * more))}
+	return {"t": "accept"}
 
 
 ## The uid of the one held item kept back for the Collector while he is still to come (-1 for none).

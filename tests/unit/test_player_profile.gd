@@ -3,6 +3,11 @@ extends TestCase
 const PP_PATH: String = "user://test_profile_unit.json"
 
 
+func pp_cleanup(path: String) -> void:
+	for suffix: String in ["", ".bak"]:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path + suffix))
+
+
 func pp_store(seed_value: int) -> RelicStore:
 	return RelicStore.create(CurioCollection.create(seed_value, Tuning.new()))
 
@@ -25,7 +30,7 @@ func test_round_trip_through_file() -> void:
 	assert_eq(b.collection.tradeable, a.collection.tradeable)
 	assert_eq(b.collection.featured_id, "curio_10")
 	assert_eq(b.collection.open_box(), a.collection.open_box(), "same next box")
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+	pp_cleanup(PP_PATH)
 
 
 func test_missing_or_bad_file_leaves_store_alone() -> void:
@@ -36,7 +41,7 @@ func test_missing_or_bad_file_leaves_store_alone() -> void:
 	f.close()
 	assert_false(PlayerProfile.load_into(s, PP_PATH))
 	assert_false(s.is_open())
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+	pp_cleanup(PP_PATH)
 
 
 func test_newer_version_is_not_loaded() -> void:
@@ -44,7 +49,7 @@ func test_newer_version_is_not_loaded() -> void:
 	f.store_string(JSON.stringify({"version": PlayerProfile.VERSION + 1, "store": {"age_ok": true}}))
 	f.close()
 	assert_false(PlayerProfile.load_into(pp_store(1), PP_PATH))
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+	pp_cleanup(PP_PATH)
 
 
 func test_run_in_progress_round_trips_exactly() -> void:
@@ -65,7 +70,7 @@ func test_run_in_progress_round_trips_exactly() -> void:
 			break
 		var cmd: Dictionary = bot.decide(a)
 		assert_eq(b.apply(cmd), a.apply(cmd), "same events after load")
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	pp_cleanup(path)
 
 
 func test_finished_run_clears_the_save() -> void:
@@ -83,7 +88,7 @@ func test_finished_run_clears_the_save() -> void:
 	f.store_string("junk")
 	f.close()
 	assert_true(PlayerProfile.load_run(cat, path).is_empty(), "junk is ignored")
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	pp_cleanup(path)
 
 
 func test_grimoire_round_trips_and_bank_finds_grants() -> void:
@@ -101,7 +106,7 @@ func test_grimoire_round_trips_and_bank_finds_grants() -> void:
 	assert_true(PlayerProfile.load_into(b, PP_PATH))
 	assert_eq(b.grimoire, a.grimoire)
 	assert_eq(b.collection.owned, a.collection.owned)
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+	pp_cleanup(PP_PATH)
 
 
 func test_version_1_profile_gets_the_default_grimoire() -> void:
@@ -111,7 +116,7 @@ func test_version_1_profile_gets_the_default_grimoire() -> void:
 	var s := pp_store(2)
 	assert_true(PlayerProfile.load_into(s, PP_PATH))
 	assert_eq(s.grimoire, Grimoire.DEFAULT_KNOWN)
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+	pp_cleanup(PP_PATH)
 
 
 func test_record_result_unlocks_and_keeps_best() -> void:
@@ -176,7 +181,7 @@ func test_progress_round_trip_and_old_file_loads() -> void:
 	assert_true(PlayerProfile.load_into(c, PP_PATH), "a version 2 file still loads")
 	assert_eq(c.haunting_unlocked, 0)
 	assert_eq(c.daily_best.size(), 0)
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+	pp_cleanup(PP_PATH)
 
 
 func test_journal_round_trips() -> void:
@@ -190,7 +195,7 @@ func test_journal_round_trips() -> void:
 	assert_eq(b.regulars, {"march": 2, "ned": 4})
 	assert_eq(b.deeds, PackedStringArray(["first_dawn", "hedge_witch"]))
 	assert_true(b.tutorial_done)
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+	pp_cleanup(PP_PATH)
 
 
 func test_unfinished_tutorial_is_remembered() -> void:
@@ -200,7 +205,7 @@ func test_unfinished_tutorial_is_remembered() -> void:
 	b.tutorial_done = true
 	PlayerProfile.load_into(b, PP_PATH)
 	assert_false(b.tutorial_done, "a version-5 file that says not done stays not done")
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+	pp_cleanup(PP_PATH)
 
 
 func test_old_version_file_loads_with_defaults_and_skips_the_tutorial() -> void:
@@ -217,7 +222,7 @@ func test_old_version_file_loads_with_defaults_and_skips_the_tutorial() -> void:
 	assert_eq(s.regulars, {})
 	assert_eq(s.deeds, PackedStringArray())
 	assert_true(s.tutorial_done, "a player who already has a profile is not walked through night 1 again")
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+	pp_cleanup(PP_PATH)
 
 
 func test_journal_cleans_unknown_entries() -> void:
@@ -229,4 +234,4 @@ func test_journal_cleans_unknown_entries() -> void:
 	assert_true(PlayerProfile.load_into(s, PP_PATH))
 	assert_eq(s.regulars, {"march": 4})
 	assert_eq(s.deeds, PackedStringArray(["first_dawn"]))
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+	pp_cleanup(PP_PATH)

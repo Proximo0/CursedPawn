@@ -4,8 +4,11 @@ extends Control
 ## keyboard focus (Up/Down/Enter/Esc) and mouse mapped back to the grid, and the settings panel both share.
 ## While visible the screen eats all input (it is a modal). Subclasses fill the ts_* hooks and never override _ready.
 
-const SETTINGS_RECT := Rect2(190.0, 46.0, 260.0, 268.0)
+const SETTINGS_RECT := Rect2(120.0, 14.0, 400.0, 332.0)
 const FOCUS_VOLUME: String = "volume"
+const TABS: Array[String] = ["audio", "display", "game", "keys"]
+const TAB_LABELS: Dictionary = {"audio": "AUDIO", "display": "DISPLAY", "game": "GAME", "keys": "KEYS"}
+const SLIDERS: Array[String] = ["volume", "sfx", "music", "shake"]
 
 var settings: TsSettings = TsSettings.shared()
 var sfx: SfxPlayer  ## optional: click and hover sounds, and where volume/mute are applied
@@ -13,11 +16,15 @@ var room: ShopRoom2D  ## optional: where the dither setting is applied
 var web: bool = OS.has_feature("web")  ## injectable for tests; web hides Quit and Fullscreen
 var desktop: bool = TsSettings.ts_is_desktop()
 var settings_open: bool = false
+var settings_tab: String = "audio"
+var rebinding: String = ""  ## the action waiting for its new key
 var focus_id: String = ""
 var down_id: String = ""
 var reset_msg: String = ""
 var canvas: TsCanvas
 var profile: Object  ## optional: the player profile (RelicStore); the Ledger reads deeds and regulars from it
+signal replay_seed(entry: Dictionary)
+
 var ledger := UiLedger.new()
 var ledger_open: bool = false
 
@@ -121,20 +128,42 @@ func is_focused(id: String) -> bool:
 func ts_focus_ids() -> Array[String]:
 	if ledger_open:
 		return ledger.focus_ids()
-	return ts_settings_ids(desktop) if settings_open else ts_menu_ids()
+	return ts_settings_ids(desktop, settings_tab) if settings_open else ts_menu_ids()
 
 
-static func ts_settings_ids(has_fullscreen: bool) -> Array[String]:
-	var out: Array[String] = [FOCUS_VOLUME, "mute", "dither", "scares"]
-	if has_fullscreen:
-		out.append("fullscreen")
-	out.append("reset_hints")
+## The setting rows of one tab, top to bottom.
+static func ts_tab_rows(tab: String, has_fullscreen: bool) -> Array[String]:
+	var out: Array[String] = []
+	match tab:
+		"audio":
+			out.append_array(["volume", "sfx", "music", "mute"] as Array[String])
+		"display":
+			out.append_array(["shake", "flash", "dither"] as Array[String])
+			if has_fullscreen:
+				out.append_array(["fullscreen", "window"] as Array[String])
+		"game":
+			out.append_array(["scares", "text_speed", "text_size", "colorblind", "reset_hints", "diag"] as Array[String])
+		"keys":
+			for a: Dictionary in TsKeys.ACTIONS:
+				out.append("key:" + str(a["id"]))
+	return out
+
+
+## Every focusable id while the settings panel shows `tab`: the rows, then the reset button, the tabs and Back.
+static func ts_settings_ids(has_fullscreen: bool, tab: String = "audio") -> Array[String]:
+	var out: Array[String] = ts_tab_rows(tab, has_fullscreen)
+	out.append("reset_all")
+	for t: String in TABS:
+		out.append("tab:" + t)
 	out.append("settings_back")
 	return out
 
 
 func _ts_focus_of(id: String) -> String:
-	return FOCUS_VOLUME if id == "vol_dec" or id == "vol_inc" else id
+	if id.ends_with("_dec") or id.ends_with("_inc"):
+		var row: String = id.left(id.length() - 4)
+		return FOCUS_VOLUME if row == "vol" else row
+	return id
 
 
 func ts_set_focus(id: String) -> void:
@@ -167,6 +196,8 @@ func ts_close_ledger() -> void:
 
 func ts_open_settings() -> void:
 	settings_open = true
+	settings_tab = "audio"
+	rebinding = ""
 	reset_msg = ""
 	focus_id = FOCUS_VOLUME
 
@@ -186,35 +217,56 @@ func ts_activate(id: String) -> void:
 			ts_close_ledger()
 		else:
 			ledger.activate(id)
+			if not ledger.replay_entry.is_empty():
+				var entry: Dictionary = ledger.replay_entry
+				ledger.replay_entry = {}
+				ts_close_ledger()
+				replay_seed.emit(entry)
+				return
 			if not ts_focus_ids().has(focus_id):
 				focus_id = "ledger_tab_deeds"
 		return
 	if not settings_open:
 		ts_activate_menu(id)
 		return
+	var row: String = _ts_focus_of(id)
+	if id.begins_with("tab:"):
+		_ts_set_tab(id.trim_prefix("tab:"))
+		return
+	if id.begins_with("key:"):
+		rebinding = "" if rebinding == id.trim_prefix("key:") else id.trim_prefix("key:")
+		return
 	match id:
-		"vol_dec":
-			settings.step_volume(-1)
-		"vol_inc":
-			settings.step_volume(1)
-		"mute":
-			settings.muted = not settings.muted
-		"dither":
-			settings.dither = not settings.dither
-		"scares":
-			settings.scares_full = not settings.scares_full
-		"fullscreen":
-			settings.fullscreen = not settings.fullscreen
+		"diag":
+			var report: String = DiagLog.copy_report()
+			reset_msg = "COPIED %d LINES FOR A BUG REPORT." % report.count("\n") if report != "" else "NOTHING TO COPY."
+			return
 		"reset_hints":
 			settings.reset_hints()
 			reset_msg = "HINTS WILL SHOW AGAIN."
+		"reset_all":
+			if settings_tab == "keys":
+				settings.keys = {}
+				reset_msg = "KEYS BACK TO THEIR DEFAULTS."
+			else:
+				settings.reset_defaults()
+				reset_msg = "EVERYTHING BACK TO ITS DEFAULT."
 		"settings_back":
 			ts_close_settings("settings")
 			return
 		_:
-			return
+			var dir: int = -1 if id.ends_with("_dec") else 1
+			if not settings.adjust(row, dir):
+				return
 	settings.apply(sfx, room)
 	settings.save_player()
+
+
+func _ts_set_tab(tab: String) -> void:
+	if TABS.has(tab):
+		settings_tab = tab
+		rebinding = ""
+		reset_msg = ""
 
 
 func ts_escape() -> void:
@@ -227,18 +279,33 @@ func ts_escape() -> void:
 
 
 func ts_key(k: int) -> bool:
+	if settings_open and rebinding != "":
+		if k != KEY_ESCAPE:
+			settings.keys = TsKeys.rebind(settings.keys, rebinding, k)
+			settings.apply(sfx, room)
+			settings.save_player()
+			reset_msg = "%s IS NOW %s." % [rebinding.replace("_", " ").to_upper(), TsKeys.name_of(k)]
+		rebinding = ""
+		return true
 	match k:
 		KEY_UP:
 			ts_move_focus(-1)
 		KEY_DOWN:
 			ts_move_focus(1)
 		KEY_LEFT, KEY_RIGHT:
+			var dir: int = -1 if k == KEY_LEFT else 1
 			if ledger_open:
-				ledger.turn(-1 if k == KEY_LEFT else 1)
-			elif settings_open and focus_id == FOCUS_VOLUME:
-				ts_activate("vol_inc" if k == KEY_RIGHT else "vol_dec")
+				ledger.turn(dir)
+			elif settings_open and focus_id.begins_with("tab:"):
+				_ts_set_tab(TABS[posmod(TABS.find(focus_id.trim_prefix("tab:")) + dir, TABS.size())])
+				focus_id = "tab:" + settings_tab
+			elif settings_open and ts_tab_rows(settings_tab, desktop).has(focus_id) and not focus_id.begins_with("key:") and focus_id != "reset_hints":
+				ts_activate(focus_id + ("_inc" if dir > 0 else "_dec"))
+		KEY_PAGEUP, KEY_PAGEDOWN:
+			if settings_open:
+				_ts_set_tab(TABS[posmod(TABS.find(settings_tab) + (1 if k == KEY_PAGEDOWN else -1), TABS.size())])
 		KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
-			if focus_id != "" and focus_id != FOCUS_VOLUME:
+			if focus_id != "" and not (settings_open and SLIDERS.has(focus_id)):
 				ts_activate(focus_id)
 		KEY_ESCAPE:
 			ts_escape()
@@ -253,45 +320,81 @@ func _ts_draw_settings(c: TsCanvas) -> void:
 	var r: Rect2 = SETTINGS_RECT
 	c.frame(r, "panel")
 	var cx: float = r.position.x + r.size.x * 0.5
-	c.head_c(cx, r.position.y + 12.0, "SETTINGS", 11, 2)
-	c.fill(Rect2(r.position.x + 14.0, r.position.y + 38.0, r.size.x - 28.0, 1.0), 9)
-	c.fill(Rect2(r.position.x + 14.0, r.position.y + 39.0, r.size.x - 28.0, 1.0), 8)
-	var y: float = r.position.y + 48.0
+	c.head_c(cx, r.position.y + 10.0, "SETTINGS", 11, 2)
+	var tw: float = 84.0
+	var tx: float = cx - tw * 2.0 - 6.0
+	for t: String in TABS:
+		c.button("tab:" + t, Rect2(tx, r.position.y + 32.0, tw, 17.0), str(TAB_LABELS[t]), true, t == settings_tab)
+		_ts_focus_mark(c, "tab:" + t, Vector2(tx - 7.0, r.position.y + 36.0))
+		tx += tw + 4.0
+	c.fill(Rect2(r.position.x + 14.0, r.position.y + 54.0, r.size.x - 28.0, 1.0), 9)
+	c.fill(Rect2(r.position.x + 14.0, r.position.y + 55.0, r.size.x - 28.0, 1.0), 8)
 	var lx: float = r.position.x + 22.0
-	var rx: float = r.end.x - 16.0
-	# volume: label, [-], value box, [+]
-	c.text(Vector2(lx, y + 6.0), "VOLUME", 15)
-	c.button("vol_dec", Rect2(rx - 90.0, y, 16.0, 19.0), "-", true)
-	c.frame(Rect2(rx - 72.0, y, 44.0, 19.0), "btn_off")
-	c.text_c(rx - 50.0, y + 6.0, "%d%%" % settings.volume_percent(), 11, 1)
-	c.button("vol_inc", Rect2(rx - 26.0, y, 16.0, 19.0), "+", true)
-	_ts_focus_mark(c, FOCUS_VOLUME, Vector2(lx - 11.0, y + 6.0))
-	y += 26.0
-	_ts_toggle_row(c, "mute", "SOUND", "MUTED" if settings.muted else "ON", lx, rx, y)
-	y += 26.0
-	_ts_toggle_row(c, "dither", "DITHER", "ON" if settings.dither else "OFF", lx, rx, y)
-	y += 26.0
-	_ts_toggle_row(c, "scares", "SCARES", "FULL" if settings.scares_full else "GENTLE", lx, rx, y)
-	y += 26.0
-	if desktop:
-		_ts_toggle_row(c, "fullscreen", "FULLSCREEN", "ON" if settings.fullscreen else "OFF", lx, rx, y)
-		y += 26.0
-	c.button("reset_hints", Rect2(lx, y, r.size.x - 38.0, 19.0), "RESET TUTORIAL HINTS", true)
-	_ts_focus_mark(c, "reset_hints", Vector2(lx - 11.0, y + 6.0))
-	y += 24.0
+	var rx: float = r.end.x - 18.0
+	var y: float = r.position.y + 64.0
+	if settings_tab == "keys":
+		_ts_draw_keys(c, r, y)
+		y += 9.0 * 20.0 + 4.0
+	else:
+		for id: String in ts_tab_rows(settings_tab, desktop):
+			_ts_draw_row(c, id, lx, rx, y)
+			y += 25.0
 	var note: String = reset_msg
-	if focus_id == "scares":
+	if rebinding != "":
+		note = "PRESS THE NEW KEY FOR " + rebinding.replace("_", " ").to_upper() + ". ESC CANCELS."
+	elif focus_id == "scares":
 		note = "GENTLE: NO FLASHES, NO LOUD STINGERS."
+	elif focus_id == "colorblind":
+		note = "ADDS SHAPES AND WORDS BESIDE COLOUR-ONLY SIGNALS."
+	elif focus_id == "text_size":
+		note = "2X MAKES MENU AND LOG TEXT LARGER."
 	if note != "":
-		c.text_c(cx, y, note, 14, 1)
-	c.button("settings_back", Rect2(cx - 44.0, r.end.y - 30.0, 88.0, 20.0), "BACK [ESC]", true, true)
-	_ts_focus_mark(c, "settings_back", Vector2(cx - 56.0, r.end.y - 24.0))
+		c.text_c(cx, r.end.y - 62.0, note, 14, 1)
+	c.button("reset_all", Rect2(cx - 80.0, r.end.y - 48.0, 160.0, 17.0), "RESET KEYS" if settings_tab == "keys" else "RESET TO DEFAULT", true)
+	_ts_focus_mark(c, "reset_all", Vector2(cx - 92.0, r.end.y - 43.0))
+	c.button("settings_back", Rect2(cx - 44.0, r.end.y - 27.0, 88.0, 19.0), "BACK [ESC]", true, true)
+	_ts_focus_mark(c, "settings_back", Vector2(cx - 56.0, r.end.y - 22.0))
 
 
-func _ts_toggle_row(c: TsCanvas, id: String, label: String, value: String, lx: float, rx: float, y: float) -> void:
-	c.text(Vector2(lx, y + 6.0), label, 15)
-	c.button(id, Rect2(rx - 78.0, y, 78.0, 19.0), value, true)
+const ROW_LABELS: Dictionary = {"volume": "MASTER", "sfx": "EFFECTS", "music": "MUSIC", "mute": "SOUND", "shake": "SCREEN SHAKE",
+	"flash": "FLASHES", "dither": "DITHER", "fullscreen": "FULLSCREEN", "window": "WINDOW SIZE", "scares": "SCARES",
+	"text_speed": "TEXT SPEED", "text_size": "TEXT SIZE", "colorblind": "COLOUR-BLIND TELLS"}
+
+
+func _ts_draw_row(c: TsCanvas, id: String, lx: float, rx: float, y: float) -> void:
+	if id == "diag":
+		c.button("diag", Rect2(lx, y, rx - lx, 19.0), "COPY DIAGNOSTICS", true)
+		_ts_focus_mark(c, id, Vector2(lx - 11.0, y + 6.0))
+		return
+	if id == "reset_hints":
+		c.button("reset_hints", Rect2(lx, y, rx - lx, 19.0), "RESET TUTORIAL HINTS", true)
+		_ts_focus_mark(c, id, Vector2(lx - 11.0, y + 6.0))
+		return
+	c.text(Vector2(lx, y + 6.0), str(ROW_LABELS.get(id, id)), 15)
+	if SLIDERS.has(id):
+		var key: String = "vol" if id == "volume" else id
+		c.button(key + "_dec", Rect2(rx - 90.0, y, 16.0, 19.0), "-", true)
+		c.frame(Rect2(rx - 72.0, y, 44.0, 19.0), "btn_off")
+		c.text_c(rx - 50.0, y + 6.0, settings.value_text(id), 11, 1)
+		c.button(key + "_inc", Rect2(rx - 26.0, y, 16.0, 19.0), "+", true)
+	else:
+		c.button(id, Rect2(rx - 90.0, y, 90.0, 19.0), settings.value_text(id), true)
 	_ts_focus_mark(c, id, Vector2(lx - 11.0, y + 6.0))
+
+
+func _ts_draw_keys(c: TsCanvas, r: Rect2, y0: float) -> void:
+	var half: int = 10
+	for i: int in range(TsKeys.ACTIONS.size()):
+		var a: Dictionary = TsKeys.ACTIONS[i]
+		var col: int = i / half
+		var row: int = i % half
+		var x: float = r.position.x + 22.0 + float(col) * 188.0
+		var y: float = y0 + float(row) * 20.0
+		var id: String = "key:" + str(a["id"])
+		c.text(Vector2(x, y + 5.0), str(a["label"]), 15)
+		var waiting: bool = rebinding == str(a["id"])
+		c.button(id, Rect2(x + 100.0, y, 62.0, 16.0), "PRESS..." if waiting else TsKeys.label_of(str(a["id"])), true, waiting)
+		_ts_focus_mark(c, id, Vector2(x - 9.0, y + 4.0))
 
 
 ## A small flickering flame beside the focused row, so keyboard focus reads at a glance.
@@ -306,6 +409,12 @@ func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or canvas == null:
 		return
 	if ts_swallow(event):
+		get_viewport().set_input_as_handled()
+		return
+	TsPad.note(event)
+	var pk: int = TsPad.key_for(event)
+	if pk != 0:
+		ts_key(pk)
 		get_viewport().set_input_as_handled()
 		return
 	var mm := event as InputEventMouseMotion

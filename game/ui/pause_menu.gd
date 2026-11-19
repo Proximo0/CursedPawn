@@ -14,7 +14,7 @@ const BTN_W: float = 150.0
 const BTN_H: float = 20.0
 const BTN_STEP: float = 28.0
 const IDS: Array[String] = ["resume", "grimoire", "ledger", "settings", "quit_title"]
-const LABELS: Dictionary = {"resume": "RESUME [ESC]", "grimoire": "GRIMOIRE", "ledger": "LEDGER", "settings": "SETTINGS", "quit_title": "QUIT TO TITLE"}
+const LABELS: Dictionary = {"resume": "RESUME [ESC]", "grimoire": "GRIMOIRE", "ledger": "JOURNAL", "settings": "SETTINGS", "quit_title": "QUIT TO TITLE"}
 
 var blocked: bool = false  ## the host sets this while Esc means something else (tarot stake open, a card up)
 var pauses_tree: bool = true
@@ -110,7 +110,8 @@ func ts_escape_menu() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
-	if key != null and key.pressed and not key.echo and key.keycode == KEY_ESCAPE and not visible and not blocked:
+	var esc: bool = (key != null and key.pressed and not key.echo and key.keycode == KEY_ESCAPE) or TsPad.key_for(event) == KEY_ESCAPE
+	if esc and not visible and not blocked:
 		open()
 		get_viewport().set_input_as_handled()
 
@@ -126,7 +127,8 @@ func ts_draw_menu(c: TsCanvas) -> void:
 	c.fill(Rect2(PANEL.position.x + 16.0, PANEL.position.y + 47.0, PANEL.size.x - 32.0, 1.0), 8)
 	var y: float = PANEL.position.y + 58.0
 	for i: int in range(IDS.size()):
-		var rect := Rect2(320.0 - BTN_W * 0.5, y + BTN_STEP * float(i), BTN_W, BTN_H)
+		var bw: float = BTN_W + (46.0 if settings.text_scale == 2 else 0.0)
+		var rect := Rect2(320.0 - bw * 0.5, y + BTN_STEP * float(i), bw, BTN_H)
 		c.button(IDS[i], rect, str(LABELS[IDS[i]]), true, i == 0)
 		if is_focused(IDS[i]):
 			c.cursor_flame(Vector2(rect.position.x - 14.0, rect.position.y + 6.0))

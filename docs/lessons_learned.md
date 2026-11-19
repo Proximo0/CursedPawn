@@ -74,6 +74,7 @@ have them) and the rule that prevents it. At the end of the project, copy the ge
 | Match-start hitches from first-use shader compiles (Godot 4.4+ ubershaders precompile only what is loaded at load time) | Instance every effect resource once off-screen at match start; keep GPU perf on real hardware (xvfb skews GPU frame times) and CI on draw calls, primitives and script time. |
 | A humanoid character was rebuilt ten times (code lofts, Blender, Houdini, polish passes) and still read as a placeholder | Never sculpt humanoids in code. Start from a creator-made or licensed model on a standard humanoid skeleton; follow `docs/character_creation_lessons.md`. |
 | The CI runner runs as a service with no GPU: offscreen captures were black at 0.2 fps | Take screenshots in the owner's desktop session (Remote Control or a desktop runner), never from a service-account runner. |
+| Room sheet cells for dusk, night and dawn all showed a full moon: a night-event flag set by an earlier cell survived `ShopRoom2D.setup()` | Every per-scene room flag (night event, title mode, wake type, queued coins) is reset in `_rebuild_world()` and re-derived from the run in `setup()`; a sheet cell that needs a state sets it after setup. |
 
 ## Assets
 
@@ -91,3 +92,4 @@ have them) and the rule that prevents it. At the end of the project, copy the ge
 | Secrets (online service client keys) must ship in builds but not in a public repo | Keep them in a git-ignored `config/*credentials*` file injected by the export script; never write them to memory or docs (`docs/online.md`). |
 | `x as RigidBody2D` on a freed node raised "Trying to cast a freed object" twice in ShopRoom2D (slides, then the wake plan), even with an is_instance_valid check right after the cast | Call is_instance_valid on the raw Variant before any `as` cast of a node that a scheduled step may outlive. |
 | The web engine was 27 MiB, over Cloudflare's 25 MiB per-file limit, though the game only uses a few engine modules | Size engine changes as trial builds (`web_template.yml` variant + extra flags) beside the live one, then gate them on the boot + bot + native-hash check before switching. size_extra plus unused modules off: 27.2 -> 19.1 MiB, same hash. |
+| A wall-clock budget assert in a unit test (music build under 2.5 s) failed only when tools/run_tests.sh sharded the suite across every CPU | Keep strict timing budgets in tests/perf (run alone); unit tests may only catch gross regressions with an allowance. |

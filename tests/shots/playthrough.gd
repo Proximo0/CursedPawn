@@ -213,6 +213,8 @@ func _go() -> void:
 	await _omen_draw(pick.x, pick.y)
 	await _frames(2)
 	await _play()
+	await _staged_round6()
+	await _loss()
 	await _altar()
 	_save_sheet()
 
@@ -279,24 +281,44 @@ func _play() -> void:
 	_g.cards.clear()
 	var shown: bool = await _until(func() -> bool: return _g.end_panel_visible() and _g.hud._end_t > 1.6, 400)
 	await _snap("run end: %s, ectoplasm earned" % ("survived" if _g.run.won else "lost"), shown)
-	await _synthetic_round6()
 
 
-## Whatever of the round-6 pop-ups the real run did not produce (the logic may not have landed, or the policy never met
-## a regular) is shown from synthetic events, and the cell says so.
-func _synthetic_round6() -> void:
+## A regular and a deed toast the policy's run did not meet are staged with the test menu's own tiles: real logic and real
+## events (a regular's chapter, a real deed id), not synthetic ones.
+func _staged_round6() -> void:
 	_g.hud.toasts.clear()
+	_g.open_test_menu()
 	if not _done.has("regular"):
-		_g.hud.toasts.feed([{"e": "regular", "id": "widow", "name": "The Widow March", "chapter": 1,
-			"line": "It came home again. I only wanted it quiet."}] as Array[Dictionary])
-		await _until(func() -> bool: return float(_g.hud.toasts.regulars[0]["age"]) > 1.6 if not _g.hud.toasts.regulars.is_empty() else true, 200)
-		await _snap("a regular arrives: portrait card (synthetic event)", false)
-		_g.hud.toasts.clear()
+		_g.run_test_tile("regular")
+		var ok: bool = await _until(func() -> bool: return not _g.hud.toasts.regulars.is_empty() and float(_g.hud.toasts.regulars[0]["age"]) > 1.6, 300)
+		await _snap("a regular arrives (staged with the test menu): portrait card", ok)
+		_g.exit_test_tile()
 	if not _done.has("deed"):
-		_g.hud.toasts.push_deed("first_light")
-		await _until(func() -> bool: return float(_g.hud.toasts.deeds[0]["age"]) > 1.8 if not _g.hud.toasts.deeds.is_empty() else true, 200)
-		await _snap("deed toast: seal stamped, name inked (synthetic)", false)
-		_g.hud.toasts.clear()
+		_g.run_test_tile("deed_toast")
+		var ok2: bool = await _until(func() -> bool: return not _g.hud.toasts.deeds.is_empty() and float(_g.hud.toasts.deeds[0]["age"]) > 1.8, 300)
+		await _snap("deed toast (staged with the test menu): seal stamped, name inked", ok2)
+		_g.exit_test_tile()
+	_g.leave_test_menu()
+	_g.cards.clear()
+
+
+## A loss: a shop with no cash passes every customer until the rent falls due and the shop is lost.
+func _loss() -> void:
+	_g.new_run(5, {}, {})
+	_g.cards.clear()
+	_g.run.cash = 0
+	var steps: int = 0
+	while not _g.run.is_over() and steps < 200:
+		steps += 1
+		_g.cards.clear()
+		_g.activate("pass")
+	var card: bool = _keep_card("title", "THE SHOP IS LOST")
+	if card:
+		_g.cards[0]["age"] = 1.6
+	await _snap("a loss: THE SHOP IS LOST card bleeding in", card and _g.run.is_over() and not _g.run.won)
+	_g.cards.clear()
+	var shown: bool = await _until(func() -> bool: return _g.end_panel_visible() and _g.hud._end_t > 1.6, 400)
+	await _snap("a loss: the run-end screen, rent unpaid", shown and not _g.run.won)
 
 
 ## One bot action through the UI's own entry points.

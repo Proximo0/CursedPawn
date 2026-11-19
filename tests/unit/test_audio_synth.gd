@@ -3,7 +3,8 @@ extends TestCase
 
 const LEN_RANGE: Dictionary = {  ## name -> [min secs, max secs]
 	"wake": [2.0, 3.2], "run_won": [1.8, 2.2], "run_lost": [1.8, 2.2], "ambient": [8.0, 10.0], "dread": [3.0, 5.0],
-	"ui_click": [0.02, 0.2], "ui_hover": [0.02, 0.2], "card_deal": [0.02, 0.3], "card_flip": [0.02, 0.3],
+	"ending_debt_free": [1.8, 2.2], "ending_cursed_shop": [1.8, 2.2], "ending_collector": [1.8, 2.2],
+	"ending_regulars": [1.8, 2.2], "ui_click": [0.02, 0.2], "ui_hover": [0.02, 0.2], "card_deal": [0.02, 0.3], "card_flip": [0.02, 0.3],
 	"wheel_tick": [0.02, 0.2], "request_pinned": [0.02, 0.4], "collector_arrive": [1.0, 1.6],
 }
 const FULL_SCALE: float = 32767.0
@@ -84,6 +85,16 @@ func test_ambient_loops_seamlessly() -> void:
 		assert_true(absi(s[0]) < 3000 and absi(s[s.size() - 1]) < 3000, name + " ends near zero")
 
 
+func test_every_one_shot_within_2db_of_its_loudness_target() -> void:
+	for name: String in SfxSynth.NAMES:
+		if SfxSynth.LOOPS.has(name):
+			continue
+		var buf: PackedFloat32Array = SfxSynth.au_decode(au_built(name, 1))
+		var target: float = SfxSynth.au_target_db(name, float(buf.size()) / float(SfxSynth.SR))
+		var level: float = SfxSynth.au_active_db(buf)
+		assert_true(absf(level - target) <= 2.0, "%s level %.1f target %.1f" % [name, level, target])
+
+
 func test_levels() -> void:
 	var s: PackedInt32Array = au_samples_of("ambient", 1)
 	var acc: float = 0.0
@@ -141,6 +152,11 @@ func test_every_event_kind_maps_in_player() -> void:
 		{"e": "collector_arrives", "want_text": "t", "line": ""},
 		{"e": "collector_pleased"},
 		{"e": "collector_refused"},
+		{"e": "curse_shift", "uid": 1, "name": "x", "from": "toy", "to": "book"},
+		{"e": "curse_copied", "from_uid": 1, "from": "x", "uid": 2, "name": "y", "curse": "c"},
+		{"e": "whispered_away"},
+		{"e": "buyer_offer", "uid": 1, "amount": 30},
+		{"e": "night_event", "id": "storm"},
 	]
 	var seen: Dictionary = {}
 	for ev: Dictionary in samples:
@@ -150,6 +166,13 @@ func test_every_event_kind_maps_in_player() -> void:
 		assert_true(p.played.size() > before, "event %s made no sound" % ev["e"])
 	for kind: String in SfxPlayer.EVENT_KINDS:
 		assert_true(seen.has(kind), "no sample for " + kind)
+	for sample: Dictionary in [{"e": "wake", "wake_type": "door_lock"}, {"e": "run_won", "cash": 1, "ending": "collector"},
+			{"e": "customer", "mood": "greedy"}, {"e": "night_event", "id": "full_moon"}]:
+		p.on_events([sample] as Array[Dictionary])
+	assert_eq(p._keyed(SfxPlayer.WAKE_TYPE_SOUNDS, "lights_out"), "wake_lights_out")
+	assert_eq(p._keyed(SfxPlayer.ENDING_SOUNDS, "regulars_complete"), "ending_regulars")
+	assert_eq(p._keyed(SfxPlayer.NIGHT_EVENT_SOUNDS, "full_moon"), "event_fullmoon")
+	assert_eq(p._keyed(SfxPlayer.MOOD_SOUNDS, "calm"), "")
 	p.on_events([{"e": "unknown_kind"}] as Array[Dictionary])  ## tolerated
 	p.ui("click")
 	p.ui("hover")
@@ -164,4 +187,13 @@ func test_every_event_kind_maps_in_player() -> void:
 	p.set_dread(0.8)
 	p.set_muted(true)
 	p.set_master_volume(0.5)
+	p.free()
+
+
+func test_sfx_volume_clamps() -> void:
+	var p := SfxPlayer.new()
+	p.set_sfx_volume(2.0)
+	assert_eq(p.sfx_volume, 1.0)
+	p.set_sfx_volume(-1.0)
+	assert_eq(p.sfx_volume, 0.0)
 	p.free()

@@ -7,6 +7,7 @@ const ONLY_MARCH: Dictionary = {"ned": 4, "crowe": 4, "vane": 4, "ashby": 4, "do
 func rg_run(progress: Dictionary, seed_value: int = 7) -> RunState:
 	var tun := Tuning.new()
 	tun.set_value("regular_chance", 1.0)
+	tun.set_value("start_cash", 2000.0)  # a debt collector must not end a pass-only run early
 	var run := RunState.new()
 	run.start(seed_value, Catalog.load_default(), tun, {}, {"regulars": progress})
 	return run

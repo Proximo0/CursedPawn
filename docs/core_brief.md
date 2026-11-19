@@ -150,3 +150,82 @@ Washington gambling = paying + chance + a thing of value; each way to get a curi
   Candle 0.3 per rank, Deep Pockets 8 per rank. Maxed: cautious 0.77, greedy 0.46 (targets 0.80 and 0.65); haunting 0 with no
   upgrades keeps all five feel targets. Every upgrade costs 220 ectoplasm (`Upgrades.total_cost()`), about 21 runs at the lab's
   average ectoplasm per run. New Tuning: `regular_chance`, `regular_pay_mult`, `tutorial_purse`, `pendulum_minutes`.
+
+## Full game run (Lane A, 19 Nov 2026; plan in docs/full_game_plan.md)
+Additions are listed as they land. Existing fields and events are unchanged.
+- **Curses 9-12** (`curses.json`, optional fields `category_swap`, `spreads`, `night_cash_unseen`, `rent_mult`, `whisper`).
+  Events: `curse_shift {uid, name, from, to}` (after `night_start`), `curse_copied {from_uid, from, uid, name, curse}` (after
+  `bought` or `lot`), `whispered_away {}` (a customer slot lost at the door; may repeat before the next `customer`).
+  Held items gain `inspected` (bool), and `copied` / `spread_used` flags. `rent_for(n)` now includes held curses' `rent_mult`.
+- **Objects 41-56** (`objects.json`, now 56; every object has `text`, a one-line flavour, at most 80 characters; the
+  catalog exposes it as `catalog.objects[i]["text"]`). New ids: toy wind_up_frog, kaleidoscope, paper_kite; jewelry tiepin,
+  opal_earrings, hair_comb; instrument kazoo, tambourine, zither; book sheet_music, bestiary, guestbook; relic horseshoe,
+  lantern, death_mask, wax_seal. They have no bespoke sprite yet (the fallback draws them).
+- **Customer types 13-17** (`customers.json`, now 17): `seer` (seller; the `customer` event may carry `sense`, a line shown
+  when she feels a curse, 80% on cursed and 10% on clean), `errand_child` (seller, height 0.6, brings objects worth at most
+  45, cursed odds x1.6), `debt_collector` (buyer; right after his `customer` event comes `debt_taken {amount, who}`, 10% of
+  cash, at least 5, never more than you hold), `twin_a` (seller) and `twin_b` (buyer, weight 0: only ever appears as the
+  return). When you buy from `twin_a`, one ordinary customer later `twin_b` comes (`customer` with `twin: true`,
+  `want_name`) and buys that same object back (pay_mult 1.4); nothing comes if the object is gone. `run.twin` is
+  `{item_id, uid, wait}` (snapshot/restore). Art needs a sprite look for each new `tid`. `test_sprite_kit` now compares
+  silhouettes against the row count instead of 12.
+- **Provenance** (`Provenance`, `game/data/provenance.json`): every held object has `item.provenance`, a one-or-two sentence
+  line seeded from (run seed, uid, id), the category and whether it is cursed (cursed lean ominous, never naming the curse).
+  Gifts merge the pass-it-on history ("Passed on by Bo. Reached night 5; the shop woke 1 times. Paid every rent. (2 holders.)").
+  The `bought` and `lot` events carry `provenance`. Own RNG: the run's random stream is unchanged.
+- **Night events** (`NightEvents`, `game/data/night_events.json`, Tuning `night_event_chance` 0.35, night 2 on; own seeded roll,
+  the main random stream is unchanged). Event `night_event {id, name, text, night}` right after `night_start` (and after any
+  `curse_shift`). Ids: `blackout` (tools cost double time), `storm` (customers take 1.4x the time, so fewer come; sellers and
+  buyers 15% pricier), `auction` (the first customer is an auctioneer, `customer` with `auction: true`, tid `estate_clearer`,
+  type "Auctioneer", a top-third-value lot, 50% cursed), `full_moon` (cursed share x2, curse Dread x2, buyers pay 1.3x for
+  cursed). `run.night_event` is `{id, name, text, mods, auction_done}` while tonight's event is active, {} otherwise
+  (snapshot/restore); `run.event_mod(key)` reads a modifier. It is cleared when the night ends.
+- **Wake variety**: every curse has a `wake` type in `curses.json` (`Catalog.WAKE_TYPES`: `drift`, `topple`, `lights_out`,
+  `door_lock`, `possession`). The `wake` event now also carries `wake_type` and `curse` (the curse whose Dread tipped it: the
+  one just bought, else the held curse with the most Dread, else "" with type `drift`). `door_lock` always closes the shop
+  (`closed: true`, day over). Mapping: possession lucky_paw and costume_change; lights_out not_who_they_seem, thirsty_mirror and
+  landlord_lullaby; topple heavy_heart and hungry_mouth; door_lock whispering_debt and bashful_purse; drift sleepwalker, bad_penny
+  and copycat. The room acts the type out (C.32); the event name for sound is `wake_<type>`.
+- **Moods** (`Moods`, `game/data/moods.json`: calm, nervous, greedy; customer types may carry `mood_bias`). Every rolled seller
+  has `customer["mood"]`; the `customer` event carries `mood` and `mood_line` (an observed behaviour such as "Their hands will not
+  stay still"). Scripted sellers (tutorial, regular) are calm, the auction lot is greedy; events without `mood` mean calm. Nervous:
+  reserve x0.92, a counter closes 75% of the gap, a lowball under 45% of their lowest price makes them leave (`left`). Greedy:
+  reserve x1.08, one more patience, a counter closes 25% of the gap, and 30% of counters are a bluff that holds the ask. Calm
+  splits the difference as before. `counter` now also carries `mood` and `tell` (a short reaction line, "" for none; nervous
+  always, greedy 70% on a bluff and 15% on an honest counter).
+- **Selling depth** (replaces the auto-price for ordinary buyers; Tuning `buyer_patience` 2, `buyer_flee_mult` 1.6, `buyer_pay_frac`
+  now 1.75, mood field `buyer_open`). An ordinary buyer (not a regular, a request or the Collector, which keep fixed prices and
+  `sell`) picks one matching shelf item at arrival and opens low: event `buyer_offer {uid, name, offer, patience, mood, tell,
+  counter}` follows the `customer` event (`counter: false`; `mood` and `mood_line` as for sellers). Commands: `{t: "accept"}` sells
+  the offered item at the current offer; `{t: "counter", amount}` asks for more (must beat the offer; costs `haggle_minutes`): at or
+  under the buyer's hidden `limit` they pay `amount` (`sold`); above it they raise the offer part of the way (`buyer_offer` with
+  `counter: true`, a mood `tell`), lose a patience, and leave (`left`) at zero patience or at a counter above `limit` x 1.6;
+  `{t: "sell", uid}` still works and pays that item's opening offer. `customer.offer = {uid, price}` is the live offer, `customer.limit`
+  and `customer.open` are hidden (UI and bots never show `limit`). `run.sale_price(item)` is now the opening offer of an ordinary buyer.
+  A glamour or a banished/broken offered item re-quotes (`buyer_offer`; a stale accept answers `invalid: the offer changed`). Opening
+  fraction by mood: calm 0.85, nervous (eager) 0.92, greedy (stingy) 0.72 with a 30% bluff that holds the offer. The tutorial buyer
+  pays in full (`sell`, no offer). Bots: greedy accepts, cautious counters once at +25% then accepts.
+- **Endings** (`Endings`, `game/data/endings.json`, Tuning `ending_cursed_count` 3): `run_won` now carries `ending`, `ending_name`,
+  `ending_title` and `epilogue` (the card text). Ids by priority: `collector` (Collector pleased), `regulars` (a regular's arc reached
+  its final chapter this run), `cursed_shop` (won holding 3+ cursed objects), `debt_free` (the rest). `run.ending` is set once
+  won ("" otherwise; snapshot/restore). Ending name for sound is `ending_<id>` (the audio lane uses `ending_debt_free`,
+  `ending_cursed_shop`, `ending_collector`, `ending_regulars`).
+- **Deeds** (now 59 in `deeds.json`; 22 new). New rule kinds: `ending id`, `curse_held id`, `curses_held_count n`, `wake_type id`,
+  `wake_types_count n`, `night_event id`, `night_events_seen n`, `whispered_at_least n`, `copies_at_least n`, `haggle_wins n`,
+  `twin_sold`, `unseen_cash n`. New RunState counters (snapshot/restore): `ending, curses_held, wake_types, events_seen, whispered,
+  copies, haggle_wins, twin_sales, unseen_cash`. New ids: costume_party, monkey_see, unwatched_pot, quiet_landlord, curse_sampler,
+  full_cabinet, storm_chaser, going_twice, moon_dancer, lights_down, night_owl, paid_in_full, beyond_saving, set_complete_ending,
+  last_chapter, lights_out_wake, locked_in, possessed_ornament, every_trouble, haggler_hand, both_halves, hush_hush.
+- **Save robustness** (`SaveGuard`): `PlayerProfile.load_into` and `load_run` validate the file's shape and types before reading
+  anything. A truncated, mistyped, garbage or newer-version file is moved to `<path>.bak` and the game starts from defaults.
+  `PlayerProfile.last_load = {status: "ok" | "missing" | "reset", why, backup}` tells the UI after a load (show "Your save was
+  damaged; a copy was kept" on "reset"). Missing keys (older versions) still load with defaults. Run saves: a stale offer or any
+  customer dict missing a required key is refused rather than crashing later.
+- **Daily themes** (`DailyThemes`, `game/data/daily_themes.json`, 8 weekly themes cycling from launch week: cursed_week, lean_week,
+  table_week, haggle_week, storm_season, quiet_week, long_nights, gift_week). `DailyThemes.theme_for(y, m, d)` and
+  `days_left(y, m, d)`; `Daily.opts_for_date(y, m, d)` returns the seed's omen plus `theme: id` (the UI should call this for the daily
+  run instead of `opts_for(seed)`). The run option `theme` only counts when `daily` is true; `run.opts` gets `theme` and `theme_name`,
+  the first `run_opts` event carries `theme` and `theme_name`, and `Daily.result_text` adds a fifth line "Theme: <name>" when there is one.
+- **Event names for sound** (checked against Lane D's list): `night_event {id}`, `wake {wake_type}`, `run_won {ending}`,
+  `customer {mood}`, `buyer_offer`, `curse_shift`, `curse_copied`, `whispered_away` all exist exactly under those names. Also new:
+  `debt_taken {amount, who}` (debt collector), and the `counter` event's `tell` field.

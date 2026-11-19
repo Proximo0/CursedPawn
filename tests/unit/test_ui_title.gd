@@ -191,12 +191,17 @@ func test_title_settings_panel_edits_and_closes() -> void:
 	t.ts_key(KEY_RIGHT)
 	assert_eq(t.settings.volume_percent(), 100, "clamped")
 	t.ts_key(KEY_DOWN)
+	t.ts_key(KEY_DOWN)
+	t.ts_key(KEY_DOWN)
+	assert_eq(t.focus_id, "mute")
 	t.ts_key(KEY_ENTER)
 	assert_true(t.settings.muted)
-	t.ts_key(KEY_DOWN)
+	t.ts_activate("tab:display")
+	t.focus_id = "dither"
 	t.ts_key(KEY_ENTER)
 	assert_false(t.settings.dither)
 	t.settings.mark_seen("seller")
+	t.ts_activate("tab:game")
 	t.ts_activate("reset_hints")
 	assert_true(t.settings.seen.is_empty())
 	t.ts_key(KEY_ESCAPE)
@@ -206,8 +211,8 @@ func test_title_settings_panel_edits_and_closes() -> void:
 
 
 func test_fullscreen_row_is_desktop_only() -> void:
-	assert_true(TsScreen.ts_settings_ids(true).has("fullscreen"))
-	assert_false(TsScreen.ts_settings_ids(false).has("fullscreen"))
+	assert_true(TsScreen.ts_settings_ids(true, "display").has("fullscreen"))
+	assert_false(TsScreen.ts_settings_ids(false, "display").has("fullscreen"))
 
 
 func test_pause_menu_choices() -> void:
@@ -238,12 +243,25 @@ func test_scares_setting_round_trips_and_toggles_from_the_panel() -> void:
 	assert_eq(str(s.to_dict()["scares"]), "gentle")
 	back.from_dict({"version": 1})
 	assert_true(back.scares_full, "older files read as full")
-	assert_true(TsScreen.ts_settings_ids(false).has("scares"))
+	assert_true(TsScreen.ts_settings_ids(false, "game").has("scares"))
 	var t := TitleScreen.new()
 	t.settings = TsSettings.new()
 	t.web = false
 	t.ts_open_settings()
+	t.ts_activate("tab:game")
 	t.focus_id = "scares"
 	t.ts_key(KEY_ENTER)
 	assert_false(t.settings.scares_full)
 	t.free()
+
+
+func test_continue_card_data() -> void:
+	var run := RunState.new()
+	run.start(3, Catalog.load_default(), Tuning.new())
+	run.cash = 77
+	run.inventory.append({"uid": 1, "name": "Hand bell", "category": "instrument", "curse": "", "id": "hand_bell", "value": 5})
+	var p: Dictionary = TitleScreen.ts_preview_of(run)
+	assert_eq(p["cash"], 77)
+	assert_eq(p["items"], ["Hand bell"] as Array[String])
+	assert_true(float(p["dread"]) >= 0.0 and float(p["dread"]) <= 1.0)
+	assert_eq(TitleScreen.ts_preview_of(null), {})

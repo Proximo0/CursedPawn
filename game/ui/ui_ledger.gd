@@ -11,6 +11,14 @@ const REGULARS_PATH: String = "res://game/data/regulars.json"
 const BOOK := Rect2(60.0, 16.0, 520.0, 328.0)
 const TAB_DEEDS: String = "deeds"
 const TAB_REGULARS: String = "regulars"
+const TAB_GRIMOIRE: String = "grimoire"
+const TAB_CURIOS: String = "curios"
+const TAB_BESTIARY: String = "bestiary"
+const TAB_RUNS: String = "runs"
+const TABS: Array[String] = ["grimoire", "deeds", "regulars", "curios", "bestiary", "runs"]
+const TAB_LABELS: Dictionary = {"grimoire": "GRIMOIRE", "deeds": "DEEDS", "regulars": "REGULARS", "curios": "CURIOS", "bestiary": "BESTIARY", "runs": "RUNS"}
+const TAB_HEADS: Dictionary = {"grimoire": "THE GRIMOIRE", "deeds": "LEDGER OF DEEDS", "regulars": "THE REGULARS", "curios": "THE CURIO CABINET",
+	"bestiary": "THE BESTIARY", "runs": "THE LAST TWENTY RUNS"}
 const DEEDS_PER_PAGE: int = 12
 const REGULARS_PER_PAGE: int = 6
 const DEED_ROW_H: float = 38.0
@@ -31,6 +39,11 @@ var page: int = 0
 var age: float = 0.0
 var earned: PackedStringArray = PackedStringArray()
 var progress: Dictionary = {}  ## regular id -> chapters finished
+var known_spells: PackedStringArray = PackedStringArray()
+var owned_curios: Dictionary = {}  ## curio id -> copies
+var log: UiJournalLog = UiJournalLog.new()
+var catalog: Catalog = null
+var replay_entry: Dictionary = {}  ## set when a replay-seed button was pressed
 
 
 # ---------------------------------------------------------------- data (pure)
@@ -175,13 +188,24 @@ static func _portrait_stand_in(id: String) -> ImageTexture:
 func open_from(p: Object) -> void:
 	earned = profile_deeds(p)
 	progress = profile_regulars(p)
+	known_spells = PackedStringArray(p.get("grimoire")) if p != null and "grimoire" in p else PackedStringArray(["scry", "hex"])
+	owned_curios = {}
+	if p != null and "collection" in p and p.get("collection") != null and "owned" in p.get("collection"):
+		owned_curios = (p.get("collection").get("owned") as Dictionary).duplicate()
+	log = UiJournalLog.shared()
+	replay_entry = {}
 	tab = TAB_DEEDS
 	page = 0
 	age = 0.0
 
 
 func focus_ids() -> Array[String]:
-	var out: Array[String] = ["ledger_tab_deeds", "ledger_tab_regulars"]
+	var out: Array[String] = []
+	for t: String in TABS:
+		out.append("ledger_tab_" + t)
+	if tab == TAB_RUNS:
+		for i: int in range(page * UiJournalPages.RUNS_PER_PAGE, mini(log.runs.size(), (page + 1) * UiJournalPages.RUNS_PER_PAGE)):
+			out.append("run_replay:%d" % i)
 	if pages() > 1:
 		out.append("ledger_prev")
 		out.append("ledger_next")
@@ -190,18 +214,37 @@ func focus_ids() -> Array[String]:
 
 
 func pages() -> int:
-	if tab == TAB_DEEDS:
-		return page_count(deed_defs().size(), DEEDS_PER_PAGE)
-	return page_count(regular_defs().size(), REGULARS_PER_PAGE)
+	match tab:
+		TAB_DEEDS:
+			return page_count(deed_defs().size(), DEEDS_PER_PAGE)
+		TAB_REGULARS:
+			return page_count(regular_defs().size(), REGULARS_PER_PAGE)
+		TAB_GRIMOIRE:
+			return UiJournalPages.pages_for(tab, UiOccult.spell_defs().size())
+		TAB_CURIOS:
+			return UiJournalPages.pages_for(tab, UiJournalPages.curio_rows(owned_curios).size())
+		TAB_BESTIARY:
+			return UiJournalPages.pages_for(tab, _beast().size())
+		TAB_RUNS:
+			return UiJournalPages.pages_for(tab, log.runs.size())
+	return 1
+
+
+func _beast() -> Array[Dictionary]:
+	return UiJournalPages.beast_rows(catalog if catalog != null else Catalog.load_default(), log)
 
 
 ## Handles a tab or page button. True when `id` was one of them.
 func activate(id: String) -> bool:
+	if id.begins_with("ledger_tab_") and TABS.has(id.trim_prefix("ledger_tab_")):
+		_set_tab(id.trim_prefix("ledger_tab_"))
+		return true
+	if id.begins_with("run_replay:"):
+		var at: int = int(id.trim_prefix("run_replay:"))
+		if at >= 0 and at < log.runs.size():
+			replay_entry = log.runs[at]
+		return true
 	match id:
-		"ledger_tab_deeds":
-			_set_tab(TAB_DEEDS)
-		"ledger_tab_regulars":
-			_set_tab(TAB_REGULARS)
 		"ledger_prev":
 			turn(-1)
 		"ledger_next":
@@ -232,30 +275,28 @@ func draw(c: TsCanvas, screen: TsScreen) -> void:
 	c.frame(BOOK, "panel")
 	var cx: float = BOOK.position.x + BOOK.size.x * 0.5
 	var defs: Array[Dictionary] = deed_defs()
-	c.head_c(cx, BOOK.position.y + 8.0, "LEDGER OF DEEDS" if tab == TAB_DEEDS else "THE REGULARS", 11, 2)
-	_tab_button(c, screen, "ledger_tab_deeds", Rect2(BOOK.position.x + 14.0, BOOK.position.y + 12.0, 76.0, 18.0), "DEEDS", tab == TAB_DEEDS)
-	_tab_button(c, screen, "ledger_tab_regulars", Rect2(BOOK.end.x - 90.0, BOOK.position.y + 12.0, 76.0, 18.0), "REGULARS", tab == TAB_REGULARS)
-	var sub: String
-	if tab == TAB_DEEDS:
-		var got: int = 0
-		for d: Dictionary in defs:
-			if earned.has(str(d["id"])):
-				got += 1
-		sub = "%d OF %d DEEDS EARNED" % [got, defs.size()]
-	else:
-		var met: int = 0
-		for rd: Dictionary in regular_defs():
-			if int(progress.get(str(rd["id"]), 0)) > 0:
-				met += 1
-		sub = "%d OF %d REGULARS MET" % [met, regular_defs().size()]
-	c.text_c(cx, BOOK.position.y + 38.0, sub, 14)
-	var paper := Rect2(BOOK.position.x + 14.0, BOOK.position.y + 50.0, BOOK.size.x - 28.0, 232.0)
+	c.head_c(cx, BOOK.position.y + 6.0, str(TAB_HEADS[tab]), 11, 2)
+	var tx: float = BOOK.position.x + 14.0
+	for t: String in TABS:
+		_tab_button(c, screen, "ledger_tab_" + t, Rect2(tx, BOOK.position.y + 26.0, 79.0, 16.0), str(TAB_LABELS[t]), tab == t)
+		tx += 83.0
+	c.text_c(cx, BOOK.position.y + 44.0, _sub_line(defs), 14)
+	var paper := Rect2(BOOK.position.x + 14.0, BOOK.position.y + 56.0, BOOK.size.x - 28.0, 226.0)
 	c.frame(paper, "note")
 	c.fill(Rect2(paper.position.x + paper.size.x * 0.5 - 1.0, paper.position.y + 6.0, 1.0, paper.size.y - 12.0), 10)  # the gutter
-	if tab == TAB_DEEDS:
-		_draw_deeds(c, paper, defs)
-	else:
-		_draw_regulars(c, paper)
+	match tab:
+		TAB_DEEDS:
+			_draw_deeds(c, paper, defs)
+		TAB_REGULARS:
+			_draw_regulars(c, paper)
+		TAB_GRIMOIRE:
+			UiJournalPages.draw_grimoire(c, paper, known_spells, age, page)
+		TAB_CURIOS:
+			UiJournalPages.draw_curios(c, paper, owned_curios, age, page)
+		TAB_BESTIARY:
+			UiJournalPages.draw_bestiary(c, paper, _beast(), age, page)
+		TAB_RUNS:
+			UiJournalPages.draw_runs(c, paper, log.runs, age, page)
 	var by: float = BOOK.end.y - 34.0
 	if pages() > 1:
 		c.button("ledger_prev", Rect2(BOOK.position.x + 14.0, by, 64.0, 20.0), "< PREV", page > 0)
@@ -265,6 +306,30 @@ func draw(c: TsCanvas, screen: TsScreen) -> void:
 	c.button("ledger_back", back, "BACK [ESC]", true, true)
 	if screen.focus_id != "":
 		_flame_for(c, screen, back)
+
+
+## The count line under the heading.
+func _sub_line(defs: Array[Dictionary]) -> String:
+	match tab:
+		TAB_DEEDS:
+			var got: int = 0
+			for d: Dictionary in defs:
+				if earned.has(str(d["id"])):
+					got += 1
+			return "%d OF %d DEEDS EARNED" % [got, defs.size()]
+		TAB_REGULARS:
+			var met: int = 0
+			for rd: Dictionary in regular_defs():
+				if int(progress.get(str(rd["id"]), 0)) > 0:
+					met += 1
+			return "%d OF %d REGULARS MET" % [met, regular_defs().size()]
+		TAB_GRIMOIRE:
+			return "%d OF %d SPELLS KNOWN" % [known_spells.size(), UiOccult.spell_defs().size()]
+		TAB_CURIOS:
+			return "%d CURIOS IN THE CABINET" % owned_curios.size()
+		TAB_BESTIARY:
+			return "%d CURSES KNOWN, %d CUSTOMERS MET" % [log.curses.size(), log.customers.size()]
+	return "%d RUNS REMEMBERED" % log.runs.size()
 
 
 func _flame_for(c: TsCanvas, screen: TsScreen, back: Rect2) -> void:

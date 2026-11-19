@@ -23,14 +23,28 @@ static func save(store: RelicStore, path: String = PATH) -> Error:
 	return DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path))
 
 
+## What the last load found: {status: "" | "ok" | "missing" | "reset", why, backup}. "reset" means the file was damaged, wrong
+## or from a newer version: it was moved to `backup` (`<path>.bak`) and the player starts from defaults. The UI can tell them.
+static var last_load: Dictionary = {"status": "", "why": "", "backup": ""}
+
+
+static func _load_result(status: String, why: String = "", backup: String = "") -> void:
+	last_load = {"status": status, "why": why, "backup": backup}
+
+
 ## Loads a saved profile into `store`. Returns false (and leaves the store as it is) when there is no file or it
-## is unreadable or from a newer version.
+## is unreadable, damaged or from a newer version; a damaged file is moved to `<path>.bak` (see `last_load`).
 static func load_into(store: RelicStore, path: String = PATH) -> bool:
 	if not FileAccess.file_exists(path):
+		_load_result("missing")
 		return false
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
-	if not parsed is Dictionary or int(parsed.get("version", 0)) > VERSION or not parsed.get("store") is Dictionary:
+	var json := JSON.new()  # parse() reports an error code quietly; parse_string prints an engine error on bad input
+	var parsed: Variant = json.data if json.parse(FileAccess.get_file_as_string(path)) == OK else null
+	var why: String = "not valid JSON" if parsed == null else SaveGuard.profile_problem(parsed, VERSION)
+	if why != "":
+		_load_result("reset", why, SaveGuard.quarantine(path))
 		return false
+	_load_result("ok")
 	store.from_dict(parsed["store"])
 	store.grimoire = PackedStringArray(parsed.get("grimoire", Array(Grimoire.DEFAULT_KNOWN)))
 	var pr: Dictionary = parsed.get("progress", {}) if parsed.get("progress") is Dictionary else {}
@@ -147,15 +161,20 @@ static func save_run(run: RunState, rec: Dictionary = {}, path: String = RUN_PAT
 
 
 ## A saved run restored against `cat`: {run: RunState, rec: Dictionary}, or {} when there is none or it is
-## unreadable.
+## unreadable, damaged or from a newer version (a damaged file moves to `<path>.bak`; see `last_load`).
 static func load_run(cat: Catalog, path: String = RUN_PATH) -> Dictionary:
 	if not FileAccess.file_exists(path):
+		_load_result("missing")
 		return {}
-	var d: Variant = bytes_to_var(FileAccess.get_file_as_bytes(path))
-	if not d is Dictionary or int(d.get("version", 0)) > VERSION or not d.get("run") is Dictionary:
+	var bytes: PackedByteArray = FileAccess.get_file_as_bytes(path)
+	var d: Variant = bytes_to_var(bytes) if SaveGuard.looks_like_variant_dict(bytes) else null
+	var why: String = "unreadable" if d == null else SaveGuard.run_problem(d, VERSION)
+	if why != "":
+		_load_result("reset", why, SaveGuard.quarantine(path))
 		return {}
 	var run := RunState.new()
 	run.restore(d["run"], cat)
+	_load_result("ok")
 	return {"run": run, "rec": d.get("rec", {}) if d.get("rec") is Dictionary else {}}
 
 

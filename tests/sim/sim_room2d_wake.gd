@@ -29,7 +29,7 @@ func _out_of_bounds(room: ShopRoom2D) -> bool:
 
 
 ## Runs one wake; returns {oob, settle_s, final_speed, moved, pos}.
-func _one_wake(seed_value: int, broke: String = "") -> Dictionary:
+func _one_wake(seed_value: int, broke: String = "", wtype: String = "") -> Dictionary:
 	var room := ShopRoom2D.new()
 	room.show_screen = false
 	world.add_child(room)
@@ -41,7 +41,7 @@ func _one_wake(seed_value: int, broke: String = "") -> Dictionary:
 	if broke != "":
 		room.apply_events([{"e": "wake", "night": 2, "dread": 3.0, "broke": room.prop_names()[0], "closed": false}] as Array[Dictionary])
 	else:
-		room.wake(seed_value)
+		room.wake(seed_value, wtype)
 	var oob: bool = false
 	var settle_s: float = -1.0
 	for tick: int in range(8 * 60 + 30):
@@ -85,5 +85,13 @@ func run() -> Array:
 	rows.append(row("room2d_wake_other_seed_differs", diff > 5.0, "max difference %.1f px" % diff))
 	rows.append(row("room2d_wake_shatter_rests_in_room", not bool(d["oob"]) and float(d["settle_s"]) >= 0.0,
 		"out of bounds %s, settled at %.2f s" % [str(d["oob"]), float(d["settle_s"])]))
+	for wt: String in RoomScenes.WAKE_TYPES:  # step 32: every wake type stays in the room and comes to rest
+		var w1: Dictionary = await _one_wake(77, "", wt)
+		var w2: Dictionary = await _one_wake(77, "", wt)
+		var werr: float = 0.0
+		for i2: int in range((w1["pos"] as Array).size()):
+			werr = maxf(werr, ((w1["pos"] as Array)[i2] as Vector2).distance_to(((w2["pos"] as Array)[i2] as Vector2)))
+		rows.append(row("room2d_wake_%s" % wt, not bool(w1["oob"]) and float(w1["settle_s"]) >= 0.0 and werr < SAME_TOL,
+			"oob %s, settled %.2f s, repeat error %.3f px" % [str(w1["oob"]), float(w1["settle_s"]), werr]))
 	await clear()
 	return rows

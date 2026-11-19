@@ -274,7 +274,7 @@ func test_customer_types_shape_customers() -> void:
 	var base: int = run.sale_price(plain)
 	run.inventory.assign([cursed])
 	var mult: float = run.sale_mult()
-	assert_eq(run.sale_price(cursed), int(round(100.0 * run.tuning.buyer_pay_frac * mult * 1.4)), "ghost hunters pay for curses")
+	assert_eq(run.sale_price(cursed), int(round(100.0 * run.tuning.buyer_pay_frac * mult * 1.4 * run.tuning.cursed_buyer_mult)), "ghost hunters pay for curses")
 	assert_true(base > 0)
 
 

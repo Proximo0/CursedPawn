@@ -84,4 +84,4 @@ func test_cursed_buyers_pay_more() -> void:
 	var item: Dictionary = {"category": "book", "value": 100, "curse": "x", "uid": 1}
 	run.customer = {"kind": "buyer", "category": "book", "pay_mult": 1.0, "cursed_mult": 1.0, "imposter": false}
 	var plain: Dictionary = {"category": "book", "value": 100, "curse": "", "uid": 2}
-	assert_eq(run.sale_price(item), int(round(run.sale_price(plain) * 1.5)))
+	assert_eq(run.sale_price(item), int(round(run.sale_price(plain) * 1.5 * Tuning.new().cursed_buyer_mult)), "the omen multiplies the base cursed-buyer pay")
