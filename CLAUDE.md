@@ -49,6 +49,8 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
 - Every logic module has a unit test file. A change is done when `tools/run_tests.sh` and `tools/lint.sh` pass.
 - File-local helper names must be unique across the project (one `class_name` space).
 - Tools are quiet: print errors and failures, then one summary line.
+- Reading CI: list the job's steps first (names, times, conclusion), then fetch only the failing job's log with a
+  small tail (about 40 lines); every tool's last line is its summary. Full CI logs are thousands of tokens of setup.
 - Scripted shots key on game state (an observed condition) with a time fallback, never fixed seconds alone.
 - Compare state hashes only on frames where `Flags.commands == 0`.
 - Captures, tests and gates never write player data (`Flags.is_scripted_run()`).
