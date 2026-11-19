@@ -9,7 +9,7 @@ const LEN_RANGE: Dictionary = {  ## name -> [min secs, max secs]
 const FULL_SCALE: float = 32767.0
 
 
-## Builds and decoded samples are cached per (name, seed): building all 53 sounds takes ~1.2 s and decoding the
+## Builds and decoded samples are cached per (name, seed): building all 55 sounds takes ~1.2 s and decoding the
 ## ambient loop sample by sample ~1.7 s, and several tests read the same sounds. The determinism test builds fresh.
 static var _au_built: Dictionary = {}  ## "name:seed" -> AudioStreamWAV
 static var _au_decoded: Dictionary = {}  ## "name:seed" -> PackedInt32Array
@@ -153,7 +153,7 @@ func test_every_event_kind_maps_in_player() -> void:
 	p.on_events([{"e": "unknown_kind"}] as Array[Dictionary])  ## tolerated
 	p.ui("click")
 	p.ui("hover")
-	for kind: String in ["omen_flip", "altar_buy", "haunt_unlock", "request_pinned"]:
+	for kind: String in ["omen_flip", "altar_buy", "haunt_unlock", "request_pinned", "deed", "regular"]:
 		var n: int = p.played.size()
 		p.ui(kind)
 		assert_true(p.played.size() > n, "ui kind " + kind)

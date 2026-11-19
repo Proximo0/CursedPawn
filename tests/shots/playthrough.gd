@@ -124,7 +124,9 @@ func _sim_score(seed_in: int, omen_index: int) -> int:
 	if omens.size() <= omen_index:
 		return -1
 	var run := RunState.new()
-	run.start(seed_in, Catalog.load_default(), Tuning.new(), {}, _ue_opts(0, omens[omen_index], false))
+	var sim_opts: Dictionary = _ue_opts(0, omens[omen_index], false)
+	sim_opts["regulars"] = {}  # regular visits on, as for a real profile
+	run.start(seed_in, Catalog.load_default(), Tuning.new(), {}, sim_opts)
 	var st: Dictionary = {}
 	var score: int = 0
 	var n: int = 0
@@ -142,6 +144,8 @@ func _sim_score(seed_in: int, omen_index: int) -> int:
 					score += 50
 				"request_done":
 					score += 20
+				"regular":
+					score += 40
 				"cast":
 					score += 5
 	if run.won:
@@ -164,6 +168,39 @@ func _find_seed() -> Vector2i:
 	return best
 
 
+# ---------------------------------------------------------------- the guided first night
+
+## Starts the tutorial run (real when the logic's Tutorial exists, else a plain run with a synthetic hint) and snaps the
+## overlay: everything dimmed but the lit element, the quill and the ink-written note.
+func _tutorial() -> void:
+	var real: bool = ResourceLoader.exists("res://game/logic/tutorial.gd")
+	var seed_in: int = 7
+	if real:
+		seed_in = int((load("res://game/logic/tutorial.gd") as GDScript).get_script_constant_map().get("SEED", 7))
+	_g.new_run(seed_in, {}, {"tutorial": true})
+	await _frames(3)
+	var live: bool = await _until(func() -> bool: return _g.hud.tutorial.active, 30)
+	if not live:
+		_g.hud.feed([{"e": "tutorial_step", "step": 1, "text": "Use the lamp, the scale, your ears, your hands. Look before you buy.", "focus": "tools"}] as Array[Dictionary])
+	_g.cards.clear()
+	await _until(func() -> bool: return _g.hud.tutorial.age > 1.4, 120)
+	_g.room.settle_visuals()
+	await _snap("tutorial: the tools lit, the rest dimmed, quill and ink note%s" % ("" if live else " (synthetic hint)"), live)
+	if live:
+		var first: int = int(_g.hud.tutorial.step)
+		for _i: int in range(6):  # do what the hints ask until the step changes, so a second hint shows
+			var cmd: Dictionary = _bot.decide(_g.run)
+			_drive_customer(cmd)
+			_g.cards.clear()
+			await _frames(4)
+			if int(_g.hud.tutorial.step) != first and _g.hud.tutorial.active:
+				break
+		await _until(func() -> bool: return _g.hud.tutorial.age > 1.4, 120)
+		_g.cards.clear()
+		await _snap("tutorial: the next step points at %s" % str(_g.hud.tutorial.focus), _g.hud.tutorial.active)
+	_g.hud.tutorial.clear()
+
+
 # ---------------------------------------------------------------- the run
 
 func _go() -> void:
@@ -172,6 +209,7 @@ func _go() -> void:
 	root.add_child(_g)
 	await _frames(20)
 	var pick: Vector2i = _find_seed()
+	await _tutorial()
 	await _omen_draw(pick.x, pick.y)
 	await _frames(2)
 	await _play()
@@ -205,6 +243,7 @@ func _omen_draw(seed_in: int, omen_index: int) -> void:
 	s.ts_key(KEY_ENTER)
 	await _until(func() -> bool: return not picked_opts.is_empty(), 200)
 	var opts: Dictionary = picked_opts[0] if not picked_opts.is_empty() else _ue_opts(0, "", false)
+	opts["regulars"] = {}
 	await _snap("omen picked: the others dim, the card lifts", not picked_opts.is_empty())
 	s.free()
 	await _frames(2)
@@ -240,6 +279,24 @@ func _play() -> void:
 	_g.cards.clear()
 	var shown: bool = await _until(func() -> bool: return _g.end_panel_visible() and _g.hud._end_t > 1.6, 400)
 	await _snap("run end: %s, ectoplasm earned" % ("survived" if _g.run.won else "lost"), shown)
+	await _synthetic_round6()
+
+
+## Whatever of the round-6 pop-ups the real run did not produce (the logic may not have landed, or the policy never met
+## a regular) is shown from synthetic events, and the cell says so.
+func _synthetic_round6() -> void:
+	_g.hud.toasts.clear()
+	if not _done.has("regular"):
+		_g.hud.toasts.feed([{"e": "regular", "id": "widow", "name": "The Widow March", "chapter": 1,
+			"line": "It came home again. I only wanted it quiet."}] as Array[Dictionary])
+		await _until(func() -> bool: return float(_g.hud.toasts.regulars[0]["age"]) > 1.6 if not _g.hud.toasts.regulars.is_empty() else true, 200)
+		await _snap("a regular arrives: portrait card (synthetic event)", false)
+		_g.hud.toasts.clear()
+	if not _done.has("deed"):
+		_g.hud.toasts.push_deed("first_light")
+		await _until(func() -> bool: return float(_g.hud.toasts.deeds[0]["age"]) > 1.8 if not _g.hud.toasts.deeds.is_empty() else true, 200)
+		await _snap("deed toast: seal stamped, name inked (synthetic)", false)
+		_g.hud.toasts.clear()
 
 
 ## One bot action through the UI's own entry points.
@@ -317,6 +374,19 @@ func _after_action(night_before: int) -> void:
 		if not _g.cards.is_empty():
 			_g.cards[0]["age"] = 1.4
 		await _snap("SOMETHING WOKE card", ok4)
+	var reg: Dictionary = _has_event(ev, "regular")
+	if not reg.is_empty() and _once("regular"):
+		_g.cards.clear()
+		var ok5: bool = await _until(func() -> bool: return not _g.hud.toasts.regulars.is_empty() and float(_g.hud.toasts.regulars[0]["age"]) > 1.6)
+		await _snap("a regular arrives: %s, portrait card" % str(reg.get("name", "?")), ok5)
+	for rk: String in ["regular_done", "regular_refused"]:
+		if not _has_event(ev, rk).is_empty() and _once(rk):
+			await _frames(20)
+			await _snap("%s: the ledger line" % rk, true)
+	if not _g.hud.toasts.deeds.is_empty() and _once("deed"):
+		_g.cards.clear()
+		var ok6: bool = await _until(func() -> bool: return not _g.hud.toasts.deeds.is_empty() and float(_g.hud.toasts.deeds[0]["age"]) > 1.8)
+		await _snap("deed toast: seal stamped, name inked", ok6)
 	if _g.run.customer.get("kind", "") == RunState.BUYER and not _g.run.sellable().is_empty() and _once("buyer"):
 		_g.cards.clear()
 		_g.room.settle_visuals()
@@ -377,6 +447,70 @@ func _table_cmd(cmd: Dictionary) -> void:
 
 # ---------------------------------------------------------------- the altar
 
+## The Ledger book: deeds (some earned, secrets as ????) and the regulars page.
+func _ledger() -> void:
+	var ul: GDScript = load("res://game/ui/ui_ledger.gd") as GDScript
+	var real: bool = not (ul.call("deed_defs") as Array).is_empty() and not (ul.call("regular_defs") as Array).is_empty()
+	if not real:
+		ul.set("force_deeds", _sample_deeds())
+		ul.set("force_regulars", _sample_regulars())
+	var d: Array = ul.call("deed_defs")
+	var rg: Array = ul.call("regular_defs")
+	var prof := Node.new()  # a stand-in profile with the two fields the Ledger reads
+	prof.set_script(_profile_stub())
+	var got := PackedStringArray()
+	for i: int in range(0, d.size(), 3):
+		got.append(str((d[i] as Dictionary)["id"]))
+	prof.set("deeds", got)
+	var prog: Dictionary = {}
+	for i: int in range(rg.size()):
+		prog[str((rg[i] as Dictionary)["id"])] = [2, 1, 0, 3, 1, 0][i % 6]
+	prof.set("regulars", prog)
+	var p: Variant = (load("res://game/ui/pause_menu.gd") as GDScript).new()
+	p.settings = (load("res://game/ui/ts_settings.gd") as GDScript).new()
+	p.pauses_tree = false
+	p.profile = prof
+	root.add_child(p)
+	p.open()
+	await _frames(3)
+	p.ts_activate_menu("ledger")
+	await _until(func() -> bool: return p.ledger.age > 1.6, 200)
+	await _snap("ledger of deeds: inked seals, secrets as ????%s" % ("" if real else " (sample data)"), real)
+	p.ledger.activate("ledger_tab_regulars")
+	await _until(func() -> bool: return p.ledger.age > 1.4, 200)
+	await _snap("ledger: the regulars, arcs so far%s" % ("" if real else " (sample data)"), real)
+	p.free()
+	prof.free()
+	await _frames(2)
+
+
+func _profile_stub() -> GDScript:
+	var sc := GDScript.new()
+	sc.source_code = "extends Node\nvar deeds: PackedStringArray = PackedStringArray()\nvar regulars: Dictionary = {}\n"
+	sc.reload()
+	return sc
+
+
+func _sample_deeds() -> Array:
+	var out: Array = []
+	var names: Array[String] = ["First Light", "Dawn Again", "The Quiet Hand", "Candle Counter", "Rent Day", "Cold Cash", "Pen Pal",
+		"Perfect Pairs", "Table Shark", "Bad Luck Charm", "The Hush", "Full House", "Seal Breaker", "Ghost Friend"]
+	for i: int in range(names.size()):
+		out.append({"id": names[i].to_lower().replace(" ", "_"), "name": names[i], "text": "Do the thing the deed asks, once, and live.",
+			"secret": i % 4 == 2})
+	return out
+
+
+func _sample_regulars() -> Array:
+	var names: Array[String] = ["The Widow March", "Little Tom", "Father Aldous", "The Great Mirelli", "Mrs Quill", "Mr Hollow"]
+	var out: Array = []
+	for i: int in range(names.size()):
+		out.append({"id": names[i].to_lower().replace(" ", "_"), "name": names[i], "tid": "x", "chapters": [
+			{"line": "It came home again. I only wanted it quiet."}, {"line": "Take it, please. It hums at night."},
+			{"line": "Keep it. We are friends now."}, {"line": "Goodbye."}]})
+	return out
+
+
 func _altar() -> void:
 	root.remove_child(_g)  # the title and the altar are drawn on their own
 	await _frames(2)
@@ -384,12 +518,14 @@ func _altar() -> void:
 	t.settings = (load("res://game/ui/ts_settings.gd") as GDScript).new()
 	t.altar_on = true
 	t.altar_ecto = 14
+	t.tutorial_on = true
 	root.add_child(t)
 	await _frames(3)
 	t.canvas.t = 12.0
-	await _snap("title with THE ALTAR entry and ectoplasm to spend", true)
+	await _snap("title with SKIP TUTORIAL, THE ALTAR, LEDGER and ectoplasm to spend", true)
 	t.free()
 	await _frames(2)
+	await _ledger()
 	var ua: GDScript = load("res://game/ui/ui_altar.gd") as GDScript
 	var real: bool = bool(ua.call("available"))
 	if (ua.call("defs") as Array).is_empty():
@@ -407,8 +543,10 @@ func _altar() -> void:
 	a.focus_id = "up:%s" % pick_id
 	await _snap("altar: candles, ectoplasm 14, upgrade cards with rank pips%s" % ("" if real else " (sample data)"), ok)
 	a.ts_activate("up:%s" % pick_id)
-	await _frames(14)
-	await _snap("altar: buy, a wisp flies to the card, a pip lights", a.ranks.get(pick_id, 0) == 1)
+	await _frames(5)
+	await _snap("altar buy at 1x: the card flashes white, wisps rise", a.ranks.get(pick_id, 0) == 1)
+	await _frames(22)
+	await _snap("altar buy: big wisps with trails fly in, the pip ignites", a.ranks.get(pick_id, 0) == 1)
 	a.free()
 
 

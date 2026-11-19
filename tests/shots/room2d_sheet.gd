@@ -77,6 +77,10 @@ func _go() -> void:
 		if picks.size() < 10 and not picks.has(n):
 			picks.append(n)
 	await _frames(20)
+	if OS.get_cmdline_user_args().has("--r6"):  # only the round 6 cells (cabinet, regular rim light, low eyes, Collector)
+		await _round6_cells(cat, picks)
+		_save_sheet()
+		return
 	if OS.get_cmdline_user_args().has("--r5"):  # only the round 5 cells (Collector, eyes, wake, FX, pendulum)
 		await _round5_cells(cat, picks)
 		_save_sheet()
@@ -151,6 +155,43 @@ func _go() -> void:
 		await _snap("wake %.1f s" % (float(target) / 60.0))
 	await _measure(cat, picks)
 	_save_sheet()
+
+
+## Round 6: the curio cabinet (empty, 5 curios, 12), a regular with the warm rim light next to a plain customer, the
+## Dread 0.5 eyes low under the shelves, and the Collector's new face.
+func _round6_cells(cat: Catalog, picks: PackedStringArray) -> void:
+	_room.scare_level = 1
+	_room.setup(_run_with(cat, picks))
+	await _snap("cabinet empty")
+	var ids: PackedStringArray = PackedStringArray()
+	for cr: Variant in (JSON.parse_string(FileAccess.open("res://game/data/curios.json", FileAccess.READ).get_as_text()) as Array):
+		ids.append(str((cr as Dictionary)["id"]))
+	_room.set_displayed(ids.slice(0, 5))
+	await _snap("cabinet 5 curios")
+	_room.set_displayed(ids.slice(0, 14))
+	await _snap("cabinet 12 curios (cap)")
+	_customer("buyer", "", "widow")
+	_room._bubble.hide_now()
+	await _frames(40)
+	await _snap("plain customer")
+	_room.apply_events([{"e": "passed", "kind": "buyer"}] as Array[Dictionary])
+	await _frames(120)
+	_room.apply_events([{"e": "customer", "kind": "buyer", "category": "toy", "tid": "widow", "regular": "widow_march"}] as Array[Dictionary])
+	_room.settle_visuals()
+	_room._bubble.hide_now()
+	await _frames(40)
+	await _snap("regular: warm rim light")
+	_room.apply_events([{"e": "passed", "kind": "buyer"}] as Array[Dictionary])
+	await _frames(120)
+	_room.set_dread(0.5 * Tuning.shared().wake_threshold)
+	await _frames(90)
+	await _snap("dread 0.5: low eyes")
+	_room.set_dread(0.0)
+	_room.apply_events([{"e": "customer", "kind": "buyer", "category": "toy", "tid": "collector", "boss": true}] as Array[Dictionary])
+	_room.settle_visuals()
+	_room._bubble.hide_now()
+	await _frames(240)
+	await _snap("collector at the counter")
 
 
 ## Round 5: the Collector's arrival, Dread 0.5 eyes, the wake silhouette, banish / glamour / glimmer and the Pendulum.

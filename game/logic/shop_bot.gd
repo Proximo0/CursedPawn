@@ -92,6 +92,8 @@ func _bot_greedy_buy(run: RunState) -> Dictionary:
 	var mid: int = int(run.estimate()["mid"])
 	var ask: int = int(c["ask"])
 	var spendable: int = run.cash - _bot_reserve(run, 0.0)
+	if str(c.get("regular", "")) != "" and ask <= spendable:
+		return {"t": "buy"}  # the story is worth a fair price
 	if ask <= mid and ask <= spendable:
 		return {"t": "buy"}
 	var offer: int = mini(spendable, int(mid * 0.6))
@@ -104,7 +106,7 @@ func _bot_cautious_buy(run: RunState) -> Dictionary:
 	var c: Dictionary = run.customer
 	if not (c["tells"] as Array).is_empty():
 		return {"t": "pass"}
-	if run.tool_ok("pendulum") and not (c["tools"] as Array).has("pendulum") and run.clock >= run.tuning.inspect_minutes:
+	if run.tool_ok("pendulum") and not (c["tools"] as Array).has("pendulum") and run.clock >= run.tuning.pendulum_minutes:
 		return {"t": "inspect", "tool": "pendulum"}  # the altar's sixth tool: a certain yes or no on a curse
 	var picked: int = 0
 	for tool: String in ["uv", "listen", "touch", "scale"]:  # the first two it can use (an omen can break one)
@@ -118,6 +120,8 @@ func _bot_cautious_buy(run: RunState) -> Dictionary:
 	var mid: int = int(run.estimate()["mid"])
 	var ask: int = int(c["ask"])
 	var spendable: int = run.cash - _bot_reserve(run, 1.0)
+	if str(c.get("regular", "")) != "" and ask <= spendable:
+		return {"t": "buy"}  # no tell after its two tools: the story is worth a fair price
 	if ask <= int(mid * 0.8) and ask <= spendable:
 		return {"t": "buy"}
 	var offer: int = mini(spendable, int(mid * 0.55))

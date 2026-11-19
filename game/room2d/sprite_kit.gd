@@ -3283,21 +3283,24 @@ static func _sk_collector(f: int) -> Image:
 		_sk_p(g, cx - 5, by - up, 11)
 	_sk_l(g, cx - 4, 49 - up, cx + 2, 53 - up, 10)
 	_sk_l(g, cx + 2, 53 - up, cx + 5, 50 - up, 11)
-	# neck, a very long pale face with hollow cheeks, deep sockets, a thin mouth
+	# neck, a long gaunt face that is plainly alive: warm cheeks, lips, brows, and round brass spectacles
 	var hy: int = 22 - up
 	_sk_r(g, cx - 2, hy + 8, 5, 8, 14)
 	_sk_r(g, cx + 1, hy + 8, 2, 8, 4)
 	_sk_e(g, float(cx), float(hy), 6.0, 9.5, 14)
 	_sk_e(g, float(cx) - 1.5, float(hy) - 1.0, 4.0, 8.0, 15)
 	_sk_r(g, cx + 3, hy - 6, 3, 13, 4)
-	_sk_r(g, cx - 5, hy + 1, 2, 5, 4)
-	_sk_r(g, cx + 3, hy + 1, 2, 5, 4)
-	_sk_p(g, cx - 4, hy, 15)
+	_sk_r(g, cx - 5, hy + 3, 1, 3, 4)  # a hollow under each cheekbone, in light tones only
+	_sk_r(g, cx + 4, hy + 3, 1, 3, 3)
+	_sk_p(g, cx - 4, hy + 4, 10)  # a little blood in the cheeks
+	_sk_p(g, cx + 3, hy + 4, 9)
 	_sk_r(g, cx - 3, hy + 8, 6, 1, 4)
 	_sk_r(g, cx - 1, hy + 2, 2, 4, 4)  # nose
-	_sk_r(g, cx - 3, hy + 6, 7, 1, 0)  # mouth, with a slight, patient curl
-	_sk_p(g, cx + 4, hy + 5, 0)
-	_sk_p(g, cx - 4, hy + 5, 0)
+	_sk_r(g, cx - 2, hy + 6, 5, 1, 13)  # lips, a slight patient curl
+	_sk_p(g, cx + 3, hy + 5, 13)
+	_sk_p(g, cx - 3, hy + 5, 12)
+	_sk_r(g, cx - 5, hy - 1, 4, 1, 3)  # brows
+	_sk_r(g, cx + 1, hy - 1, 4, 1, 3)
 	# the top hat: a tall crown, a red band, a curled brim that shades the eyes
 	_sk_r(g, cx - 8, hy - 21, 17, 15, 1)
 	_sk_r(g, cx - 8, hy - 21, 3, 15, 2)
@@ -3310,22 +3313,30 @@ static func _sk_collector(f: int) -> Image:
 	_sk_r(g, cx - 12, hy - 3, 24, 1, 0)
 	_sk_r(g, cx - 6, hy - 2, 12, 1, 4)  # the brim's shadow across the brow
 	for ex: int in [-3, 2]:
+		var lx: int = _sk_eye_x(cx, ex)
+		_sk_r(g, lx - 1, hy, 5, 4, 14)  # lens glass, then the eye behind it
 		if f == 2:
-			_sk_r(g, _sk_eye_x(cx, ex), hy + 1, 3, 1, 0)
+			_sk_r(g, lx, hy + 2, 3, 1, 0)
 		else:
-			_sk_r(g, _sk_eye_x(cx, ex), hy - 1, 3, 3, 0)
-			_sk_p(g, _sk_eye_x(cx, ex) + 1, hy, 11)
-	# the case: red velvet, brass edge, a grid of tiny drawers with brass pulls (one slides open in frame 3)
+			_sk_r(g, lx, hy + 1, 3, 2, 15)
+			_sk_r(g, lx + 1, hy + 1, 2, 2, 0)
+			_sk_p(g, lx + 1, hy + 1, 11)
+		_sk_r(g, lx - 2, hy - 1, 7, 1, 10)  # brass rims
+		_sk_r(g, lx - 2, hy + 4, 7, 1, 9)
+		_sk_r(g, lx - 2, hy, 1, 4, 10)
+		_sk_r(g, lx + 4, hy, 1, 4, 9)
+		_sk_p(g, lx + 3, hy, 15)  # glint on the lens
+	_sk_r(g, cx - 1, hy + 1, 3, 1, 10)  # the bridge
+	# the case: a brass-bound box of deep wine velvet drawers, dark wood between them, a bright brass pull on each
 	var by0: int = 60 - up
-	_sk_r(g, 22, by0, 28, 23, 12)
-	_sk_r(g, 22, by0, 28, 1, 13)
-	_sk_r(g, 22, by0, 1, 23, 13)
-	_sk_r(g, 49, by0, 1, 23, 0)
-	_sk_r(g, 22, by0 + 22, 28, 1, 0)
-	_sk_r(g, 23, by0 + 1, 26, 1, 10)
-	_sk_r(g, 23, by0 + 21, 26, 1, 8)
-	_sk_p(g, 23, by0 + 1, 11)
-	_sk_p(g, 48, by0 + 1, 11)
+	_sk_r(g, 22, by0, 28, 23, 10)  # brass frame
+	_sk_r(g, 22, by0, 28, 1, 11)
+	_sk_r(g, 22, by0, 1, 23, 11)
+	_sk_r(g, 49, by0, 1, 23, 8)
+	_sk_r(g, 22, by0 + 22, 28, 1, 8)
+	_sk_r(g, 23, by0 + 1, 26, 21, 8)  # dark wood carcass showing between the drawers
+	_sk_p(g, 22, by0, 15)
+	_sk_p(g, 49, by0, 9)
 	for r: int in range(3):
 		for c: int in range(4):
 			var dx: int = 24 + c * 6
@@ -3336,10 +3347,12 @@ static func _sk_collector(f: int) -> Image:
 				_sk_p(g, dx + 1, dy + 1, 15)
 				_sk_p(g, dx + 2, dy + 1, 11)
 				dy += 3
-			_sk_r(g, dx, dy, 5, 5, 8)
-			_sk_r(g, dx, dy, 5, 1, 9)
+			_sk_r(g, dx, dy, 5, 5, 12)  # velvet front
+			_sk_r(g, dx, dy, 5, 1, 13)
 			_sk_r(g, dx, dy + 4, 5, 1, 0)
-			_sk_p(g, dx + 2, dy + 2, 11 if (r + c) % 3 != 1 else 10)
+			_sk_r(g, dx + 1, dy + 2, 3, 1, 11)  # the brass pull
+			_sk_p(g, dx + 1, dy + 3, 9)
+			_sk_p(g, dx + 3, dy + 3, 9)
 	# long white fingers wrapped under the case from the cuffs, thumbs over the front
 	for h: int in range(2):
 		var hx2: int = 16 if h == 0 else 50
@@ -3394,36 +3407,55 @@ static func omen_art(id: String) -> ImageTexture:
 			_sk_r(g, 20, 34, 3, 2, 8)
 			_sk_r(g, 33, 33, 3, 2, 8)
 		"blind_lamp":
-			_sk_r(g, 15, 6, 18, 9, 3)
-			_sk_r(g, 15, 6, 18, 2, 4)
-			_sk_r(g, 15, 13, 18, 2, 2)
-			_sk_r(g, 22, 15, 4, 16, 9)
-			_sk_r(g, 22, 15, 1, 16, 10)
-			_sk_r(g, 17, 31, 14, 3, 8)
-			_sk_r(g, 17, 31, 14, 1, 9)
-			for y: int in range(16, 36):  # a cone of nothing: sparse grey dither and no light
-				var hwid: int = (y - 15) / 2 + 2
+			# a bright brass lamp that gives no light: a bone shade, a dead black bulb crossed in red, and a cone of black
+			for y: int in range(14, 37):
+				var hwid: int = (y - 13) * 2 / 3 + 4
 				for x: int in range(24 - hwid, 24 + hwid + 1):
-					if (x + y) % 4 == 0 and (x < 21 or x > 27 or y > 30):
-						_sk_p(g, x, y, 2)
-			_sk_l(g, 19, 7, 29, 14, 13)
-			_sk_l(g, 29, 7, 19, 14, 13)
-			_sk_l(g, 19, 8, 29, 15, 12)
-			_sk_l(g, 29, 8, 19, 15, 12)
+					if x < 3 or x > 44:
+						continue
+					_sk_p(g, x, y, 0 if (x + y) % 5 != 0 or y > 33 else 1)
+			for y: int in range(5, 14):  # the shade, wide at the bottom
+				var sw: int = 5 + (y - 5) * 6 / 8
+				_sk_r(g, 24 - sw, y, sw * 2 + 1, 1, 14)
+				_sk_p(g, 24 - sw, y, 4)
+				_sk_p(g, 24 + sw, y, 3)
+			_sk_r(g, 20, 5, 6, 8, 15)
+			_sk_r(g, 15, 13, 19, 2, 4)
+			_sk_r(g, 15, 14, 19, 1, 3)
+			_sk_r(g, 21, 15, 7, 5, 0)  # the dead bulb, black
+			_sk_p(g, 22, 16, 3)
+			_sk_r(g, 23, 20, 3, 14, 10)  # brass stem
+			_sk_r(g, 23, 20, 1, 14, 11)
+			_sk_r(g, 25, 20, 1, 14, 9)
+			_sk_r(g, 17, 34, 15, 3, 9)
+			_sk_r(g, 17, 34, 15, 1, 11)
+			_sk_l(g, 19, 6, 29, 14, 13)  # a red cross over the shade
+			_sk_l(g, 29, 6, 19, 14, 13)
+			_sk_l(g, 20, 6, 30, 14, 12)
+			_sk_l(g, 30, 6, 20, 14, 12)
 		"deaf_ear":
-			_sk_e(g, 27.0, 16.0, 9.0, 11.0, 14)
-			_sk_e(g, 26.0, 33.0 - 3.0, 4.0, 5.0, 14)
-			_sk_e(g, 25.5, 15.0, 7.0, 9.5, 15)
-			_sk_e(g, 28.0, 17.0, 5.0, 8.0, 14)
-			_sk_e(g, 28.5, 19.0, 3.0, 5.5, 4)
-			_sk_r(g, 28, 21, 3, 4, 0)
-			_sk_r(g, 28, 21, 3, 2, 11)  # a plug of wax in the canal
-			_sk_l(g, 22, 14, 24, 25, 4)
-			_sk_r(g, 33, 12, 2, 12, 4)
-			for ax: int in [6, 10, 14]:
-				_sk_e_arc(g, ax + 6, 18, 3 + (ax - 6) / 2)
-			_sk_l(g, 4, 31, 18, 9, 13)
-			_sk_l(g, 5, 31, 19, 9, 12)
+			# a big bone ear on the right, sound arriving from the left in amber arcs that stop dead against a wax plug
+			_sk_e(g, 31.0, 19.0, 10.0, 13.0, 4)
+			_sk_e(g, 31.0, 19.0, 9.0, 12.0, 14)
+			_sk_e(g, 30.0, 18.0, 7.0, 10.0, 15)
+			_sk_e(g, 32.0, 20.0, 5.0, 8.0, 14)
+			_sk_e(g, 32.5, 21.0, 3.0, 5.5, 4)
+			_sk_l(g, 26, 14, 28, 26, 3)
+			_sk_e(g, 33.0, 20.0, 2.0, 3.0, 0)
+			_sk_r(g, 31, 19, 5, 4, 11)  # the wax plug, bright
+			_sk_r(g, 31, 19, 5, 1, 15)
+			_sk_r(g, 31, 22, 5, 1, 10)
+			_sk_e(g, 31.0, 34.0, 4.0, 3.0, 14)  # the lobe
+			_sk_e(g, 30.0, 33.0, 3.0, 2.0, 15)
+			for k: int in range(3):  # arcs of sound that give out before they reach it
+				var ar: int = 5 + k * 4
+				for ai: int in range(-6, 7):
+					if (ai + k) % 3 == 0 and absi(ai) > k:
+						continue
+					var ang: float = float(ai) * 0.2
+					_sk_p(g, 16 - roundi(cos(ang) * float(ar)) + 8, 20 + roundi(sin(ang) * float(ar) * 1.5), 11 if k == 0 else (10 if k == 1 else 9))
+			_sk_l(g, 4, 6, 12, 14, 13)  # a small red slash over the speaker
+			_sk_l(g, 12, 6, 4, 14, 13)
 		"numb_hands":
 			_sk_r(g, 17, 22, 15, 12, 4)
 			_sk_r(g, 17, 22, 15, 2, 15)
@@ -3837,3 +3869,215 @@ static func _sk_upgrade_row(id: String) -> Dictionary:
 			if r is Dictionary and str((r as Dictionary).get("id", "")) == id:
 				return r as Dictionary
 	return {}
+
+
+# ---------------------------------------------------------------- round 6: regular portraits and deed seals
+const SK_REG_W: int = 32
+const SK_REG_H: int = 40
+const SK_SEAL: int = 20
+const SK_REG_KINDS: Array[String] = ["veil", "cap", "collar", "tophat", "hood", "bun"]
+const SK_REG_WORDS: Dictionary = {"widow": "veil", "mourn": "veil", "veil": "veil", "boy": "cap", "kid": "cap", "child": "cap",
+	"priest": "collar", "father": "collar", "vicar": "collar", "magic": "tophat", "conjur": "tophat", "great": "tophat",
+	"monk": "hood", "hermit": "hood", "nun": "hood", "granny": "bun", "grand": "bun", "aunt": "bun", "mrs": "bun"}
+const SK_SEAL_TONES: Array = [[12, 13, 11], [5, 6, 7], [8, 9, 10], [1, 3, 4], [0, 12, 13], [9, 10, 11]]
+
+
+## A 32x40 framed bust of one of the story regulars. The id is looked up in game/data/regulars.json at call time (name
+## and type); an id that is not in the file (or no file yet) is dressed from its hash, so every id gets a stable face.
+## Palette-locked, brass frame, candle-lit from the top left, one eye a hair off.
+static func regular_portrait(id: String) -> ImageTexture:
+	var row: Dictionary = _sk_regular_row(id)
+	var key: String = (id + " " + str(row.get("name", ""))).to_lower()
+	var kind: String = ""
+	var best: int = 9999
+	for w: String in SK_REG_WORDS:
+		var at: int = key.find(w)
+		if at >= 0 and at < best:
+			best = at
+			kind = str(SK_REG_WORDS[w])
+	var hv: int = absi(hash(id))
+	if kind == "":
+		kind = SK_REG_KINDS[hv % SK_REG_KINDS.size()]
+	var g: Image = _sk_new(SK_REG_W, SK_REG_H)
+	_sk_r(g, 0, 0, SK_REG_W, SK_REG_H, 9)  # the frame, brass with a dark inner lip
+	_sk_r(g, 0, 0, SK_REG_W, 1, 11)
+	_sk_r(g, 0, 0, 1, SK_REG_H, 10)
+	_sk_r(g, 0, SK_REG_H - 1, SK_REG_W, 1, 8)
+	_sk_r(g, SK_REG_W - 1, 0, 1, SK_REG_H, 8)
+	_sk_r(g, 2, 2, 28, 36, 0)
+	for y: int in range(3, 37):  # a dusk wall, dithered, warmer on the candle side
+		for x: int in range(3, 29):
+			var t: float = float(y) / 36.0 + float(x) / 120.0
+			var c: int = 2 if t < 0.35 else (1 if t < 0.7 else 0)
+			if (x + y) % 2 == 0 and t > 0.3 and t < 0.75:
+				c = maxi(c - 1, 0)
+			_sk_p(g, x, y, c)
+	var tones: Array = [[14, 15, 4], [14, 15, 3], [15, 14, 4]]
+	var skin: Array = tones[(hv / 7) % tones.size()] as Array
+	var cloth: int = [2, 3, 12, 6, 8][(hv / 3) % 5]
+	var cx: int = 16
+	# shoulders, collar and neck
+	_sk_e(g, float(cx), 42.0, 14.0, 10.0, cloth)
+	_sk_e(g, float(cx) - 3.0, 42.0, 9.0, 9.0, mini(cloth + 1, 15) if cloth != 12 else 13)
+	_sk_r(g, cx - 3, 27, 7, 6, int(skin[2]))
+	_sk_r(g, cx - 3, 27, 3, 5, int(skin[0]))
+	var ey: int = 17
+	var tall: int = 8 if kind != "cap" else 7  # the boy has a smaller head
+	_sk_e(g, float(cx), float(ey), 6.0, float(tall), int(skin[0]))
+	_sk_e(g, float(cx) - 1.5, float(ey) - 1.0, 4.0, float(tall) - 2.0, int(skin[1]))
+	_sk_r(g, cx + 3, ey - 4, 3, 9, int(skin[2]))
+	_sk_p(g, cx - 2, ey + 6, 13)  # cheeks and mouth
+	_sk_r(g, cx - 2, ey + 5, 5, 1, 12 if kind != "tophat" else 13)
+	_sk_p(g, cx + 3, ey + 4, 9)
+	_sk_r(g, cx, ey + 1, 1, 3, int(skin[2]))  # nose
+	var wrong: int = hv % 3  # which eye sits a pixel low
+	for e: int in range(2):
+		var ex: int = cx - 4 + e * 5
+		var yy: int = ey - 1 + (1 if e == wrong % 2 and wrong < 2 else 0)
+		_sk_r(g, ex, yy, 3, 2, 15)
+		_sk_r(g, ex + 1, yy, 2 if e == 0 else 1, 2, 0)
+		_sk_p(g, ex + 1, yy, 11)  # a pinprick of candle in each eye
+		_sk_r(g, ex - 1, yy - 2, 4, 1, 3)
+	match kind:
+		"veil":  # a black bonnet and a net veil to the chin
+			_sk_e(g, float(cx), float(ey) - 6.0, 8.0, 5.0, 0)
+			_sk_r(g, cx - 8, ey - 6, 16, 5, 0)
+			_sk_r(g, cx - 6, ey - 9, 4, 1, 3)
+			_sk_r(g, cx - 8, ey - 3, 3, 14, 0)  # the veil falls in black drapes either side of the face
+			_sk_r(g, cx + 6, ey - 3, 3, 14, 0)
+			_sk_r(g, cx - 8, ey - 3, 1, 14, 1)
+			_sk_l(g, cx - 5, ey + 9, cx + 5, ey + 9, 3)  # and a fine lace hem at the chin
+			_sk_p(g, cx - 3, ey - 5, 4)
+		"cap":  # a flat cap and tousled fringe
+			_sk_e(g, float(cx), float(ey) - 5.0, 7.0, 4.0, 8)
+			_sk_r(g, cx - 7, ey - 6, 14, 2, 9)
+			_sk_r(g, cx - 8, ey - 4, 17, 2, 8)
+			_sk_r(g, cx - 7, ey - 6, 4, 1, 10)
+			_sk_r(g, cx - 5, ey - 2, 3, 1, 9)
+		"collar":  # grey hair, a black cassock and a white clerical collar
+			_sk_e(g, float(cx), float(ey) - 6.0, 7.0, 4.0, 4)
+			_sk_r(g, cx - 7, ey - 5, 3, 7, 4)
+			_sk_r(g, cx + 5, ey - 5, 2, 6, 3)
+			_sk_r(g, cx - 4, ey - 8, 3, 2, 14)
+			_sk_r(g, cx - 5, 30, 11, 5, 0)
+			_sk_r(g, cx - 2, 31, 5, 3, 15)
+		"tophat":  # a stage magician: top hat, a cravat and a waxed moustache
+			_sk_r(g, cx - 6, ey - 16, 13, 10, 0)
+			_sk_r(g, cx - 6, ey - 16, 2, 10, 2)
+			_sk_r(g, cx - 6, ey - 8, 13, 2, 12)
+			_sk_e(g, float(cx), float(ey) - 6.0, 11.0, 2.0, 0)
+			_sk_r(g, cx - 3, ey + 4, 3, 1, 0)
+			_sk_r(g, cx + 1, ey + 4, 3, 1, 0)
+			_sk_r(g, cx - 3, 30, 7, 4, 13)
+			_sk_p(g, cx, 31, 15)
+		"hood":  # a hood pulled forward, the face deep inside it
+			_sk_e(g, float(cx), float(ey) - 2.0, 10.0, 12.0, cloth)
+			_sk_e(g, float(cx), float(ey) + 1.0, 6.0, 8.0, int(skin[0]))
+			_sk_e(g, float(cx) - 1.0, float(ey), 4.0, 6.0, int(skin[1]))
+			_sk_r(g, cx - 4, ey - 1, 3, 2, 0)
+			_sk_r(g, cx + 1, ey - 1, 3, 2, 0)
+			_sk_p(g, cx - 3, ey - 1, 11)
+			_sk_p(g, cx + 2, ey - 1, 11)
+			_sk_r(g, cx - 2, ey + 5, 5, 1, 12)
+		_:  # a tight grey bun and a cameo at the throat
+			_sk_e(g, float(cx), float(ey) - 6.0, 7.0, 4.0, 4)
+			_sk_e(g, float(cx), float(ey) - 11.0, 3.0, 3.0, 4)
+			_sk_p(g, cx - 1, ey - 12, 14)
+			_sk_r(g, cx - 7, ey - 4, 2, 7, 4)
+			_sk_r(g, cx + 6, ey - 4, 1, 6, 3)
+			_sk_e(g, float(cx), 31.0, 2.0, 2.0, 14)
+			_sk_p(g, cx, 31, 12)
+	# a dim glaze: darker corners, a hairline crack in the glass, a brass nameplate nick
+	for p: Vector2i in [Vector2i(3, 3), Vector2i(28, 3), Vector2i(3, 36), Vector2i(28, 36)]:
+		_sk_p(g, p.x, p.y, 0)
+	_sk_l(g, 24, 3, 20, 9, 4)
+	_sk_p(g, 20, 9, 15)
+	_sk_p(g, 14, 38, 11)
+	return ImageTexture.create_from_image(g)
+
+
+static func _sk_regular_row(id: String) -> Dictionary:
+	var f: FileAccess = FileAccess.open("res://game/data/regulars.json", FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	var rows: Array = []
+	if parsed is Array:
+		rows = parsed as Array
+	elif parsed is Dictionary and (parsed as Dictionary).get("regulars", null) is Array:
+		rows = (parsed as Dictionary)["regulars"] as Array
+	for r: Variant in rows:
+		if r is Dictionary and str((r as Dictionary).get("id", "")) == id:
+			return r as Dictionary
+	return {}
+
+
+## A 20x20 wax seal for one deed: a slightly uneven disc of wax (colour from the id hash), a pressed ring and a small
+## embossed emblem (cross, star, eye, key or moon), lit from the top left, with a drip or two at the rim.
+static func deed_seal(id: String) -> ImageTexture:
+	var hv: int = absi(hash(id))
+	var tone: Array = SK_SEAL_TONES[hv % SK_SEAL_TONES.size()] as Array
+	var dk: int = int(tone[0])
+	var md: int = int(tone[1])
+	var lt: int = int(tone[2])
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = hv + 77
+	var g: Image = _sk_new(SK_SEAL, SK_SEAL)
+	var cx: float = 9.5
+	var cy: float = 9.5
+	var rad: PackedFloat32Array = PackedFloat32Array()
+	for i: int in range(16):
+		rad.append(8.2 + rng.randf_range(-0.7, 0.9))
+	for y: int in range(SK_SEAL):
+		for x: int in range(SK_SEAL):
+			var dx: float = float(x) - cx
+			var dy: float = float(y) - cy
+			var ang: float = fposmod(atan2(dy, dx), TAU)
+			var r: float = rad[int(ang / TAU * 16.0) % 16]
+			var d: float = sqrt(dx * dx + dy * dy)
+			if d > r:
+				continue
+			var c: int = md
+			if dx + dy < -4.0 and d > 3.0:
+				c = lt if d > r - 2.5 else md
+			elif dx + dy > 5.0 and d > r - 3.0:
+				c = dk
+			_sk_p(g, x, y, c)
+	for a: int in range(24):  # the pressed ring
+		var an: float = float(a) / 24.0 * TAU
+		var rx: int = roundi(cx + cos(an) * 6.0)
+		var ry: int = roundi(cy + sin(an) * 6.0)
+		_sk_p(g, rx, ry, dk if cos(an) + sin(an) > -0.4 else md)
+		if cos(an) + sin(an) < -0.6:
+			_sk_p(g, rx + 1, ry + 1, lt)
+	var emb: int = hv / 6 % 5
+	var ox: int = 8
+	var oy: int = 8
+	match emb:
+		0:
+			_sk_r(g, ox + 1, oy - 2, 2, 7, dk)
+			_sk_r(g, ox - 1, oy, 6, 2, dk)
+		1:
+			for k: int in range(5):
+				var an2: float = float(k) / 5.0 * TAU - PI * 0.5
+				_sk_l(g, ox + 1, oy + 1, ox + 1 + roundi(cos(an2) * 4.0), oy + 1 + roundi(sin(an2) * 4.0), dk)
+		2:
+			_sk_e(g, float(ox) + 1.5, float(oy) + 1.5, 4.0, 2.4, dk)
+			_sk_r(g, ox + 1, oy + 1, 2, 2, lt)
+		3:
+			_sk_e(g, float(ox) + 1.0, float(oy) - 1.0, 2.0, 2.0, dk)
+			_sk_r(g, ox + 1, oy, 1, 6, dk)
+			_sk_r(g, ox + 2, oy + 4, 2, 1, dk)
+			_sk_r(g, ox + 2, oy + 2, 2, 1, dk)
+		_:
+			_sk_e(g, float(ox) + 1.5, float(oy) + 1.5, 4.0, 4.0, dk)
+			_sk_e(g, float(ox) + 3.0, float(oy) + 0.5, 3.5, 3.8, md)
+	_sk_p(g, ox - 1, oy - 1, lt)  # a catchlight
+	var drips: int = 1 + hv % 2
+	for i: int in range(drips):  # wax that ran a little at the lower rim
+		var dxp: int = [5, 12][i] + rng.randi_range(-1, 1)
+		_sk_r(g, dxp, 17, 2, 2, md)
+		_sk_p(g, dxp, 17, lt)
+		_sk_p(g, dxp + 1, 19, dk)
+	_sk_outline(g)
+	return ImageTexture.create_from_image(g)

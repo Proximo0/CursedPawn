@@ -117,3 +117,36 @@ Washington gambling = paying + chance + a thing of value; each way to get a curi
   ectoplasm; `PlayerProfile.altar_opts(store)` gives `{upgrades, carry_cash}` to merge into the next run's opts.
 - Bots keep a want-matching item for the Collector on the evening before; cautious uses the Pendulum first. Lab adds the
   `*_collector` and `upgrades_info` lines (maxed upgrades: cautious 0.97, greedy 0.53).
+
+## Round 6: regulars, the Ledger of Deeds, the guided first night, balance (logic; contract in docs/round6_brief.md)
+- **Regulars** (`game/data/regulars.json`, `Regulars`): six `{id, name, tid, chapters: [{line, kind, item_id | category, curse,
+  outcome_lines: {done, refused}, reward}]}`, 3-4 chapters, lines at most 80 characters, the last chapter always pays a reward.
+  Ids: march (Widow March, music box), ned (Little Ned, gramophone), crowe (Father Crowe, cribbage with the cellar), vane (the Great
+  Vane, the assistant in the box), ashby (Colonel Ashby, the backwards clock), dottie (Dottie Vane, the shy ghost).
+  Profile `regulars: {id: next chapter index}` (`RelicStore.regulars`). The key `regulars` in run opts switches visits on
+  (`PlayerProfile.altar_opts` always sets it; the lab and tests without it see none). `run.regular` is `{id, night, chapter
+  (0-based), state: ""|"here"|"done"|"refused"}`, planned at start on its own RNG (`Regulars.plan`: `regular_chance`, night 2-4, an
+  unfinished arc). The regular is the first customer on or after their night; a seller chapter comes at once, a buyer chapter
+  as soon as a held object matches (item_id, or category, and curse when named), so no story is lost to an empty shelf.
+  Events: `customer` with `regular: id` (type is the regular's name, `tid` the look-alike type), then `regular {id, name, chapter
+  (1-based), chapters, line}`. Buying (seller) or selling a match (buyer, pays `regular_pay_mult` * value): `regular_done {id,
+  chapter, line, reward, price}`, the reward goes to `run.found` (`found` event). Passing, fleeing or haggling out:
+  `regular_refused {id, chapter, line}`. Either way `run.regular_progress[id] = chapter + 1` and `PlayerProfile.record_result`
+  folds it into `store.regulars`.
+- **Deeds** (`game/data/deeds.json`, `Deeds`): 37 `{id, name, text, secret, check}`. `Deeds.check(run, profile) -> PackedStringArray`
+  (new ids only, writes nothing, safe mid-run); every key of a rule must hold. Kinds: won, haunting_at_least, wakes_at_least,
+  cash_at_least, spells_cast, table_wins, pairs_perfect, collector "pleased", requests_done, curios_owned (owned plus found this run),
+  set_complete (parlor, attic, cellar, chapel), regular_finished, omen, daily, no_tools, all_cursed_held (most held at once).
+  RunState counters (snapshot/restore): `spells_cast, table_wins, pairs_perfect, tools_used, max_cursed_held`.
+  `store.deeds`; `record_result` appends and returns `deeds_new` (call `bank_finds` first so found curios count).
+- **Tutorial** (`Tutorial`): `PlayerProfile.needs_tutorial(store)`; the first run uses `Tutorial.SEED` and `Tutorial.opts()`
+  (`{tutorial: true}`; `run.opts.tutorial`). Night 1 is `Tutorial.customers()`: a clean Hand bell seller, a cursed Oil portrait
+  seller (sleepwalker; the UV tell is certain) and an instrument buyer, with no random draws, then the night ends. No wake on
+  night 1 (Dread is capped under the threshold), `tutorial_purse` extra cash covers rent. `customer` events carry `tutorial: step`.
+  `tutorial_step {step, text, focus}` events (`Tutorial.script()`: 1 tools, 2 offer, 3 tools, 4 dread, 5 shelf, 6 table at
+  `table_open`, 7 spells on night 2); focus is one of `Tutorial.FOCUS`. `record_result` sets `store.tutorial_done` (the title's Skip
+  sets it directly). A profile file older than version 5 loads with `tutorial_done` true; profile VERSION 5 adds a `journal` block.
+- **Balance**: the Pendulum now costs `pendulum_minutes` (50) per swing, Keen Eye +5% per rank, Patient Landlord 3% per rank, Altar
+  Candle 0.3 per rank, Deep Pockets 8 per rank. Maxed: cautious 0.77, greedy 0.46 (targets 0.80 and 0.65); haunting 0 with no
+  upgrades keeps all five feel targets. Every upgrade costs 220 ectoplasm (`Upgrades.total_cost()`), about 21 runs at the lab's
+  average ectoplasm per run. New Tuning: `regular_chance`, `regular_pay_mult`, `tutorial_purse`, `pendulum_minutes`.

@@ -55,6 +55,8 @@ var spell_bar := UiSpellBar.new()  ## the occult round: spells on keys 5-0, the 
 var table := UiTable.new()
 var found := UiFound.new()
 var requests := UiRequests.new()  ## the engagement round: pinned customer requests
+var toasts := UiToasts.new()  ## round 6: deed toasts and the regular's arrival card
+var tutorial := UiTutorial.new()  ## round 6: the guided first night overlay
 
 
 func _init() -> void:
@@ -72,6 +74,8 @@ func feed(events: Array[Dictionary]) -> void:
 	table.feed(events)
 	found.feed(events)
 	requests.feed(events)
+	toasts.feed(events)
+	tutorial.feed(events)
 
 
 ## The topmost enabled-or-not widget id under p (UI grid coordinates), "" for none.
@@ -146,6 +150,8 @@ func _process(delta: float) -> void:
 	table.tick(delta, r)
 	found.tick(delta)
 	requests.tick(delta)
+	toasts.tick(delta)
+	tutorial.tick(delta)
 	if "requests" in r:
 		requests.sync(r.get("requests") as Array)
 	_ui_drips(r, delta)
@@ -243,6 +249,7 @@ func _draw_inner() -> void:
 		if not game.cards.is_empty():
 			widgets.clear()
 			_draw_card(game.cards[0])
+		toasts.draw(self)
 		return
 	_draw_dread(r)
 	requests.draw(self, _t)
@@ -253,6 +260,7 @@ func _draw_inner() -> void:
 		widgets.clear()
 		_draw_end(r)
 		_draw_pops()
+		toasts.draw(self)
 		return
 	if not r.customer.is_empty():
 		if str(r.customer["kind"]) == RunState.SELLER:
@@ -274,12 +282,15 @@ func _draw_inner() -> void:
 	if game.is_replaying():
 		_draw_replay_banner()
 	_draw_pops()
+	if game.cards.is_empty() and not found.active() and not game.is_replaying():
+		tutorial.draw(self, game.shelf_rect_list())
 	found.draw(self)
 	if found.active():
 		widgets.clear()
 	if not game.cards.is_empty():
 		widgets.clear()
 		_draw_card(game.cards[0])
+	toasts.draw(self)
 
 
 func _draw_top(r: RunState) -> void:
@@ -311,7 +322,31 @@ func _draw_badge(r: RunState) -> void:
 	_text(Vector2(rect.position.x + 9.0, rect.position.y + 3.0), label, 11 if hot else 10, 1, false)
 
 
+## Hovering a tool names it and its day-clock cost (the Pendulum's is Tuning pendulum_minutes).
+static func ui_tool_tip(tool: String, r: RunState) -> String:
+	var mins: float = r.tuning.inspect_minutes
+	if tool == "pendulum" and "pendulum_minutes" in r.tuning:
+		mins = float(r.tuning.get("pendulum_minutes"))
+	var nm: String = {"uv": "UV LAMP", "scale": "SCALE", "listen": "LISTEN", "touch": "TOUCH", "pendulum": "PENDULUM"}.get(tool, tool.to_upper())
+	return "%s: COSTS %d MIN" % [nm, int(round(mins))]
+
+
+func _draw_tool_tip(r: RunState) -> void:
+	if not game.hover_id.begins_with("tool:") or game.is_replaying():
+		return
+	var tool: String = game.hover_id.trim_prefix("tool:")
+	var tip: String = ui_tool_tip(tool, r)
+	var w: float = float(UiPixelFont.ui_width(tip)) + 12.0
+	var u: float = UiMotion.ui_out(_hov_age / 0.15)
+	var tool_list: Array[String] = seller_tools(r)
+	var i: int = maxi(tool_list.find(tool), 0)
+	var rc := Rect2(clampf(TOOL_X0 + TOOL_STEP * float(i) + TOOL_SIZE * 0.5 - w * 0.5, 4.0, ShopGame.VIEW.x - w - 4.0), TOOL_Y - 17.0 + (1.0 - u) * 4.0, w, 14.0)
+	_frame(rc, "note")
+	_text(rc.position + Vector2(6.0, 3.0), tip, 0, 1, false)
+
+
 func _draw_badge_tip(r: RunState) -> void:
+	_draw_tool_tip(r)
 	if game.hover_id != "badge" or game.cards.size() > 0:
 		return
 	var tip: Array = UiEngage.badge_info(r)["tip"] as Array

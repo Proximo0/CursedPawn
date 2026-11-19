@@ -17,6 +17,7 @@ const FIELDS: Array = [
 	["day_minutes", 280.0, 60.0, 720.0, 10.0, "Clock", "Shop minutes per day on the day clock."],
 	["customer_minutes", 25.0, 5.0, 120.0, 5.0, "Clock", "Day-clock minutes each customer takes before any tool or haggle."],
 	["inspect_minutes", 10.0, 0.0, 60.0, 1.0, "Clock", "Day-clock minutes per tool use (UV lamp, scale, listen, touch)."],
+	["pendulum_minutes", 50.0, 0.0, 60.0, 1.0, "Clock", "Day-clock minutes per swing of the Pendulum (the altar's sixth tool)."],
 	["haggle_minutes", 5.0, 0.0, 30.0, 1.0, "Clock", "Day-clock minutes per offer."],
 	["seller_share", 0.5, 0.0, 1.0, 0.05, "Customers", "Chance a customer is selling (when you hold stock); otherwise buying."],
 	["buyer_match_chance", 0.8, 0.0, 1.0, 0.05, "Customers", "Chance a buyer wants a category you hold."],
@@ -81,6 +82,9 @@ const FIELDS: Array = [
 	["ecto_per_night", 2.0, 0.0, 20.0, 0.5, "Altar", "Ectoplasm earned for each night survived in a run."],
 	["ecto_win_bonus", 5.0, 0.0, 50.0, 1.0, "Altar", "Extra ectoplasm for winning a run."],
 	["night_dread_relief", 0.0, 0.0, 5.0, 0.1, "Altar", "Dread the altar candle removes at every dawn (an upgrade; 0 without it)."],
+	["regular_chance", 0.8, 0.0, 1.0, 0.05, "Regulars", "Chance a run brings a regular (one visit, night 2-4) whose arc is unfinished."],
+	["regular_pay_mult", 1.6, 0.5, 4.0, 0.1, "Regulars", "A regular buyer pays this multiple of the item's true value."],
+	["tutorial_purse", 50.0, 0.0, 500.0, 5.0, "Run", "Extra starting cash in the guided first run (covers night 1's rent)."],
 	["secs_per_customer", 25.0, 1.0, 120.0, 1.0, "Pacing", "Estimated real seconds a player spends per customer (lab run length)."],
 	["secs_per_inspect", 5.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per tool use."],
 	["secs_per_haggle", 4.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per offer."],
@@ -96,6 +100,7 @@ var rent_growth: float
 var day_minutes: float
 var customer_minutes: float
 var inspect_minutes: float
+var pendulum_minutes: float
 var haggle_minutes: float
 var seller_share: float
 var buyer_match_chance: float
@@ -160,6 +165,9 @@ var collector_legendary_odds: float
 var ecto_per_night: float
 var ecto_win_bonus: float
 var night_dread_relief: float
+var regular_chance: float
+var regular_pay_mult: float
+var tutorial_purse: float
 var secs_per_customer: float
 var secs_per_inspect: float
 var secs_per_haggle: float

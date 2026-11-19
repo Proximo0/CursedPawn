@@ -19,6 +19,9 @@ const REPLAY_TAIL_SECS: float = 4.5
 const HOLD_DELAY: float = 0.4
 const HOLD_STEP: float = 0.06
 const LOG_KEEP: int = 12
+const DEEDS_SCRIPT: String = "res://game/logic/deeds.gd"
+const TUTORIAL_SCRIPT: String = "res://game/logic/tutorial.gd"
+const DISPLAY_MAX: int = 12
 const REPEAT_IDS: PackedStringArray = ["dec", "inc", "stake_dec", "stake_inc", "t_stake_dec", "t_stake_inc"]
 
 var run: RunState = RunState.new()
@@ -68,6 +71,8 @@ var _banked: bool = false  ## this run's finds were handed to the profile
 var _recorded: bool = false  ## record_result was called for this run
 var _daily_done: Dictionary = {}  ## {key, line}: today's daily played in this session (when the profile cannot say)
 var _last_invalid: bool = false
+var _toasted: PackedStringArray = PackedStringArray()  ## deeds already toasted this run
+var _deeds_gd: GDScript
 
 
 # ---------------------------------------------------------------- pure helpers (unit-tested)
@@ -143,6 +148,25 @@ static func ui_clock_text(minutes_left: float) -> String:
 
 # ---------------------------------------------------------------- setup
 
+## The owned curio ids the shop cabinet shows: up to DISPLAY_MAX, rarest first (then by id). `owned` is id -> copies,
+## `rarity_of` maps id -> "common" | "rare" | "legendary".
+static func ui_displayed_curios(owned: Dictionary, rarity_of: Dictionary) -> PackedStringArray:
+	var rank: Dictionary = {"legendary": 0, "rare": 1, "common": 2}
+	var ids: Array = []
+	for id: Variant in owned.keys():
+		if int(owned[id]) > 0:
+			ids.append(str(id))
+	ids.sort_custom(func(a: Variant, b: Variant) -> bool:
+		var ra: int = int(rank.get(str(rarity_of.get(str(a), "common")), 2))
+		var rb: int = int(rank.get(str(rarity_of.get(str(b), "common")), 2))
+		return str(a) < str(b) if ra == rb else ra < rb)
+	var out := PackedStringArray()
+	for id: Variant in ids:
+		if out.size() < DISPLAY_MAX:
+			out.append(str(id))
+	return out
+
+
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -169,6 +193,7 @@ func _ready() -> void:
 	pause = PauseMenu.new()
 	pause.sfx = sfx
 	pause.room = room
+	pause.profile = _relics.store if _relics != null else null
 	add_child(pause)
 	pause.quit_to_title.connect(_show_title)
 	# Scripted runs (tests, captures) skip the title and play straight away.
@@ -193,6 +218,8 @@ func _show_title() -> void:
 	title.parcel = TitleScreen.ts_parcel_in_page()
 	title.altar_on = UiAltar.available()
 	title.altar_ecto = UiAltar.store_ecto(_relics.store if _relics != null else null)
+	title.profile = _relics.store if _relics != null else null
+	title.tutorial_on = tutorial_pending()
 	title.daily_on = UiEngage.daily_available()
 	if title.daily_on:
 		title.daily_number = UiEngage.daily_number(UiEngage.today())
@@ -202,6 +229,7 @@ func _show_title() -> void:
 		title.hide()
 		_begin_setup(true))
 	title.open_altar.connect(_open_altar)
+	title.skip_tutorial.connect(skip_tutorial)
 	title.start_daily.connect(func() -> void:
 		title.hide()
 		_saved = {}
@@ -248,6 +276,7 @@ func _build_hud() -> void:
 	hud.game = self
 	hud.table.sfx = sfx
 	hud.found.sfx = sfx
+	hud.toasts.sfx = sfx
 	_hud_vp.add_child(hud)
 	var layer := CanvasLayer.new()
 	layer.layer = -5  # above the room (-10), below the debug panels
@@ -311,6 +340,8 @@ func new_run(seed_in: int, gift: Dictionary = {}, opts: Dictionary = {}) -> void
 	_recorded = false
 	if room != null:
 		room.setup(run)
+		_show_displayed()
+	_toasted = PackedStringArray()
 	log_lines.clear()
 	log_age.clear()
 	cards.clear()
@@ -324,8 +355,44 @@ func new_run(seed_in: int, gift: Dictionary = {}, opts: Dictionary = {}) -> void
 		hud.table.reset_stage()
 		hud.found.popups.clear()
 		hud.requests.clear()
+		hud.toasts.clear()
+		hud.tutorial.clear()
 	_on_events(run.last_events)
 	_refresh()
+
+
+## Hands the owned curios to the room's display cabinet (the art worker's set_displayed), when the room has one.
+func _show_displayed() -> void:
+	if room == null or not room.has_method("set_displayed") or _relics == null or _relics.store == null:
+		return
+	var col: CurioCollection = _relics.store.collection
+	if col == null:
+		return
+	var rarity_of: Dictionary = {}
+	for id: Variant in col.owned.keys():
+		rarity_of[str(id)] = str(col.curio(str(id)).get("rarity", "common"))
+	room.call("set_displayed", ui_displayed_curios(col.owned, rarity_of))
+
+
+## True for a first-time player: the guided first night is built (logic) and the profile has not finished or skipped it.
+func tutorial_pending() -> bool:
+	if Flags.is_scripted_run() or not ResourceLoader.exists(TUTORIAL_SCRIPT) or _relics == null or _relics.store == null:
+		return false
+	return "tutorial_done" in _relics.store and not bool(_relics.store.get("tutorial_done"))
+
+
+## Skip tutorial on the title: marks it done and saves.
+func skip_tutorial() -> void:
+	if _relics == null or _relics.store == null or not "tutorial_done" in _relics.store:
+		return
+	_relics.store.set("tutorial_done", true)
+	_relics.save_profile()
+
+
+## The seed the scripted first night uses (Tutorial.SEED when the logic names one).
+func _tutorial_seed(fallback: int) -> int:
+	var sc: GDScript = load(TUTORIAL_SCRIPT) as GDScript
+	return int(sc.get_script_constant_map().get("SEED", fallback)) if sc != null else fallback
 
 
 ## The options the profile's Altar adds to a new run (none in scripted runs, which never read player data).
@@ -398,8 +465,16 @@ static func ui_event_line(e: Dictionary) -> String:
 			return "Request filled. They paid %d." % int(e.get("pay", 0))
 		"request_failed":
 			return "A request slipped away unfilled."
-		"run_opts":
+		"run_opts", "tutorial_step", "regular_pending":
 			return ""
+		"regular":
+			return "%s walks in. Chapter %d." % [str(e.get("name", "A regular")), maxi(int(e.get("chapter", 1)), 1)]
+		"regular_done":
+			var rl: String = str(e.get("line", ""))
+			return rl if rl != "" else "A regular's story moves on."
+		"regular_refused":
+			var rr: String = str(e.get("line", ""))
+			return rr if rr != "" else "A regular leaves unsatisfied."
 		"collector_omen":
 			return "A card under the door: %s." % UiEngage.collector_line(str(e.get("text", ""))).capitalize()
 		"collector_arrives":
@@ -492,6 +567,7 @@ func _refresh() -> void:
 		selected_uid = -1
 	if hud != null:
 		hud.table.clamp_stake(r)
+	_check_deeds()
 	if run.is_over() and not _banked and _relics != null:
 		_banked = true
 		_relics.bank_finds(run)
@@ -512,6 +588,12 @@ func _record_result() -> void:
 		return
 	var before: int = _profile_int("haunting_unlocked")
 	var res: Dictionary = PlayerProfile.record_result(run, _relics.store)
+	if res.get("deeds_new") is PackedStringArray or res.get("deeds_new") is Array:
+		var fresh := PackedStringArray()
+		for id: Variant in res["deeds_new"]:
+			if not _toasted.has(str(id)):
+				fresh.append(str(id))
+		_toast_deeds(fresh)
 	ecto_earned = int(res.get("ecto", 0))
 	carried_cash = int(res.get("carried", 0))
 	var after: int = _profile_int("haunting_unlocked")
@@ -521,6 +603,28 @@ func _record_result() -> void:
 		var nights: int = run.night
 		_daily_done = {"key": UiEngage.date_key(UiEngage.today()), "line": "NIGHT %d, %d COINS" % [nights, run.cash]}
 	_relics.save_profile()
+
+
+## Toasts the deeds the logic says the run has earned so far (once each). Quiet when the logic has no Deeds yet.
+func _check_deeds() -> void:
+	if hud == null or _relics == null or _relics.store == null or _replay_run != null:
+		return
+	if _deeds_gd == null and ResourceLoader.exists(DEEDS_SCRIPT):
+		_deeds_gd = load(DEEDS_SCRIPT) as GDScript
+	if _deeds_gd == null or not UiOccult.static_has(_deeds_gd, "check"):
+		return
+	var ids: Variant = _deeds_gd.call("check", run, _relics.store)
+	if ids is PackedStringArray or ids is Array:
+		_toast_deeds(PackedStringArray(ids))
+
+
+func _toast_deeds(ids: PackedStringArray) -> void:
+	for id: String in ids:
+		if _toasted.has(id):
+			continue
+		_toasted.append(id)
+		hud.toasts.push_deed(id)
+		_log("Deed earned: %s." % UiToasts.deed_name(id).capitalize())
 
 
 func _profile_int(field: String) -> int:
@@ -541,6 +645,10 @@ func _daily_played_line() -> String:
 ## logic without hauntings or omens, start at once with today's behaviour.
 func _begin_setup(from_title: bool) -> void:
 	var seed_next: int = seed_now + 1
+	if tutorial_pending():  # the very first run is the guided night: fixed seed, no picker
+		_saved = {}
+		_start_chosen(_tutorial_seed(seed_next), {"tutorial": true})
+		return
 	var unlocked: int = UiEngage.picker_max(_profile_int("haunting_unlocked"))
 	var omens: Array[String] = UiEngage.omen_offer(seed_next)
 	if Flags.is_scripted_run() or (unlocked == 0 and omens.is_empty()):
@@ -615,6 +723,13 @@ func pass_text() -> String:
 
 
 ## Shelf item rectangles by uid (props follow run.inventory order in the room). Empty when the room is absent.
+func shelf_rect_list() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for r: Variant in shelf_rects().values():
+		out.append(r as Rect2)
+	return out
+
+
 func shelf_rects() -> Dictionary:
 	var out: Dictionary = {}
 	if room == null:

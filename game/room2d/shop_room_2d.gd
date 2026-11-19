@@ -62,11 +62,17 @@ const TORCH_LIGHT := Color(1.0, 0.5, 0.2)
 const MOON_LIGHT := Color(0.55, 0.66, 1.0)
 const UV_COLOR := Color(0.62, 0.30, 1.0)
 const CANDLES: Array[Vector2] = [Vector2(84.0, 226.0), Vector2(292.0, 226.0), Vector2(446.0, 226.0), Vector2(344.0, 40.0)]
-const TORCHES: Array[Vector2] = [Vector2(54.0, 150.0), Vector2(508.0, 176.0)]
-const CLOCK_POS := Vector2(34.0, 120.0)
-const PORTRAIT_POSES: Array[Vector2] = [Vector2(34.0, 50.0), Vector2(510.0, 88.0)]
-const EYES_POS := Vector2(204.0, 66.0)  # bigger and lower: in the dark gap between the shelf units, level with the top board
-const EYES_SCALE: float = 4.0
+const TORCHES: Array[Vector2] = [Vector2(54.0, 200.0), Vector2(508.0, 176.0)]
+const CLOCK_POS := Vector2(34.0, 80.0)
+const PORTRAIT_POSES: Array[Vector2] = [Vector2(34.0, 38.0), Vector2(510.0, 88.0)]
+const CABINET_RECT := Rect2(3.0, 106.0, 54.0, 82.0)  ## the curio cabinet on the left wall: clear of the HUD (counter front y 227, door below)
+const CABINET_COLS: int = 3
+const CABINET_ROWS: int = 4
+const CABINET_ICON: int = 16
+const CABINET_MAX: int = 12
+const EYES_POS := Vector2(204.0, 221.0)  # low: in the dark strip under the shelf units, just above the counter
+const EYES_SCALE: float = 2.0
+const RIM_COLOR := Color(1.0, 0.74, 0.36, 0.9)  ## a regular's faint warm rim light
 const BEAT_TICKS: int = 54  ## the wake opens with a blackout and a flicker before the chaos (inside WAKE_SECS)
 const FLASH_FROM: int = 33
 const FLASH_TO: int = 46
@@ -165,6 +171,11 @@ var _moon: PointLight2D
 var _overlay: Sprite2D
 var _overlay_on: bool = false
 var _cust_frames: Array[ImageTexture] = []
+var _displayed: PackedStringArray = PackedStringArray()
+var _display_tex: Dictionary = {}  ## curio id -> 16x16 ImageTexture
+var _rim: Sprite2D
+var _regular_here: bool = false
+var _regular_pending: bool = false
 var _motes: Array[Dictionary] = []
 var _eye_open: float = 0.0
 var _flash: float = 0.0
@@ -325,6 +336,83 @@ func set_dread(v: float) -> void:
 
 
 ## 0..1.5, Dread as a fraction of the wake threshold.
+## Sets the curios shown in the glass cabinet on the left wall (up to CABINET_MAX, in order). The UI calls it at run start.
+func set_displayed(ids: PackedStringArray) -> void:
+	_displayed = PackedStringArray()
+	for id: String in ids:
+		if _displayed.size() >= CABINET_MAX:
+			break
+		_displayed.append(id)
+	if _decor != null:
+		_decor.queue_redraw()
+
+
+func displayed_ids() -> PackedStringArray:
+	return _displayed
+
+
+func regular_here() -> bool:
+	return _regular_here
+
+
+func _cabinet_icon(id: String) -> Texture2D:
+	if not _display_tex.has(id):
+		var img: Image = SpriteKit.curio_icon(id).get_image()
+		img.resize(CABINET_ICON, CABINET_ICON, Image.INTERPOLATE_NEAREST)
+		_display_tex[id] = ImageTexture.create_from_image(img)
+	return _display_tex[id] as Texture2D
+
+
+## The glass-fronted curio cabinet: dark wood and a brass trim, four velvet-lined shelves of three, a soft glint per piece.
+func _draw_cabinet(pal: PackedColorArray) -> void:
+	var r: Rect2 = CABINET_RECT
+	_decor.draw_rect(Rect2(r.position - Vector2.ONE, r.size + Vector2(2.0, 2.0)), pal[0])
+	_decor.draw_rect(r, pal[8])
+	_decor.draw_rect(Rect2(r.position.x, r.position.y, r.size.x, 1.0), pal[9])
+	_decor.draw_rect(Rect2(r.position.x, r.position.y, 1.0, r.size.y), pal[9])
+	_decor.draw_rect(Rect2(r.end.x - 1.0, r.position.y, 1.0, r.size.y), pal[0])
+	var inner := Rect2(r.position.x + 3.0, r.position.y + 5.0, r.size.x - 6.0, r.size.y - 8.0)
+	_decor.draw_rect(Rect2(inner.position.x - 1.0, inner.position.y - 1.0, inner.size.x + 2.0, inner.size.y + 2.0), pal[10])  # brass trim
+	_decor.draw_rect(inner, pal[0])
+	_decor.draw_rect(Rect2(inner.position.x, inner.position.y, inner.size.x, inner.size.y * 0.5), pal[1])  # velvet back, darker at the bottom
+	var cell_h: float = inner.size.y / float(CABINET_ROWS)
+	var cell_w: float = inner.size.x / float(CABINET_COLS)
+	_decor.draw_rect(Rect2(r.position.x + 10.0, r.position.y + 1.0, r.size.x - 20.0, 3.0), pal[10])  # a brass pediment plate
+	_decor.draw_rect(Rect2(r.position.x + 10.0, r.position.y + 1.0, r.size.x - 20.0, 1.0), pal[11])
+	for row: int in range(CABINET_ROWS):
+		var by: float = inner.position.y + cell_h * float(row + 1)
+		_decor.draw_rect(Rect2(inner.position.x, by - 3.0, inner.size.x, 3.0), pal[9])
+		_decor.draw_rect(Rect2(inner.position.x, by - 3.0, inner.size.x, 1.0), pal[10])
+		for col: int in range(CABINET_COLS):
+			var i: int = row * CABINET_COLS + col
+			var cx: float = inner.position.x + cell_w * (float(col) + 0.5)
+			var top := Vector2(roundf(cx - float(CABINET_ICON) * 0.5), roundf(by - 3.0 - float(CABINET_ICON)))
+			if i >= _displayed.size():
+				_decor.draw_rect(Rect2(top.x + 4.0, top.y + 10.0, 8.0, 1.0), pal[2])  # an empty place on the velvet
+				continue
+			_decor.draw_texture(_cabinet_icon(_displayed[i]), top)
+			# a soft glint that wanders over each piece, out of step with its neighbours
+			var ph: float = fposmod(_t * 0.55 + float(i) * 0.37, 3.0)
+			if ph < 0.6:
+				var a: float = sin(ph / 0.6 * PI)
+				var gp := Vector2(top.x + 3.0 + floorf(float(i % 3) * 4.0), top.y + 3.0 + floorf(float(i % 4) * 2.0))
+				var gc: Color = pal[15]
+				gc.a = a * 0.9
+				_decor.draw_rect(Rect2(gp.x, gp.y, 1.0, 1.0), gc)
+				gc.a = a * 0.45
+				_decor.draw_rect(Rect2(gp.x - 1.0, gp.y, 3.0, 1.0), gc)
+				_decor.draw_rect(Rect2(gp.x, gp.y - 1.0, 1.0, 3.0), gc)
+	var glass: Color = pal[14]  # the glass: a pale diagonal sheen and a frosted edge
+	glass.a = 0.07
+	_decor.draw_rect(inner, glass)
+	glass.a = 0.12
+	for k: int in range(3):
+		_decor.draw_line(inner.position + Vector2(4.0 + float(k) * 3.0, inner.size.y - 4.0), inner.position + Vector2(inner.size.x - 6.0 + float(k) * 3.0, 4.0), glass, 1.0)
+	_decor.draw_rect(Rect2(inner.position.x, inner.position.y, inner.size.x, 1.0), Color(pal[15], 0.25))
+	_decor.draw_rect(Rect2(r.position.x + 20.0, r.end.y - 2.0, 14.0, 1.0), pal[10])  # the lock plate
+	_decor.draw_rect(Rect2(r.position.x + 26.0, r.end.y - 3.0, 2.0, 2.0), pal[11])
+
+
 func dread_norm() -> float:
 	return clampf(dread / maxf(Tuning.shared().wake_threshold, 0.1), 0.0, 1.5)
 
@@ -345,6 +433,8 @@ func apply_events(events: Array[Dictionary]) -> void:
 					_sigil_on = false
 					_fx_sys.emit("ash", SIGIL_POS + Vector2(0.0, -6.0), 10)
 				_seller_here = str(e.get("kind", "")) == RunState.SELLER
+				_regular_here = str(e.get("regular", "")) != "" or _regular_pending
+				_regular_pending = false
 				var oname: String = ""
 				var cat: String = ""
 				if str(e.get("kind", "")) == RunState.SELLER:
@@ -371,6 +461,11 @@ func apply_events(events: Array[Dictionary]) -> void:
 				_hexed = false
 				_on_sold(e)
 				_cust_start_leave()
+			"regular":
+				if _cust_state == "enter" or _cust_state == "here":
+					_regular_here = true
+				else:
+					_regular_pending = true
 			"scry_reveal":
 				_scry_t = SCRY_SECS
 			"hexed":
@@ -958,6 +1053,14 @@ func _build_customer() -> void:
 	_cust_occ = LightOccluder2D.new()
 	_cust_occ.occluder = OccluderPolygon2D.new()
 	_customer.add_child(_cust_occ)
+	_rim = Sprite2D.new()  # the same figure one pixel up and left, in unshaded amber, peeking out behind it
+	_rim.centered = false
+	_rim.z_index = -1
+	_rim.visible = false
+	var rim_mat := CanvasItemMaterial.new()
+	rim_mat.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
+	_rim.material = rim_mat
+	_customer.add_child(_rim)
 	_counter_obj = Sprite2D.new()
 	_counter_obj.z_index = 6
 	_counter_obj.visible = false
@@ -1202,6 +1305,9 @@ func _apply_customer_frame(i: int) -> void:
 	var tex: ImageTexture = _cust_frames[clampi(i, 0, _cust_frames.size() - 1)]
 	_customer.texture = tex
 	_customer.offset = Vector2(-float(tex.get_width()) * 0.5, -float(tex.get_height()))
+	if _rim != null:
+		_rim.texture = tex
+		_rim.offset = _customer.offset
 	if _customer.get_meta("occ_h", -1) != tex.get_height():
 		_customer.set_meta("occ_h", tex.get_height())
 		_fit_customer_occluder()
@@ -1270,6 +1376,7 @@ func _cust_start_leave() -> void:
 
 func _finish_leave() -> void:
 	_cust_state = "none"
+	_regular_here = false
 	_customer.visible = false
 	_bubble.hide_now()
 	_hide_counter_object()
@@ -1284,6 +1391,12 @@ func _place_customer() -> void:
 		bob = roundf(sin(_t * 1.6) * 0.5 + 0.5)  # a one-pixel breath when there are no idle frames
 	_customer.position = Vector2(roundf(_cust_x), STAND_Y - bob)
 	_customer.flip_h = _cust_state == "leave"
+	if _rim != null:
+		_rim.flip_h = _customer.flip_h
+		_rim.position = Vector2(2.0 if _customer.flip_h else -2.0, -1.0)
+		_rim.visible = _regular_here and _customer.visible
+		var pulse: float = 0.8 + 0.2 * sin(_t * 2.4)
+		_rim.modulate = Color(RIM_COLOR.r, RIM_COLOR.g, RIM_COLOR.b, RIM_COLOR.a * pulse)
 
 
 func _show_counter_object() -> void:
@@ -1914,6 +2027,7 @@ func _draw_decor() -> void:
 			_decor.draw_rect(Rect2(top, Vector2(24.0, 32.0)), pal[0])
 			_decor.draw_rect(Rect2(top.x + 7.0, top.y + 6.0, 10.0, 12.0), pal[2])
 			_decor.draw_rect(Rect2(top.x + 3.0, top.y + 20.0, 18.0, 12.0), pal[1])
+	_draw_cabinet(pal)
 	# sconce brackets (the flames are drawn on the glow layer)
 	for tc: Vector2 in TORCHES:
 		_decor.draw_rect(Rect2(tc.x - 3.0, tc.y - 4.0, 6.0, 14.0), pal[8])
@@ -2364,10 +2478,10 @@ func _draw_eyes(pal: PackedColorArray, _n: float) -> void:
 	var pulse: float = 0.75 + 0.25 * sin(_t * 2.1)
 	var halo: Color = pal[12]
 	halo.a = 0.7 * o * pulse
-	_fx.draw_texture_rect(_bloom_texture(), Rect2(ep.x - 90.0, ep.y - 44.0, 180.0, 88.0), false, halo)  # a faint red bloom around them
+	_fx.draw_texture_rect(_bloom_texture(), Rect2(ep.x - 60.0, ep.y - 24.0, 120.0, 48.0), false, halo)  # a faint red bloom around them
 	var core: Color = pal[13]
 	core.a = 0.3 * o
-	_fx.draw_rect(Rect2(ep.x - 50.0, ep.y - 3.0, 100.0, 6.0), core)
+	_fx.draw_rect(Rect2(ep.x - 30.0, ep.y - 2.0, 60.0, 4.0), core)
 	if et != null:
 		var ew: float = float(et.get_width()) * EYES_SCALE
 		var eh: float = float(et.get_height()) * EYES_SCALE * minf(o * 1.6, 1.0)

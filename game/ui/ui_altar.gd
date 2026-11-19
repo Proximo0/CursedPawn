@@ -10,6 +10,8 @@ extends TsScreen
 signal closed
 signal bought(id: String)
 
+const WISP_SECS: float = 0.85
+
 const UPGRADES_PATH: String = "res://game/data/upgrades.json"
 const COLS: int = 4
 const CARD_W: float = 142.0
@@ -229,7 +231,7 @@ func _spawn_wisps(slot: int, cost: int) -> void:
 		return
 	var to: Vector2 = card_rect(slot).position + Vector2(CARD_W * 0.5, 14.0)
 	for k: int in range(clampi(cost, 3, 10)):
-		_wisps.append({"from": COUNTER_AT + Vector2(0.0, 4.0), "to": to, "age": 0.0, "delay": float(k) * 0.05, "k": k})
+		_wisps.append({"from": COUNTER_AT + Vector2(0.0, 4.0), "to": to, "age": 0.0, "delay": float(k) * 0.07, "k": k})
 
 
 func _process(delta: float) -> void:
@@ -249,7 +251,7 @@ func _process(delta: float) -> void:
 			_shudder.erase(id)
 	for w: Dictionary in _wisps:
 		w["age"] = float(w["age"]) + delta
-	while not _wisps.is_empty() and float(_wisps[0]["age"]) - float(_wisps[0]["delay"]) > 0.6:
+	while not _wisps.is_empty() and float(_wisps[0]["age"]) - float(_wisps[0]["delay"]) > WISP_SECS:
 		_wisps.pop_front()
 
 
@@ -306,17 +308,27 @@ func _draw_counter(c: TsCanvas) -> void:
 	c.text(Vector2(at.x - 8.0, at.y - 16.0), "ECTOPLASM", 7, 1)
 	c.head_c(at.x + 14.0, at.y - 4.0, "%d" % shown, 7 if not counting else 15, 1)
 	for w: Dictionary in _wisps:
-		var u: float = (float(w["age"]) - float(w["delay"])) / 0.6
+		var u: float = (float(w["age"]) - float(w["delay"])) / WISP_SECS
 		if u <= 0.0 or u >= 1.0:
 			continue
 		var e: float = UiMotion.ui_in_out(u)
 		var p: Vector2 = (w["from"] as Vector2).lerp(w["to"] as Vector2, e)
 		p.y -= sin(e * PI) * 26.0 * (1.0 if int(w["k"]) % 2 == 0 else -0.5)
-		_draw_wisp(c, p, c.t + float(w["k"]) * 0.3, 0.6)
+		for tr: int in range(1, 4):  # a fading trail of embers behind the wisp
+			var eb: float = UiMotion.ui_in_out(maxf(u - 0.05 * float(tr), 0.0))
+			var tp: Vector2 = (w["from"] as Vector2).lerp(w["to"] as Vector2, eb)
+			tp.y -= sin(eb * PI) * 26.0 * (1.0 if int(w["k"]) % 2 == 0 else -0.5)
+			c.fill(Rect2(tp.x + 5.0, tp.y + 8.0, 3.0 - float(tr) * 0.6, 3.0 - float(tr) * 0.6), 6 if tr < 3 else 5)
+		_draw_wisp(c, p, c.t + float(w["k"]) * 0.3, 2.0)
 
 
 ## A tiny ectoplasm wisp: a green teardrop with a bright core. scale 1 is 7x9.
 func _draw_wisp(c: TsCanvas, at: Vector2, t: float, s: float) -> void:
+	if s > 1.0:  # the flying wisp: the same teardrop at 2x, so it reads at 1x scale of the window
+		c.draw_set_transform(at, 0.0, Vector2(s, s))
+		_draw_wisp(c, Vector2.ZERO, t, 1.0)
+		c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
 	var sway: float = floorf(sin(t * 3.0) * 1.0 + 0.5)
 	if s >= 1.0:
 		c.fill(Rect2(at.x + 3.0 + sway, at.y, 1.0, 2.0), 5)
@@ -399,8 +411,13 @@ func _draw_card(c: TsCanvas, i: int, def: Dictionary) -> void:
 		if lit:
 			c.fill(Rect2(px + 1.0, py + 1.0, 2.0, 2.0), 15)
 		if fresh:
-			var ring: float = UiMotion.ui_out(buy_age / 0.6) * 7.0
+			var ring: float = UiMotion.ui_out(buy_age / 0.6) * 9.0
 			c.draw_rect(Rect2(px - ring + 3.0, py - ring + 3.0, ring * 2.0 + 1.0, ring * 2.0 + 1.0), c.c(15 if buy_age < 0.25 else 7), false, 1.0)
+			var grow: float = 3.0 * maxf(0.0, 1.0 - buy_age / 0.4)  # the pip swells as it catches
+			if grow > 0.0:
+				c.fill(Rect2(px - grow, py - grow, 7.0 + grow * 2.0, 7.0 + grow * 2.0), 15 if buy_age < 0.2 else 7)
+				c.fill(Rect2(px + 1.0, py + 1.0, 5.0, 5.0), 15 if buy_age < 0.2 else 6)
+			UiFrames.ui_flame(c, Vector2(px + 1.0, py - 9.0), c.t, 0, false, 3)  # a flame lifts off it
 	if state == "maxed":
 		c.text(Vector2(rect.end.x - 40.0, py), "MAXED", 7, 1, false)
 	else:
@@ -409,8 +426,12 @@ func _draw_card(c: TsCanvas, i: int, def: Dictionary) -> void:
 		var s: String = "%d" % cost
 		c.text(Vector2(rect.end.x - float(UiPixelFont.ui_width(s)) - 8.0, py), s, col, 1, false)
 		_draw_wisp(c, Vector2(rect.end.x - float(UiPixelFont.ui_width(s)) - 20.0, py - 1.0), c.t, 1.0)
-	if buy_age < 0.3:  # the flash of a buy
-		c.draw_rect(rect.grow(2.0 + buy_age * 14.0), c.c(7 if buy_age > 0.12 else 15), false, 1.0)
+	if buy_age < 0.45:  # the flash of a buy: the whole card whites out, then a green wash, then a ring that spreads
+		if buy_age < 0.09:
+			c.draw_rect(rect, Color(c.c(15), 0.85))
+		elif buy_age < 0.3:
+			c.draw_rect(rect, Color(c.c(7), 0.45 * (1.0 - (buy_age - 0.09) / 0.21)))
+		c.draw_rect(rect.grow(2.0 + buy_age * 20.0), c.c(7 if buy_age > 0.12 else 15), false, 2.0)
 	if focused and not dim:
 		c.fill(Rect2(rect.position.x + 2.0, rect.end.y - 3.0, rect.size.x - 4.0, 1.0), 11 if fmod(c.t, 1.0) < 0.7 else 10)
 

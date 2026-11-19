@@ -66,6 +66,15 @@ static func cost_of(id: String, rank: int) -> int:
 	return int(get_upgrade(id).get("cost", 0)) * (rank + 1)
 
 
+## Ectoplasm to buy every rank of every upgrade (the lab's "runs to max everything").
+static func total_cost() -> int:
+	var t: int = 0
+	for u: Dictionary in all():
+		for r: int in range(int(u["max_rank"])):
+			t += cost_of(str(u["id"]), r)
+	return t
+
+
 ## Buys one rank of `id` with the profile's ectoplasm. `profile` is the RelicStore (ecto, upgrades).
 ## Returns {ok, why, rank, cost}; why is "" on success.
 static func buy(id: String, profile: RelicStore) -> Dictionary:

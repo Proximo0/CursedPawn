@@ -24,7 +24,7 @@ const EVENT_KINDS: PackedStringArray = [
 ]
 ## UI-only sounds, played with ui(kind): the screens call these where no run event exists.
 const UI_SOUNDS: Dictionary = {"click": "ui_click", "omen_flip": "omen_flip", "altar_buy": "altar_buy",
-	"haunt_unlock": "haunt_unlock", "request_pinned": "request_pinned"}
+	"haunt_unlock": "haunt_unlock", "request_pinned": "request_pinned", "deed": "deed", "regular": "regular"}
 const WHEEL_TICKS: PackedFloat32Array = [0.0, 0.1, 0.2, 0.32, 0.46, 0.64, 0.86]  ## slowing, then the settle
 
 var master: float = 1.0  ## linear 0..1
@@ -237,7 +237,7 @@ func on_events(events: Array[Dictionary]) -> void:
 				play("collector_refused")
 
 
-## UI feedback: "click", "hover", or a UI_SOUNDS kind (omen_flip, altar_buy, haunt_unlock, request_pinned).
+## UI feedback: "click", "hover", or a UI_SOUNDS kind (omen_flip, altar_buy, haunt_unlock, request_pinned, deed, regular).
 func ui(kind: String) -> void:
 	if kind == "hover":
 		play("ui_hover", -6.0)

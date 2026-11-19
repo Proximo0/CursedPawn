@@ -12,6 +12,7 @@ signal start_new
 signal continue_run
 signal start_daily
 signal open_altar
+signal skip_tutorial
 signal quit
 
 const TITLE: String = "Cursed Pawn"  ## small caps after the capitals, so the letters read as deliberate
@@ -46,20 +47,25 @@ var daily_on: bool = false  ## offer the Daily Seance (the logic for it exists)
 var daily_number: int = 0  ## today's Seance number
 var altar_on: bool = false  ## offer the Altar (the logic for upgrades exists)
 var altar_ecto: int = 0  ## ectoplasm waiting to be spent: a green number beside the entry
+var tutorial_on: bool = false  ## a first-time player: offer SKIP TUTORIAL
 var daily_line: String = ""  ## when today's was already played: its short result, shown under the menu
 var _own_room: bool = false
 
 
 ## The menu entries top to bottom: [{id, label}]. Continue needs a saved run; Quit is not offered on the web.
-static func ts_entries(has_save_in: bool, web_in: bool, daily_in: bool = false, daily_no: int = 0, altar_in: bool = false) -> Array[Dictionary]:
+static func ts_entries(has_save_in: bool, web_in: bool, daily_in: bool = false, daily_no: int = 0, altar_in: bool = false, ledger_in: bool = false, skip_in: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if has_save_in:
 		out.append({"id": "continue", "label": "CONTINUE"})
 	out.append({"id": "new", "label": "NEW RUN"})
+	if skip_in:
+		out.append({"id": "skip_tutorial", "label": "SKIP TUTORIAL"})
 	if daily_in:
 		out.append({"id": "daily", "label": "DAILY SEANCE #%d" % daily_no})
 	if altar_in:
 		out.append({"id": "altar", "label": "THE ALTAR"})
+	if ledger_in:
+		out.append({"id": "ledger", "label": "LEDGER"})
 	out.append({"id": "settings", "label": "SETTINGS"})
 	if not web_in:
 		out.append({"id": "quit", "label": "QUIT"})
@@ -106,7 +112,7 @@ func ts_ready() -> void:
 
 func ts_menu_ids() -> Array[String]:
 	var ids: Array[String] = []
-	for e: Dictionary in ts_entries(has_save, web, daily_on, daily_number, altar_on):
+	for e: Dictionary in ts_entries(has_save, web, daily_on, daily_number, altar_on, true, tutorial_on):
 		ids.append(str(e["id"]))
 	return ids
 
@@ -121,6 +127,12 @@ func ts_activate_menu(id: String) -> void:
 			start_daily.emit()
 		"altar":
 			open_altar.emit()
+		"ledger":
+			ts_open_ledger()
+		"skip_tutorial":
+			tutorial_on = false
+			focus_id = "new"
+			skip_tutorial.emit()
 		"settings":
 			ts_open_settings()
 		"quit":
@@ -197,9 +209,10 @@ func _ts_draw_eyes(c: TsCanvas, at: Vector2, w: float, o: float, rim: int, core:
 
 
 func ts_draw_menu(c: TsCanvas) -> void:
-	var entries: Array[Dictionary] = ts_entries(has_save, web, daily_on, daily_number, altar_on)
-	var step: float = BTN_STEP if entries.size() <= 5 else BTN_STEP_TIGHT
-	var y: float = 186.0 if entries.size() <= 5 else 176.0
+	var entries: Array[Dictionary] = ts_entries(has_save, web, daily_on, daily_number, altar_on, true, tutorial_on)
+	var many: bool = entries.size() > 7
+	var step: float = BTN_STEP if entries.size() <= 5 else (BTN_STEP_TIGHT if not many else 21.0)
+	var y: float = 186.0 if entries.size() <= 5 else (176.0 if not many else 168.0)
 	if parcel and c.t > MENU_AT:
 		var pulse: bool = fmod(c.t, 1.6) < 0.9
 		c.text_c(MENU_X, y - 24.0, PARCEL_LINE, 11 if pulse else 15, 1)
@@ -220,5 +233,5 @@ func ts_draw_menu(c: TsCanvas) -> void:
 	if daily_line != "" and c.t > MENU_AT + 0.6:
 		var dy: float = y + step * float(entries.size()) + 1.0
 		c.text_c(MENU_X, dy, "PLAYED TODAY: " + daily_line, 14, 1)
-	if c.t > MENU_AT + 0.8:
+	if c.t > MENU_AT + 0.8 and not many:
 		c.text_c(MENU_X, 340.0, "UP DOWN ENTER, OR CLICK", 4, 1)
