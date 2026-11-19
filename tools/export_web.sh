@@ -21,7 +21,7 @@ fail() {
 cd "${ROOT}"
 if [[ "${MODE}" == "--export-release" ]]; then
 	# The Web preset's custom release template: the 2D-only engine from the web-template-2d draft release.
-	[[ -f build/templates/web_nothreads_release_2d.zip ]] || tools/fetch_web_template.sh >/dev/null \
+	[[ -f build/templates/web_nothreads_release_2d_min.zip ]] || tools/fetch_web_template.sh >/dev/null \
 		|| fail "2D web template fetch failed (needs gh with access to the repo)"
 elif [[ ! -f "${TEMPLATE_DIR}/web_nothreads_debug.zip" ]]; then
 	python3 -I tools/fetch_templates.py "${GODOT_VERSION}" "${TEMPLATE_DIR}" web_nothreads_debug.zip >/dev/null \
