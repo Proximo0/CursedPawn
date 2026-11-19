@@ -28,7 +28,7 @@ if (( HAVE_BOT )); then
 fi
 (( HAVE_LAB )) && TASKS+=("lab|timeout 600 $GODOT --headless --fixed-fps 60 --path . res://tests/lab/lab.tscn")
 TASKS+=("sims|tools/run_sims.sh")
-TASKS+=("unit|timeout 600 $GODOT --headless --path . -s res://tests/runner.gd")
+TASKS+=("unit|timeout 600 tools/run_tests.sh")  # shards itself across the CPUs
 TASKS+=("lint|tools/lint.sh")
 
 running=0

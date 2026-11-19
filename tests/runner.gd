@@ -1,5 +1,5 @@
 extends SceneTree
-## Runs every tests/unit/test_*.gd (or one file via -- --only=test_name). Prints failures only, then one summary line.
+## Runs every tests/unit/test_*.gd (or one file via -- --only=test_name, or one shard via -- --shard=i --nshards=n). Prints failures only, then one summary line.
 ## Exit code 0 = all pass, 1 = any failure or a script that would not load.
 
 
@@ -10,16 +10,27 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var only: String = ""
+	var shard: int = 0
+	var nshards: int = 1
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--only="):
 			only = a.trim_prefix("--only=")
+		elif a.begins_with("--shard="):
+			shard = int(a.trim_prefix("--shard="))
+		elif a.begins_with("--nshards="):
+			nshards = maxi(1, int(a.trim_prefix("--nshards=")))
 	var passed: int = 0
 	var failed: int = 0
 	var dir: PackedStringArray = DirAccess.get_files_at("res://tests/unit")
+	dir.sort()
+	var index: int = -1
 	for f: String in dir:
 		if not (f.begins_with("test_") and f.ends_with(".gd")):
 			continue
+		index += 1
 		if only != "" and f.get_basename() != only:
+			continue
+		if only == "" and index % nshards != shard:  ## -- --shard=i --nshards=n: every n-th file, for parallel runs
 			continue
 		var script: GDScript = load("res://tests/unit/" + f)
 		if script == null or not script.can_instantiate():
