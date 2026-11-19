@@ -12,7 +12,7 @@ signal start_new
 signal continue_run
 signal quit
 
-const TITLE: String = "CURSED PAWN"
+const TITLE: String = "Cursed Pawn"  ## small caps after the capitals, so the letters read as deliberate
 const SUBTITLE: String = "an occult pawnshop"
 const PARCEL_LINE: String = "A parcel is waiting for you"
 const TITLE_SCALE: int = 4
@@ -20,7 +20,10 @@ const BTN_W: float = 150.0
 const BTN_H: float = 20.0
 const BTN_STEP: float = 26.0
 const MENU_X: float = 420.0
-const CANDLE_POS := Vector2(150.0, 300.0)
+const CANDLE_POS := Vector2(150.0, 312.0)
+const CANDLE_W: int = 16
+const CANDLE_H: int = 54
+const FLAME_PX: int = 3
 const TITLE_AT: float = 0.9
 const TITLE_FADE: float = 2.6
 const SUB_AT: float = 3.2
@@ -128,10 +131,13 @@ func ts_swallow(event: InputEvent) -> bool:
 
 func ts_draw_scene(c: TsCanvas) -> void:
 	var flick: bool = UiMotion.ui_hash(int(c.t * 9.0), 1) < 0.5
-	c.light_pool(Vector2i(CANDLE_POS) - Vector2i(0, 36), 34.0, 196.0 if flick else 204.0, 15)
-	UiFrames.ui_candle(c, CANDLE_POS.x, CANDLE_POS.y, 10, 40, c.t, 0, false, 3)
-	_ts_draw_eyes(c, Vector2(522.0, 120.0), 11.0, ts_eye_open(c.t, EYES_AT), 13, 11)
-	_ts_draw_eyes(c, Vector2(78.0, 104.0), 8.0, ts_eye_open(c.t, EYES2_AT) * 0.8, 12, 13)
+	var flame_at: Vector2 = CANDLE_POS - Vector2(0.0, float(CANDLE_H) + float(FLAME_PX * 4))
+	c.light_pool(Vector2i(flame_at), 46.0, 230.0 if flick else 240.0, 15)
+	UiFrames.ui_glow(c, flame_at, 90 if flick else 96, 9, 10, 1.1)  # the warm pool the candle throws
+	UiFrames.ui_glow(c, CANDLE_POS + Vector2(0.0, 4.0), 56, 8, 9, 0.7)  # and its light on the table
+	UiFrames.ui_candle(c, CANDLE_POS.x, CANDLE_POS.y, CANDLE_W, CANDLE_H, c.t, 0, false, 3, FLAME_PX)
+	_ts_draw_eyes(c, Vector2(556.0, 160.0), 24.0, ts_eye_open(c.t, EYES_AT), 13, 11)
+	_ts_draw_eyes(c, Vector2(96.0, 96.0), 14.0, ts_eye_open(c.t, EYES2_AT) * 0.8, 12, 13)
 	if settings_open:
 		return
 	var step: int = ts_fade_step(c.t)
@@ -148,23 +154,30 @@ func ts_draw_scene(c: TsCanvas) -> void:
 		c.text_c(320.0, 144.0, SUBTITLE, sub_ramp[int(sp * 5.0)], 2, sp > 0.6)
 
 
-## A pair of almond eyes: two eyes `gap` apart (centre of the pair at `at`); o is how open they are.
+## A pair of almond eyes, each row three pixels tall (about 15 px when open), `w` wide, a dither halo in the rim colour and
+## a slit pupil; centre of the pair at `at`. o is how open they are (0..1). A flash of white as they first open.
 func _ts_draw_eyes(c: TsCanvas, at: Vector2, w: float, o: float, rim: int, core: int) -> void:
 	var rows: int = int(round(o * 5.0))
 	if rows <= 0:
 		return
-	var widths: Array[int] = [int(w) - 4, int(w), int(w), int(w) - 2, int(w) - 6]
+	var widths: Array[int] = [int(w) - 6, int(w) - 1, int(w), int(w) - 2, int(w) - 8]
+	var half: float = w * 0.5 + 6.0
 	for side: int in range(2):
-		var ex: float = at.x + (-1.0 if side == 0 else 1.0) * (w + 3.0)
+		var ex: float = at.x + (-1.0 if side == 0 else 1.0) * (w + 6.0)
+		var ey: float = at.y + 7.0
+		UiFrames.ui_glow(c, Vector2(ex, ey), int(half * 2.0), 1 if rim == 12 else 12, rim, 0.8 * o)
 		for i: int in range(rows):
 			var ri: int = i + (5 - rows) / 2
 			var ww: int = maxi(widths[ri], 1)
-			var y: float = at.y + float(ri)
-			c.fill(Rect2(ex - float(ww) * 0.5, y, float(ww), 1.0), rim)
-			if ri >= 1 and ri <= 3 and ww > 3:
-				c.fill(Rect2(ex - float(ww - 4) * 0.5, y, float(ww - 4), 1.0), core)
+			var y: float = at.y + float(ri * 3)
+			c.fill(Rect2(ex - float(ww) * 0.5, y, float(ww), 3.0), rim)
+			if ri >= 1 and ri <= 3 and ww > 4:
+				c.fill(Rect2(ex - float(ww - 4) * 0.5, y, float(ww - 4), 3.0), core)
 		if rows >= 3:
-			c.fill(Rect2(ex, at.y + 1.0, 1.0, 3.0), 0)  # the slit pupil
+			c.fill(Rect2(ex - 1.0, at.y + 3.0, 3.0, 9.0), 0)  # the slit pupil
+			c.fill(Rect2(ex - 5.0, at.y + 4.0, 2.0, 3.0), 15)  # a glint
+		if o < 1.0 and rows >= 2:
+			c.fill(Rect2(ex - 3.0, at.y + 6.0, 6.0, 3.0), 15)  # the white flash of waking
 
 
 func ts_draw_menu(c: TsCanvas) -> void:

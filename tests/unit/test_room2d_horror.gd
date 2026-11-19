@@ -92,10 +92,20 @@ func test_wake_opens_with_a_blackout_beat_and_gentle_has_no_strobe() -> void:
 	room.scare_level = 0
 	room.wake(5)
 	var gentle_peak: float = 0.0
+	var prev: float = 0.0
+	var turns: int = 0
+	var rising: bool = true
 	for t: int in range(ShopRoom2D.BEAT_TICKS):
 		room._wake_step()
 		gentle_peak = maxf(gentle_peak, room._flash)
-	assert_true(gentle_peak > 0.0 and gentle_peak < 0.5, "gentle shows it dimly: %f" % gentle_peak)
+		if t > 0 and rising and room._flash < prev - 0.0001:
+			rising = false
+			turns += 1
+		elif t > 0 and not rising and room._flash > prev + 0.0001:
+			turns += 1  # it came back up: a strobe
+		prev = room._flash
+	assert_true(gentle_peak >= 0.6 and gentle_peak <= 0.95, "gentle shows it clearly but not as a flash: %f" % gentle_peak)
+	assert_eq(turns, 1, "gentle swells once and fades: no strobe")
 	room.free()
 
 
@@ -136,3 +146,25 @@ func test_screen_fit_matches_the_hud_grid_rules() -> void:
 	assert_near(ShopRoom2D.fit_scale(Vector2(1920.0, 1080.0)), 3.0)
 	assert_near(ShopRoom2D.fit_scale(Vector2(1000.0, 560.0)), 560.0 / 360.0, 0.001)  # 1x would keep under 80% of the fit
 	assert_eq(ShopRoom2D.fit_rect(Vector2(1280.0, 720.0)), Rect2(0.0, 0.0, 1280.0, 720.0))
+
+
+func test_customer_clearance_blocks_the_deck_only_while_walking_past() -> void:
+	assert_near(ShopRoom2D.span_clearance(100.0, 32.0, 392.0, 440.0), 1.0)
+	assert_near(ShopRoom2D.span_clearance(416.0, 32.0, 392.0, 440.0), 0.0)
+	assert_near(ShopRoom2D.span_clearance(380.0, 32.0, 392.0, 440.0), 0.0, 0.001)
+	assert_true(ShopRoom2D.span_clearance(350.0, 32.0, 392.0, 440.0) > 0.0)
+	assert_near(ShopRoom2D.span_clearance(590.0, 32.0, 392.0, 440.0), 1.0)
+
+
+func test_fog_wisps_are_thin_and_tile_sideways() -> void:
+	var room := ShopRoom2D.new()
+	var tex: Texture2D = room._fog_texture()
+	var img: Image = tex.get_image()
+	var solid: int = 0
+	for y: int in range(img.get_height()):
+		for x: int in range(img.get_width()):
+			if img.get_pixel(x, y).a > 0.9:
+				solid += 1
+	assert_true(solid < img.get_width() * img.get_height() / 5, "wisps, not banks")
+	assert_near(ShopRoom2D.wisp_noise(0.0, 1.3, 6, 0), ShopRoom2D.wisp_noise(6.0, 1.3, 6, 0), 0.0001)
+	room.free()

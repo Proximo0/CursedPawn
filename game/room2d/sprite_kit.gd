@@ -32,6 +32,15 @@ const SK_EYE_STYLE: Dictionary = {
 	"priest": "blank", "rival": "slit",
 }
 
+## Body plan per customer type, "body[,accessory]". Body: normal, hunched, tall (thin), broad, child. Accessory: veil,
+## hat, cane, satchel. A look dictionary may override it with its own "plan" (and "hat": top, soft, wide) key.
+const SK_PLAN: Dictionary = {
+	"widow": "hunched,veil", "estate_clearer": "broad,satchel", "nervous_heir": "child", "fence": "hunched,hat",
+	"haggler": "hunched,cane", "medium": "tall,veil", "collector": "tall,hat", "tourist": "normal,satchel",
+	"ghost_hunter": "tall,satchel", "decorator": "normal,cane", "priest": "broad,hat", "rival": "normal,hat",
+}
+const SK_HAT: Dictionary = {"fence": "soft", "collector": "top", "priest": "wide", "rival": "soft"}
+
 static var _sk_cols: PackedColorArray = PackedColorArray()
 
 
@@ -81,7 +90,8 @@ static func _sk_draw_object(g: Image, id: String, category: String) -> void:
 
 
 ## Customer figure, 64x96 at height 1.0 (taller or shorter types stretch the torso band, never the pixels).
-## Gaunt hooded figure, uneven shoulders, long pale fingers; the eyes differ per type (see SK_EYE_STYLE).
+## Gaunt hooded figure, uneven shoulders, long pale fingers; the eyes differ per type (see SK_EYE_STYLE) and so does
+## the body plan (hunched, tall and thin, broad, child-sized; veil, hat brim, cane or satchel: see SK_PLAN).
 static func customer_texture(look: Dictionary) -> ImageTexture:
 	return ImageTexture.create_from_image(_sk_cust_image(look, 0))
 
@@ -140,16 +150,38 @@ static func _sk_cust_draw(look: Dictionary, frame: int) -> Image:
 	var sh2: int = SK_DARK[sh]
 	var hsh: int = absi(hash(id))
 	var lean: float = [-3.0, -1.0, 2.0, -2.0, 1.0, -4.0, 0.0][hsh % 7]
-	var rise: int = 1 if frame == 1 else 0
+	var plan: PackedStringArray = str(look.get("plan", SK_PLAN.get(id, "normal"))).split(",")
+	var body: String = plan[0]
+	var acc: String = plan[1] if plan.size() > 1 else ""
+	var wf: float = 1.0
+	var hf: float = 1.0
+	var drop: float = 0.0
+	var hump: float = 0.0
+	var kid: bool = body == "child"
+	match body:
+		"hunched":
+			drop = 4.0
+			hump = 4.0
+			lean = -6.0
+		"tall":
+			wf = 0.8
+			hf = 0.92
+		"broad":
+			wf = 1.3
+	var rise: int = 1 if (frame == 1 and not kid) else 0
 	var tilt: float = 4.5 if frame == 3 else 0.0
 	for y: int in range(SK_CUST_H):
 		var ys: float = float(y + (rise if y < 62 else 0))
-		var hl: float = _sk_interp(SK_HL, ys)
+		var ysrc: float = ys - drop * clampf((46.0 - float(y)) / 43.0, 0.0, 1.0)
+		var hl: float = _sk_interp(SK_HL, ysrc)
 		if hl < 0.0:
 			continue
-		var hr: float = _sk_interp(SK_HR, ys)
-		var widen: float = float(rise) if ys > 37.0 and ys < 60.0 else 0.0
-		var shift: float = _sk_head_shift(ys, lean, tilt)
+		var hr: float = _sk_interp(SK_HR, ysrc)
+		var fw: float = lerpf(hf, wf, clampf((ysrc - 34.0) / 8.0, 0.0, 1.0))
+		hl *= fw
+		hr = hr * fw + hump * sin(PI * clampf((ysrc - 34.0) / 28.0, 0.0, 1.0))
+		var widen: float = float(rise) if ysrc > 37.0 and ysrc < 60.0 else 0.0
+		var shift: float = _sk_head_shift(ysrc, lean, tilt)
 		var xl: int = roundi(32.0 + shift - hl - widen)
 		var xr: int = roundi(32.0 + shift + hr + widen)
 		var span: float = float(maxi(xr - xl, 1))
@@ -176,7 +208,7 @@ static func _sk_cust_draw(look: Dictionary, frame: int) -> Image:
 				t = sh2
 			_sk_p(g, x, y, t)
 		# long vertical folds of heavy cloth: shadow line with a broken highlight beside it
-		if ys >= 44.0:
+		if ysrc >= 44.0:
 			for k: int in range(3):
 				var fy0: int = [46, 52, 44][k]
 				var fy1: int = 95 - k * 5
@@ -185,34 +217,127 @@ static func _sk_cust_draw(look: Dictionary, frame: int) -> Image:
 					_sk_p(g, fx, y, sh2)
 					if (y + k) % 3 != 0:
 						_sk_p(g, fx - 1, y, lit)
+	var hy: int = 25 + roundi(drop)
+	var ysh: float = float(hy) - drop * clampf((46.0 - float(hy)) / 43.0, 0.0, 1.0)
+	var hx: int = 32 + roundi(_sk_head_shift(ysh, lean, tilt))
+	var sy: int = 36 - rise + roundi(drop * 0.5)
 	# cloth draped over the shoulders (left catches the light, right falls into shadow)
-	var hx: int = 32 + roundi(_sk_head_shift(25.0, lean, tilt))
-	var sy: int = 36 + rise * -1
-	_sk_l(g, hx - 8, sy, hx - 15, sy + 9, lit)
-	_sk_l(g, hx - 8, sy + 1, hx - 14, sy + 9, sh)
-	_sk_l(g, hx + 8, sy + 1, hx + 16, sy + 11, sh2)
-	_sk_l(g, hx + 7, sy + 1, hx + 14, sy + 10, base)
+	_sk_l(g, hx - roundi(8.0 * wf), sy, hx - roundi(15.0 * wf), sy + 9, lit)
+	_sk_l(g, hx - roundi(8.0 * wf), sy + 1, hx - roundi(14.0 * wf), sy + 9, sh)
+	_sk_l(g, hx + roundi(8.0 * wf), sy + 1, hx + roundi(16.0 * wf), sy + 11, sh2)
+	_sk_l(g, hx + roundi(7.0 * wf), sy + 1, hx + roundi(14.0 * wf), sy + 10, base)
+	var rx: float = 8.0
+	var ry: float = 11.0
+	if kid:
+		g = _sk_cust_shrink(g, 0.75)
+		hx = 32 + roundi(float(hx - 32) * 0.75)
+		hy = 95 + roundi(float(hy - 95) * 0.75)
+		rx = 6.2
+		ry = 8.0
+		if frame == 1:
+			var src: Image = g.duplicate()
+			g.fill_rect(Rect2i(0, 0, SK_CUST_W, 61), Color(0, 0, 0, 0))
+			g.blit_rect(src, Rect2i(0, 1, SK_CUST_W, 61), Vector2i(0, 0))
+			hy -= 1
 	# hood opening with a thick rim of cloth
-	for y: int in range(12, 40):
-		for x: int in range(hx - 12, hx + 13):
-			var dx: float = float(x - hx) / 8.0
-			var dy: float = float(y - 25) / 11.0
+	for y: int in range(hy - 13, hy + 15):
+		for x: int in range(hx - 13, hx + 14):
+			var dx: float = float(x - hx) / rx
+			var dy: float = float(y - hy) / ry
 			var d: float = dx * dx + dy * dy
 			if g.get_pixel(x, y).a <= 0.0:
 				continue
 			if d <= 1.0:
 				_sk_p(g, x, y, 0)
 			elif d <= 1.5:
-				_sk_p(g, x, y, lit if (x - hx) + (y - 25) < 0 else sh2)
+				_sk_p(g, x, y, lit if (x - hx) + (y - hy) < 0 else sh2)
 	# gaunt hollows inside the dark
-	_sk_r(g, hx - 6, 29, 1, 2, 1)
-	_sk_r(g, hx + 6, 29, 1, 2, 1)
+	var hol: int = 5 if kid else 6
+	_sk_r(g, hx - hol, hy + 4, 1, 2, 1)
+	_sk_r(g, hx + hol, hy + 4, 1, 2, 1)
+	if acc == "veil":
+		for y: int in range(hy - 13, hy + 19):
+			var vw: int = roundi(lerpf(9.0, 15.0, clampf(float(y - hy + 13) / 30.0, 0.0, 1.0)) * maxf(wf, 0.9))
+			for x: int in range(hx - vw, hx + vw + 1):
+				if (x + y) % 2 != 0 and y < hy + 18:
+					continue
+				var cur: int = _sk_idx(g, x, y)
+				if cur < 0:
+					_sk_p(g, x, y, 2)
+				elif cur == 0:
+					_sk_p(g, x, y, 2 if y < hy + 18 else 3)
+				else:
+					_sk_p(g, x, y, SK_DARK[cur])
+	elif acc == "hat":
+		_sk_cust_hat(g, hx, hy - 11, str(look.get("hat", SK_HAT.get(id, "soft"))), base, lit, sh, sh2)
 	var style: String = str(SK_EYE_STYLE.get(id, SK_STYLES[hsh % SK_STYLES.size()]))
-	_sk_cust_eyes(g, hx, 25, eyes, style, frame == 2)
-	_sk_cust_hand(g, 22, 80, -1, base, lit, sh2)
-	_sk_cust_hand(g, 42, 82, 1, base, lit, sh2)
+	_sk_cust_eyes(g, hx, hy, eyes, style, frame == 2)
+	if acc == "cane":
+		var cx: int = 32 - roundi(21.0 * wf) - 3
+		_sk_r(g, cx, 60, 2, 36, 9)
+		_sk_r(g, cx, 60, 1, 36, 10)
+		_sk_r(g, cx - 3, 57, 5, 2, 9)
+		_sk_r(g, cx - 3, 57, 5, 1, 10)
+		_sk_r(g, cx - 4, 58, 2, 3, 11)
+		_sk_r(g, cx, 94, 2, 2, 8)
+	elif acc == "satchel":
+		var bx: int = mini(32 + roundi(19.0 * wf) - 6, 50)
+		_sk_l(g, hx - roundi(8.0 * wf), 38, bx + 5, 62, 9)
+		_sk_l(g, hx - roundi(8.0 * wf) + 1, 38, bx + 6, 62, 8)
+		_sk_r(g, bx, 62, 12, 15, 9)
+		_sk_r(g, bx, 62, 12, 5, 10)
+		_sk_r(g, bx, 62, 12, 1, 11)
+		_sk_r(g, bx + 5, 66, 2, 3, 11)
+		_sk_r(g, bx + 11, 62, 1, 15, 8)
+		_sk_r(g, bx, 76, 12, 1, 8)
+	_sk_cust_hand(g, 32 - roundi(10.0 * wf), 80, -1, base, lit, sh2)
+	_sk_cust_hand(g, 32 + roundi(10.0 * wf), 82, 1, base, lit, sh2)
 	_sk_outline(g)
 	return g
+
+
+## Nearest-neighbour shrink about the bottom centre (a child-sized figure standing on the same floor line).
+static func _sk_cust_shrink(g: Image, s: float) -> Image:
+	var out: Image = _sk_new(SK_CUST_W, SK_CUST_H)
+	for y: int in range(SK_CUST_H):
+		for x: int in range(SK_CUST_W):
+			var sx: int = roundi(32.0 + (float(x) - 32.0) / s)
+			var sy: int = roundi(95.0 + (float(y) - 95.0) / s)
+			if sx >= 0 and sx < SK_CUST_W and sy >= 0 and sy < SK_CUST_H:
+				var c: Color = g.get_pixel(sx, sy)
+				if c.a > 0.0:
+					out.set_pixel(x, y, c)
+	return out
+
+
+## A hat over the hood: "top" tall and straight, "soft" a pinched fedora, "wide" a low crown with a huge brim.
+static func _sk_cust_hat(g: Image, hx: int, brim_y: int, kind: String, base: int, lit: int, sh: int, sh2: int) -> void:
+	var crown_h: int = 7
+	var cw: int = 7
+	var brx: float = 15.0
+	match kind:
+		"top":
+			crown_h = 11
+			cw = 6
+			brx = 12.0
+		"wide":
+			crown_h = 5
+			cw = 8
+			brx = 20.0
+	for y: int in range(0, brim_y):
+		_sk_r(g, hx - 16, y, 33, 1, -1)
+	for y: int in range(brim_y - crown_h, brim_y + 1):
+		var t: float = float(brim_y - y) / float(crown_h)
+		var hw: int = cw if kind != "soft" else cw - roundi(t * 2.5)
+		_sk_r(g, hx - hw, y, hw * 2 + 1, 1, base)
+		_sk_p(g, hx - hw, y, lit)
+		_sk_p(g, hx + hw, y, sh)
+	if kind == "soft":
+		_sk_r(g, hx - 1, brim_y - crown_h, 3, 1, sh)
+	_sk_r(g, hx - cw, brim_y - 2, cw * 2 + 1, 2, sh2)
+	_sk_e(g, float(hx), float(brim_y + 1), brx, 2.2, base)
+	_sk_r(g, hx - roundi(brx) + 2, brim_y + 2, roundi(brx) * 2 - 3, 1, sh2)
+	_sk_r(g, hx - roundi(brx) + 1, brim_y, 5, 1, lit)
 
 
 static func _sk_eye_centers(style: String) -> Array[Vector2i]:
@@ -484,15 +609,13 @@ static func _sk_t_wall() -> Image:
 		for x: int in range(32):
 			var m: int = x % 16
 			var t: int = 3
-			if m == 8 and y % 2 == 0:
-				t = 3
-			elif m == 8 or m >= 9 and m <= 14:
+			if m >= 8 and m <= 14:
 				t = 2
 			elif m == 15:
-				t = 2 if y % 2 == 0 else 1
+				t = 2
 			_sk_p(g, x, y, t)
 	# damask lozenges on the light stripe, each lit on its upper left
-	for o: Vector2i in [Vector2i(4, 5), Vector2i(20, 21), Vector2i(20, 3), Vector2i(4, 19)]:
+	for o: Vector2i in [Vector2i(4, 6), Vector2i(4, 22)]:
 		_sk_art(g, ["..4..", ".434.", "44344", ".434.", "..4.."], o.x - 2, o.y - 2)
 	# seams: dark gap, lit paper edge to its right
 	for sx: int in [0, 16]:
@@ -508,8 +631,6 @@ static func _sk_t_wall() -> Image:
 				_sk_p(g, x, y, 5)
 			elif d < 1.0 and (x + y) % 2 == 0:
 				_sk_p(g, x, y, 5)
-			elif d < 1.35 and (x * 3 + y) % 5 == 0:
-				_sk_p(g, x, y, 5)
 	_sk_r(g, 24, 14, 1, 9, 5)
 	_sk_p(g, 25, 15, 5)
 	_sk_p(g, 24, 23, 6)
@@ -519,13 +640,11 @@ static func _sk_t_wall() -> Image:
 			var d2: float = pow(float(x - 6) / 5.0, 2.0) + pow(float(y - 26) / 3.0, 2.0)
 			if d2 < 0.5 or (d2 < 1.0 and (x + y) % 2 == 0):
 				_sk_p(g, x, y, 8 if g.get_pixel(x, y) == _sk_col(2) else 1)
-	# soot smear and mildew specks, in clusters of two so nothing is a lone pixel
-	for p: Vector2i in [Vector2i(10, 12), Vector2i(12, 28), Vector2i(29, 27), Vector2i(7, 3)]:
-		_sk_r(g, p.x, p.y, 2, 1, 1)
-		_sk_p(g, p.x + 1, p.y + 1, 1)
-	for p: Vector2i in [Vector2i(3, 9), Vector2i(13, 22), Vector2i(28, 19)]:
-		_sk_r(g, p.x, p.y, 2, 2, 5)
-		_sk_p(g, p.x, p.y, 6)
+	# one soot smear and one patch of mildew; nothing smaller
+	_sk_r(g, 10, 11, 4, 2, 1)
+	_sk_r(g, 11, 13, 2, 1, 1)
+	_sk_r(g, 27, 24, 3, 3, 5)
+	_sk_p(g, 27, 24, 6)
 	return g
 
 
@@ -569,23 +688,20 @@ static func _sk_t_floor() -> Image:
 				t = 8 if t == 9 else 1
 			_sk_p(g, x, y, t)
 	# grain dashes
-	for i: int in range(26):
+	for i: int in range(7):
 		var gx: int = rng.randi_range(0, 31)
 		var gy: int = rng.randi_range(0, 31)
-		var gl: int = rng.randi_range(4, 9)
+		var gl: int = rng.randi_range(8, 12)
 		for k: int in range(gl):
 			var cur: int = _sk_idx(g, (gx + k) % 32, gy)
 			if cur == 9:
 				_sk_p(g, (gx + k) % 32, gy, 8)
-			elif cur == 8 and k % 2 == 0:
-				_sk_p(g, (gx + k) % 32, gy, 1)
 	# joints with a lit right edge and nail heads
 	for r: int in range(4):
 		var jx2: int = (r * 13 + 5) % 32
 		for y: int in range(r * 8 + 1, r * 8 + 6):
 			_sk_p(g, jx2, y, 0)
 			_sk_p(g, (jx2 + 1) % 32, y, 10 if _sk_idx(g, (jx2 + 1) % 32, y) == 9 else 9)
-			_sk_p(g, (jx2 + 3) % 32, y, _sk_idx(g, (jx2 + 3) % 32, y) if y != r * 8 + 2 and y != r * 8 + 4 else 1)
 	# knot
 	_sk_art(g, [".888.", "81118", "81018", "81118", ".888."], 20, 13)
 	# spilled stain, dithered at the rim
@@ -593,7 +709,7 @@ static func _sk_t_floor() -> Image:
 		for x: int in range(3, 15):
 			var d: float = pow(float(x - 9) / 6.0, 2.0) + pow(float(y - 4) / 3.5, 2.0)
 			var cur2: int = _sk_idx(g, x, y)
-			if cur2 != 0 and (d < 0.55 or (d < 1.0 and (x + y) % 2 == 0)):
+			if cur2 != 0 and d < 0.8:
 				_sk_p(g, x, y, SK_DARK[cur2])
 	return g
 
@@ -888,44 +1004,73 @@ static func _sk_o_tin_soldier(g: Image) -> void:
 
 
 static func _sk_o_porcelain_doll(g: Image) -> void:
-	_sk_e(g, 16, 9, 6.0, 6.0, 15)
-	_sk_r(g, 9, 3, 14, 4, 8)
-	_sk_r(g, 9, 5, 3, 9, 8)
-	_sk_r(g, 20, 5, 3, 9, 8)
-	for y: int in range(15, 30):
-		var hw: int = 4 + (y - 15) * 8 / 15
-		_sk_r(g, 16 - hw, y, hw * 2, 1, 14)
-	_sk_r(g, 12, 15, 8, 4, 13)
-	_sk_r(g, 8, 17, 3, 6, 15)
-	_sk_r(g, 21, 17, 3, 6, 15)
+	# dark ringlets behind and beside a pale cracked face, a faded red dress with a lace hem
+	_sk_e(g, 16, 7, 8.0, 6.5, 2)
+	_sk_r(g, 8, 7, 3, 11, 2)
+	_sk_r(g, 21, 7, 3, 11, 2)
+	_sk_r(g, 8, 18, 3, 2, 2)
+	_sk_r(g, 21, 18, 3, 2, 2)
+	_sk_e(g, 16, 11, 5.5, 6.5, 15)
+	_sk_r(g, 11, 4, 10, 3, 2)
+	_sk_r(g, 14, 17, 4, 3, 14)
+	for y: int in range(19, 31):
+		var hw: int = 4 + (y - 19) * 7 / 12
+		_sk_r(g, 16 - hw, y, hw * 2, 1, 12)
+	_sk_r(g, 12, 19, 8, 2, 14)
+	_sk_r(g, 9, 20, 3, 3, 12)
+	_sk_r(g, 21, 20, 3, 3, 12)
+	_sk_r(g, 9, 23, 3, 4, 14)
+	_sk_r(g, 21, 23, 3, 4, 14)
 	_sk_outline(g)
-	_sk_p(g, 13, 9, 0)
-	_sk_p(g, 19, 9, 0)
-	_sk_p(g, 16, 11, 13)
-	_sk_p(g, 12, 11, 13)
-	_sk_p(g, 20, 11, 13)
-	_sk_r(g, 10, 27, 12, 1, 4)
-	_sk_l(g, 13, 18, 11, 28, 4)
-	_sk_l(g, 19, 18, 21, 28, 4)
+	for x: int in range(6, 27, 2):
+		_sk_p(g, x, 30, 15)
+	_sk_r(g, 15, 19, 2, 11, 13)
+	_sk_r(g, 12, 10, 3, 2, 0)
+	_sk_p(g, 13, 10, 15)
+	_sk_r(g, 18, 10, 3, 3, 0)
+	_sk_l(g, 16, 6, 14, 10, 3)
+	_sk_l(g, 14, 10, 15, 13, 3)
+	_sk_l(g, 15, 13, 13, 16, 3)
+	_sk_l(g, 15, 13, 18, 14, 3)
+	_sk_r(g, 19, 14, 2, 2, 0)
+	_sk_r(g, 15, 14, 3, 1, 13)
+	_sk_p(g, 17, 15, 12)
+	_sk_p(g, 11, 13, 13)
+	_sk_p(g, 16, 12, 14)
 
 
 static func _sk_o_jack_in_box(g: Image) -> void:
-	_sk_r(g, 6, 19, 20, 10, 13)
-	_sk_r(g, 6, 19, 20, 2, 12)
-	_sk_r(g, 6, 24, 20, 1, 11)
-	_sk_r(g, 15, 19, 2, 10, 11)
-	_sk_r(g, 5, 17, 5, 2, 9)
-	_sk_l(g, 16, 18, 12, 16, 14)
-	_sk_l(g, 12, 16, 20, 14, 14)
-	_sk_l(g, 20, 14, 12, 12, 14)
-	_sk_e(g, 16, 8, 5.0, 5.0, 15)
-	_sk_r(g, 11, 1, 10, 3, 3)
-	_sk_p(g, 16, 0, 11)
+	# painted box with a crank and a sprung lid, a zig-zag spring, a jester head with a far too wide grin
+	_sk_r(g, 6, 22, 20, 9, 3)
+	_sk_r(g, 5, 21, 22, 2, 10)
+	_sk_r(g, 6, 26, 20, 1, 4)
+	_sk_l(g, 5, 21, 2, 15, 9)
+	_sk_l(g, 6, 21, 3, 15, 9)
+	_sk_r(g, 26, 25, 4, 1, 14)
+	_sk_r(g, 29, 23, 2, 4, 11)
+	for y: int in range(17, 21):
+		_sk_r(g, 13 + (y % 2) * 5, y, 3, 1, 14)
+	_sk_e(g, 16, 11, 5.5, 5.0, 15)
+	for i: int in range(6):
+		_sk_r(g, 10 - i, 5 - (i * 4) / 5, 5, 1, 13)
+		_sk_r(g, 17 + i, 5 - (i * 4) / 5, 5, 1, 4)
+	_sk_r(g, 10, 5, 12, 2, 10)
+	_sk_p(g, 5, 0, 11)
+	_sk_p(g, 27, 0, 11)
 	_sk_outline(g)
-	_sk_r(g, 13, 7, 2, 1, 0)
-	_sk_r(g, 17, 7, 2, 1, 0)
-	_sk_r(g, 15, 9, 2, 2, 13)
-	_sk_r(g, 13, 11, 6, 1, 12)
+	_sk_r(g, 12, 9, 3, 2, 0)
+	_sk_r(g, 18, 9, 3, 2, 0)
+	_sk_p(g, 13, 10, 11)
+	_sk_p(g, 19, 10, 11)
+	_sk_r(g, 15, 11, 2, 2, 13)
+	_sk_r(g, 11, 13, 11, 3, 0)
+	_sk_p(g, 10, 12, 0)
+	_sk_p(g, 22, 12, 0)
+	for x: int in range(12, 21, 2):
+		_sk_p(g, x, 13, 15)
+		_sk_p(g, x + 1, 15, 15)
+	_sk_r(g, 8, 24, 1, 5, 11)
+	_sk_r(g, 23, 24, 1, 5, 11)
 
 
 static func _sk_o_rocking_horse(g: Image) -> void:
@@ -972,54 +1117,83 @@ static func _sk_o_spinning_top(g: Image) -> void:
 
 
 static func _sk_o_marionette(g: Image) -> void:
-	_sk_r(g, 3, 1, 26, 2, 9)
-	_sk_r(g, 14, 3, 4, 2, 9)
-	_sk_p(g, 3, 1, 11)
-	_sk_p(g, 28, 1, 11)
-	for i: int in range(5):
-		_sk_r(g, 13 + i, 6 - i, 6 - i * 2 if i < 3 else 1, 1, 13)
-	_sk_e(g, 16, 10, 4.0, 4.0, 14)
-	_sk_r(g, 11, 14, 10, 8, 13)
-	_sk_r(g, 11, 14, 10, 1, 11)
-	_sk_l(g, 11, 15, 6, 21, 13)
-	_sk_l(g, 12, 15, 7, 21, 13)
-	_sk_l(g, 20, 15, 25, 21, 13)
-	_sk_l(g, 19, 15, 24, 21, 13)
-	_sk_r(g, 5, 21, 3, 3, 14)
-	_sk_r(g, 24, 21, 3, 3, 14)
-	_sk_r(g, 11, 22, 4, 8, 3)
-	_sk_r(g, 17, 22, 4, 4, 3)
-	_sk_r(g, 20, 25, 4, 4, 3)
-	_sk_r(g, 9, 29, 7, 2, 9)
-	_sk_r(g, 22, 28, 5, 2, 9)
+	# crossed control bars, a wooden puppet with a dropped jaw and a hopelessly tangled set of strings
+	_sk_r(g, 3, 0, 26, 2, 9)
+	_sk_r(g, 14, 2, 4, 3, 10)
+	_sk_e(g, 16, 11, 3.5, 4.0, 10)
+	_sk_r(g, 12, 16, 8, 7, 12)
+	_sk_r(g, 12, 16, 8, 1, 13)
+	_sk_l(g, 12, 17, 7, 20, 12)
+	_sk_l(g, 12, 18, 7, 21, 12)
+	_sk_l(g, 7, 20, 6, 14, 12)
+	_sk_l(g, 8, 20, 7, 14, 12)
+	_sk_l(g, 20, 17, 25, 21, 12)
+	_sk_l(g, 20, 18, 25, 22, 12)
+	_sk_l(g, 25, 21, 26, 27, 12)
+	_sk_l(g, 24, 21, 25, 27, 12)
+	_sk_r(g, 5, 12, 3, 2, 10)
+	_sk_r(g, 25, 27, 3, 2, 10)
+	_sk_l(g, 14, 23, 12, 27, 3)
+	_sk_l(g, 15, 23, 13, 27, 3)
+	_sk_l(g, 12, 27, 9, 30, 3)
+	_sk_l(g, 13, 27, 10, 30, 3)
+	_sk_l(g, 18, 23, 21, 27, 3)
+	_sk_l(g, 19, 23, 22, 27, 3)
+	_sk_l(g, 21, 27, 23, 31, 3)
+	_sk_l(g, 22, 27, 24, 31, 3)
+	_sk_r(g, 11, 26, 3, 2, 10)
+	_sk_r(g, 20, 26, 3, 2, 10)
+	_sk_r(g, 7, 30, 4, 1, 9)
+	_sk_r(g, 22, 30, 4, 1, 9)
 	_sk_outline(g)
-	_sk_p(g, 14, 10, 0)
-	_sk_p(g, 18, 10, 0)
+	_sk_r(g, 14, 9, 2, 2, 0)
+	_sk_r(g, 17, 9, 2, 2, 0)
+	_sk_p(g, 14, 10, 11)
+	_sk_p(g, 18, 10, 11)
+	_sk_p(g, 16, 11, 9)
 	_sk_p(g, 13, 12, 13)
 	_sk_p(g, 19, 12, 13)
-	_sk_p(g, 16, 17, 11)
-	_sk_p(g, 16, 19, 11)
-	_sk_l(g, 4, 3, 6, 21, 15)
-	_sk_l(g, 27, 3, 25, 21, 15)
-	_sk_l(g, 8, 3, 12, 24, 15)
-	_sk_l(g, 24, 3, 22, 25, 15)
+	_sk_r(g, 15, 13, 3, 2, 0)
+	_sk_p(g, 13, 14, 8)
+	_sk_p(g, 19, 14, 8)
+	# strings, deliberately crossed and knotted
+	_sk_l(g, 16, 5, 16, 7, 14)
+	_sk_l(g, 4, 2, 6, 12, 14)
+	_sk_l(g, 28, 2, 26, 26, 14)
+	_sk_l(g, 12, 2, 20, 26, 14)
+	_sk_l(g, 20, 2, 12, 26, 14)
+	_sk_l(g, 5, 2, 25, 27, 14)
+	_sk_ring(g, 22.0, 9.0, 2.5, 2.5, 1.0, 14)
+	_sk_l(g, 27, 27, 29, 31, 14)
+	_sk_l(g, 4, 3, 3, 8, 14)
 
 
 static func _sk_o_toy_theatre(g: Image) -> void:
-	_sk_r(g, 3, 6, 26, 3, 11)
-	_sk_r(g, 5, 3, 22, 3, 10)
-	_sk_r(g, 3, 9, 26, 20, 12)
-	_sk_r(g, 8, 11, 16, 14, 1)
-	_sk_r(g, 8, 25, 16, 3, 9)
-	_sk_r(g, 3, 9, 6, 18, 13)
-	_sk_r(g, 23, 9, 6, 18, 13)
+	# a gilt proscenium and a stage with a tight red curtain; something shows in the gap
+	_sk_r(g, 2, 27, 28, 4, 9)
+	_sk_r(g, 3, 8, 4, 19, 10)
+	_sk_r(g, 25, 8, 4, 19, 10)
+	_sk_r(g, 7, 8, 18, 19, 1)
+	_sk_r(g, 3, 5, 26, 3, 11)
+	_sk_r(g, 8, 3, 16, 2, 10)
+	_sk_r(g, 12, 1, 8, 2, 11)
+	_sk_r(g, 7, 8, 9, 18, 13)
+	_sk_r(g, 16, 8, 9, 18, 13)
 	_sk_outline(g)
-	_sk_l(g, 8, 11, 8, 24, 12)
-	_sk_l(g, 23, 11, 23, 24, 12)
-	_sk_r(g, 15, 17, 2, 7, 14)
-	_sk_e(g, 16, 15, 1.0, 1.0, 14)
-	_sk_p(g, 14, 12, 11)
-	_sk_p(g, 18, 12, 11)
+	for x: int in [9, 12, 19, 22]:
+		_sk_r(g, x, 11, 1, 15, 12)
+	_sk_r(g, 7, 8, 18, 3, 12)
+	for x: int in range(7, 25, 2):
+		_sk_p(g, x, 11, 11)
+	_sk_r(g, 15, 12, 2, 14, 0)
+	_sk_p(g, 15, 16, 11)
+	_sk_p(g, 16, 19, 11)
+	for x: int in [6, 11, 16, 21, 26]:
+		_sk_p(g, x, 26, 11)
+	_sk_r(g, 4, 27, 24, 1, 8)
+	_sk_p(g, 16, 3, 0)
+	_sk_p(g, 8, 20, 11)
+	_sk_p(g, 23, 20, 11)
 
 
 # ---------------------------------------------------------------- objects: jewelry
@@ -1353,134 +1527,150 @@ static func _sk_bk_atlas(g: Image) -> void:
 	_sk_p(g, 18, 11, 15)
 
 
-## Diary: slim upright red book, big gold padlock hanging on a strap across the cover.
+## Upright book in three-quarter view: spine strip on the left, cover, page block peeking out below.
+static func _sk_bk_block(g: Image, x: int, y: int, w: int, h: int, sp: int, cov: int, spc: int) -> void:
+	_sk_r(g, x, y, w, h - 2, cov)
+	_sk_r(g, x, y, sp, h - 2, spc)
+	_sk_r(g, x + sp, y + h - 2, w - sp - 1, 2, 14)
+	_sk_r(g, x + sp, y + h - 2, w - sp - 1, 1, 15)
+	_sk_p(g, x + sp + 3, y + h - 1, 4)
+	_sk_p(g, x + sp + 8, y + h - 1, 4)
+
+
+## Diary: red cloth, gold spine bands, a leather strap with a big brass padlock and a stained corner.
 static func _sk_bk_diary(g: Image) -> void:
-	_sk_r(g, 7, 2, 18, 27, 13)
-	_sk_r(g, 25, 3, 2, 25, 14)
-	_sk_r(g, 7, 2, 3, 27, 12)
-	_sk_r(g, 20, 17, 6, 3, 11)
-	_sk_r(g, 13, 11, 2, 7, 14)
-	_sk_r(g, 19, 11, 2, 7, 14)
-	_sk_r(g, 13, 10, 8, 2, 14)
-	_sk_r(g, 11, 17, 12, 10, 11)
+	_sk_bk_block(g, 6, 2, 20, 28, 4, 13, 12)
 	_sk_outline(g)
-	_sk_r(g, 11, 24, 12, 3, 10)
-	_sk_r(g, 16, 20, 2, 3, 0)
-	_sk_p(g, 17, 22, 0)
-	_sk_p(g, 12, 18, 15)
-	_sk_p(g, 12, 19, 15)
-	_sk_r(g, 15, 11, 4, 1, 4)
-	_sk_p(g, 12, 5, 11)
-	_sk_p(g, 22, 6, 11)
-	_sk_p(g, 14, 7, 11)
-	_sk_r(g, 10, 3, 1, 25, 11)
+	for y: int in [5, 12, 19, 25]:
+		_sk_r(g, 6, y, 4, 1, 11)
+	_sk_r(g, 10, 14, 16, 3, 9)
+	for x: int in range(11, 26, 3):
+		_sk_p(g, x, 15, 10)
+	_sk_r(g, 16, 17, 6, 6, 11)
+	_sk_r(g, 17, 13, 4, 1, 14)
+	_sk_r(g, 17, 14, 1, 3, 14)
+	_sk_r(g, 20, 14, 1, 3, 14)
+	_sk_r(g, 18, 19, 2, 2, 0)
+	_sk_p(g, 18, 21, 0)
+	_sk_r(g, 12, 4, 12, 1, 11)
+	_sk_r(g, 20, 21, 5, 4, 12)
+	_sk_p(g, 22, 23, 8)
+	_sk_p(g, 12, 7, 11)
+	_sk_p(g, 22, 8, 11)
 
 
-## Hymnal: small tall black book, gold cross, a red ribbon bookmark hanging out of the bottom.
+## Hymnal: slim black book, a gold cross split by a crack, brass corners and a red ribbon hanging from the bottom.
 static func _sk_bk_hymnal(g: Image) -> void:
-	_sk_r(g, 10, 2, 13, 25, 2)
-	_sk_r(g, 10, 2, 3, 25, 1)
-	_sk_r(g, 11, 26, 12, 2, 14)
-	_sk_r(g, 17, 27, 3, 4, 13)
-	_sk_p(g, 18, 30, -1)
+	_sk_bk_block(g, 8, 3, 16, 26, 3, 2, 1)
+	_sk_r(g, 15, 28, 2, 4, 13)
+	_sk_p(g, 15, 31, -1)
 	_sk_outline(g)
-	_sk_r(g, 17, 5, 2, 12, 11)
-	_sk_r(g, 14, 8, 8, 2, 11)
-	_sk_r(g, 15, 21, 6, 1, 10)
-	_sk_p(g, 16, 28, 15)
-	_sk_r(g, 13, 2, 1, 24, 3)
+	for y: int in [6, 12, 18, 23]:
+		_sk_r(g, 8, y, 3, 1, 10)
+	_sk_r(g, 17, 7, 2, 13, 11)
+	_sk_r(g, 14, 10, 8, 2, 11)
+	_sk_l(g, 15, 8, 19, 17, 0)
+	_sk_r(g, 11, 3, 3, 1, 10)
+	_sk_r(g, 11, 3, 1, 3, 10)
+	_sk_r(g, 21, 3, 3, 1, 10)
+	_sk_r(g, 11, 23, 3, 1, 10)
+	_sk_r(g, 11, 21, 1, 3, 10)
+	_sk_r(g, 21, 23, 3, 1, 10)
+	_sk_r(g, 23, 21, 1, 3, 10)
+	_sk_r(g, 13, 22, 8, 1, 3)
 
 
-## Almanac: floppy stitched paperback with a dog-eared corner, sun above and moon below.
+## Almanac: floppy tan paperback, a stitched spine, a dog-eared corner, a sun above and a moon below.
 static func _sk_bk_almanac(g: Image) -> void:
-	_sk_r(g, 7, 3, 19, 26, 4)
-	_sk_r(g, 7, 28, 19, 1, 3)
-	for y: int in range(4):
-		for x: int in range(4):
-			if x - y >= 1:
-				_sk_p(g, 22 + x, 3 + y, -1)
-	_sk_p(g, 25, 28, -1)
-	_sk_p(g, 7, 28, -1)
+	_sk_bk_block(g, 7, 3, 19, 26, 2, 9, 8)
+	for i: int in range(4):
+		for j: int in range(4):
+			if i - j >= 1:
+				_sk_p(g, 22 + i, 3 + j, -1)
+	_sk_p(g, 7, 26, -1)
 	_sk_outline(g)
+	for y: int in range(5, 26, 3):
+		_sk_r(g, 8, y, 1, 2, 14)
 	_sk_r(g, 21, 4, 2, 1, 14)
-	_sk_r(g, 21, 5, 3, 1, 14)
-	_sk_r(g, 22, 6, 2, 1, 14)
-	for y: int in range(5, 28, 3):
-		_sk_r(g, 9, y, 1, 2, 15)
-	_sk_e(g, 17, 11, 3.0, 3.0, 11)
-	for p: Vector2i in [Vector2i(17, 5), Vector2i(17, 17), Vector2i(11, 11), Vector2i(23, 11), Vector2i(13, 7), Vector2i(21, 15), Vector2i(21, 7), Vector2i(13, 15)]:
+	_sk_r(g, 22, 5, 3, 1, 14)
+	_sk_r(g, 23, 6, 2, 1, 14)
+	_sk_e(g, 17, 10, 3.0, 3.0, 11)
+	for p: Vector2i in [Vector2i(17, 5), Vector2i(17, 15), Vector2i(12, 10), Vector2i(22, 10), Vector2i(13, 6), Vector2i(21, 14)]:
 		_sk_p(g, p.x, p.y, 11)
-	_sk_e(g, 17, 23, 4.0, 4.0, 15)
-	_sk_e(g, 19, 22, 3.5, 3.5, 4)
-	_sk_p(g, 12, 21, 11)
-	_sk_p(g, 13, 26, 11)
+	_sk_e(g, 17, 21, 4.0, 4.0, 15)
+	_sk_e(g, 19, 20, 3.5, 3.5, 9)
+	_sk_p(g, 12, 18, 11)
+	_sk_p(g, 13, 25, 11)
+	_sk_r(g, 10, 27, 7, 1, 8)
 
 
-## Photo album: tall open album, two tiny photographs with corner tabs, caption lines.
+## Photo album: wide, bound in pale leather the colour of skin (pores, a stitched seam), a window showing a pale
+## face, and a brass clasp.
 static func _sk_bk_album(g: Image) -> void:
-	_sk_r(g, 2, 4, 28, 24, 9)
-	_sk_r(g, 4, 6, 11, 20, 14)
-	_sk_r(g, 17, 6, 11, 20, 14)
+	_sk_bk_block(g, 3, 5, 26, 24, 4, 14, 10)
+	_sk_r(g, 28, 14, 3, 4, 11)
 	_sk_outline(g)
-	_sk_r(g, 15, 5, 2, 22, 8)
-	_sk_r(g, 5, 8, 8, 9, 15)
-	_sk_r(g, 6, 9, 6, 7, 3)
-	_sk_e(g, 9, 12, 1.5, 1.5, 14)
-	_sk_r(g, 7, 15, 4, 1, 14)
-	_sk_r(g, 19, 14, 8, 8, 15)
-	_sk_r(g, 20, 15, 6, 6, 4)
-	_sk_p(g, 24, 16, 11)
-	_sk_r(g, 20, 19, 6, 2, 6)
-	for p: Vector2i in [Vector2i(5, 8), Vector2i(12, 16), Vector2i(19, 14), Vector2i(26, 21)]:
-		_sk_p(g, p.x, p.y, 13)
-	_sk_r(g, 6, 20, 6, 1, 13)
-	_sk_r(g, 6, 22, 4, 1, 13)
-	_sk_r(g, 19, 8, 7, 1, 13)
-	_sk_r(g, 19, 10, 5, 1, 13)
+	for y: int in range(5, 27):
+		for x: int in range(7, 29):
+			if _sk_idx(g, x, y) == 14:
+				if (x * 5 + y * 3) % 7 == 0:
+					_sk_p(g, x, y, 10)
+				elif (x * 3 + y * 7) % 13 == 0:
+					_sk_p(g, x, y, 9)
+	for y: int in range(6, 26, 2):
+		_sk_p(g, 8, y, 8)
+	_sk_r(g, 12, 8, 12, 12, 8)
+	_sk_r(g, 13, 9, 10, 10, 2)
+	_sk_e(g, 18, 14, 3.0, 4.0, 15)
+	_sk_r(g, 16, 13, 1, 2, 0)
+	_sk_r(g, 19, 13, 1, 2, 0)
+	_sk_r(g, 17, 17, 2, 1, 0)
+	_sk_p(g, 30, 16, 0)
+	for p: Vector2i in [Vector2i(12, 8), Vector2i(23, 8), Vector2i(12, 19), Vector2i(23, 19)]:
+		_sk_p(g, p.x, p.y, 11)
 
 
-## Herbarium: dark green press-book, bone label, fern and leaves poking out of the pages.
+## Herbarium: dark green press-book held shut by two buckled straps, a bone label with a pressed leaf, a fern
+## escaping from the top.
 static func _sk_bk_herbarium(g: Image) -> void:
-	_sk_r(g, 5, 8, 19, 21, 5)
-	_sk_r(g, 24, 9, 2, 19, 14)
-	_sk_r(g, 5, 8, 3, 21, 0)
-	_sk_e(g, 28, 13, 3.0, 2.0, 7)
-	_sk_e(g, 28, 22, 3.0, 2.0, 6)
-	_sk_l(g, 14, 8, 14, 1, 7)
+	_sk_bk_block(g, 5, 8, 21, 22, 3, 6, 5)
+	_sk_l(g, 16, 8, 16, 2, 7)
 	for y: int in [2, 4, 6]:
-		_sk_r(g, 11, y, 3, 1, 7)
-		_sk_r(g, 15, y, 3, 1, 7)
-	_sk_e(g, 20, 5, 2.0, 3.0, 6)
+		_sk_r(g, 13, y, 3, 1, 7)
+		_sk_r(g, 17, y, 3, 1, 7)
+	_sk_e(g, 28, 14, 2.5, 1.5, 7)
+	_sk_e(g, 28, 22, 2.5, 1.5, 6)
 	_sk_outline(g)
-	_sk_r(g, 10, 13, 10, 10, 14)
-	_sk_r(g, 10, 13, 10, 1, 15)
-	_sk_l(g, 12, 22, 17, 15, 6)
-	_sk_e(g, 17, 17, 2.0, 1.0, 7)
-	_sk_e(g, 13, 19, 1.0, 1.0, 7)
-	_sk_r(g, 8, 8, 1, 21, 6)
-	_sk_p(g, 27, 13, 5)
-	_sk_p(g, 28, 22, 5)
+	_sk_r(g, 11, 8, 2, 19, 8)
+	_sk_r(g, 20, 8, 2, 19, 8)
+	_sk_r(g, 10, 22, 4, 3, 11)
+	_sk_r(g, 19, 22, 4, 3, 11)
+	_sk_p(g, 11, 23, 0)
+	_sk_p(g, 20, 23, 0)
+	_sk_r(g, 14, 11, 5, 8, 15)
+	_sk_l(g, 15, 18, 17, 12, 6)
+	_sk_e(g, 17, 14, 1.2, 1.5, 7)
+	_sk_r(g, 8, 8, 1, 20, 7)
+	_sk_p(g, 28, 18, 13)
 
 
-## First edition: upright, brown spine with gold ridged bands, red dust jacket with a bone title panel and crest.
+## First edition: black and gold, a brass fore-edge clasp, and a huge open eye with a slit pupil on the cover.
 static func _sk_bk_first_edition(g: Image) -> void:
-	_sk_r(g, 6, 2, 5, 27, 9)
-	_sk_r(g, 11, 2, 15, 27, 12)
-	_sk_r(g, 22, 2, 4, 27, 13)
+	_sk_bk_block(g, 7, 2, 19, 28, 5, 1, 9)
+	_sk_r(g, 25, 19, 3, 4, 11)
 	_sk_outline(g)
-	for y: int in [4, 9, 14, 19, 24]:
-		_sk_r(g, 6, y, 5, 1, 11)
-		_sk_r(g, 6, y + 1, 5, 1, 8)
-	_sk_r(g, 22, 2, 1, 27, 0)
-	_sk_r(g, 13, 6, 8, 7, 14)
-	_sk_r(g, 14, 8, 6, 1, 12)
-	_sk_r(g, 14, 10, 4, 1, 12)
-	_sk_r(g, 11, 2, 15, 1, 11)
-	_sk_r(g, 11, 28, 15, 1, 11)
-	_sk_r(g, 16, 17, 3, 3, 11)
-	_sk_p(g, 17, 16, 11)
-	_sk_p(g, 17, 20, 11)
-	_sk_r(g, 13, 23, 8, 1, 11)
+	for y: int in [5, 11, 17, 23]:
+		_sk_r(g, 7, y, 5, 1, 11)
+	_sk_r(g, 12, 4, 13, 1, 11)
+	_sk_r(g, 12, 25, 13, 1, 11)
+	_sk_r(g, 12, 4, 1, 22, 11)
+	_sk_r(g, 24, 4, 1, 22, 11)
+	_sk_art(g, ["..bbbbbbb..", ".bfffffffb.", "bffaa0aaffb", "bffaa0aaffb", "bffaa0aaffb", ".bfffffffb.", "..bbbbbbb.."], 13, 10)
+	_sk_p(g, 14, 14, 13)
+	_sk_p(g, 22, 14, 13)
+	_sk_r(g, 14, 20, 9, 1, 11)
+	_sk_r(g, 16, 22, 5, 1, 11)
+	_sk_p(g, 27, 21, 0)
 
 
 # ---------------------------------------------------------------- objects: relics
@@ -1780,14 +1970,15 @@ static func _sk_opaque(g: Image) -> int:
 ##  "eyes" 16x6: a pair of slit-pupilled amber eyes, the right one lower and half-lidded.
 ##  "portrait" 24x32: gilt frame, pale gaunt sitter; the two eye sockets are LEFT BLANK (dark) at (9,13) and (13,13),
 ##     each 2x2, so the room can draw pupils that follow the player.
-##  "silhouette" 40x96: tall wrong figure, black with a faint red rim light on its left edges and two pinprick eyes.
+##  "silhouette" 40x96: tall wrong figure, black with a lit red rim and two pinprick eyes, standing on a dark red
+##     oval backdrop (opaque in the middle, dithered out to transparent at the edges and corners).
 ##  "hand" 16x12: long pale hand lying palm down, wrist at the left edge, fingers to the right.
-##  "moth" 6x5: dusty moth with wings spread.
+##  "moth" 8x7: dusty moth with wings spread, eyespots on the wings and two antennae.
 ##  "clock" 24x48: grandfather clock; dial centred at (12,12) radius 7, pendulum window x 8..15, y 23..38 left dark
 ##     (the room draws the pendulum there).
 static func horror_texture(kind: String) -> ImageTexture:
 	var sizes: Dictionary = {"eyes": Vector2i(16, 6), "portrait": Vector2i(24, 32), "silhouette": Vector2i(40, 96),
-		"hand": Vector2i(16, 12), "moth": Vector2i(6, 5), "clock": Vector2i(24, 48)}
+		"hand": Vector2i(16, 12), "moth": Vector2i(8, 7), "clock": Vector2i(24, 48)}
 	var sz: Vector2i = sizes.get(kind, Vector2i(8, 8))
 	var g: Image = _sk_new(sz.x, sz.y)
 	match kind:
@@ -1803,7 +1994,7 @@ static func horror_texture(kind: String) -> ImageTexture:
 		"hand":
 			_sk_t_hand(g)
 		"moth":
-			_sk_art(g, [".e..e.", "eeffee", "e4ff4e", ".e44e.", "..44.."], 0, 0)
+			_sk_art(g, ["..e..e..", "eee44eee", "e4f44f4e", "e404404e", ".e4ff4e.", "..e44e..", "...44..."], 0, 0)
 		"clock":
 			_sk_t_clock(g)
 		_:
@@ -1863,6 +2054,18 @@ static func _sk_g_face(g: Image) -> void:
 
 static func _sk_t_silhouette(g: Image) -> void:
 	var cx: float = 20.0
+	# dark red backdrop: a tall oval, solid inside, dithered out at its rim, a brighter halo behind the head
+	for y: int in range(96):
+		for x: int in range(40):
+			var d: float = pow((float(x) - 19.5) / 20.0, 2.0) + pow((float(y) - 47.5) / 48.0, 2.0)
+			var bc: int = -1
+			if d < 0.72 or (d < 1.0 and (x + y) % 2 == 0):
+				bc = 12
+			var hd: float = pow((float(x) - 17.0) / 11.0, 2.0) + pow((float(y) - 12.0) / 12.0, 2.0)
+			if hd < 0.4 or (hd < 0.8 and (x + y) % 2 == 0):
+				bc = 13
+			if bc >= 0:
+				_sk_p(g, x, y, bc)
 	# torso and long coat, narrow at the shoulders, with the head too far forward
 	for y: int in range(26, 96):
 		var hw: float = 11.0 if y < 32 else lerpf(11.0, 8.0, clampf(float(y - 32) / 20.0, 0.0, 1.0))
@@ -1885,21 +2088,22 @@ static func _sk_t_silhouette(g: Image) -> void:
 	for i: int in range(4):
 		_sk_l(g, 8 + i, 78, 6 + i * 2, 88 + (i % 2) * 2, 0)
 		_sk_l(g, 30 + i, 80, 29 + i * 2, 91 - (i % 2), 0)
-	# faint red rim light on the left and upper edges
+	# lit red rim on the figure's left and upper edges, where it meets the backdrop
 	var src: Image = g.duplicate()
+	var ink: Color = _sk_col(0)
 	for y: int in range(96):
 		for x: int in range(40):
-			if src.get_pixel(x, y).a <= 0.0:
+			if src.get_pixel(x, y) != ink:
 				continue
-			var l_open: bool = x == 0 or src.get_pixel(x - 1, y).a <= 0.0
-			var t_open: bool = y == 0 or src.get_pixel(x, y - 1).a <= 0.0
-			if l_open or (t_open and y < 30):
-				_sk_p(g, x, y, 12)
+			var l_open: bool = x == 0 or src.get_pixel(x - 1, y) != ink
+			var t_open: bool = y == 0 or src.get_pixel(x, y - 1) != ink
+			if (l_open and y > 8) or (t_open and y < 30):
+				_sk_p(g, x, y, 13 if y < 40 else 12)
 	# two pinprick eyes, close together, too high
-	_sk_p(g, 16, 10, 13)
-	_sk_p(g, 21, 11, 13)
-	_sk_p(g, 16, 11, 12)
-	_sk_p(g, 21, 12, 12)
+	_sk_p(g, 16, 10, 15)
+	_sk_p(g, 21, 11, 15)
+	_sk_p(g, 16, 11, 11)
+	_sk_p(g, 21, 12, 11)
 
 
 static func _sk_thick(g: Image, x0: int, y0: int, x1: int, y1: int, w: int) -> void:

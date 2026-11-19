@@ -60,7 +60,15 @@ func test_head_font_has_every_heading_character() -> void:
 	for text: String in ["NIGHT 1/5", "SOMETHING WOKE", "YOU SURVIVED", "THE SHOP IS LOST", "CURSED PAWN", "SETTINGS", "PAUSED"]:
 		for ch: String in text:
 			assert_true(ch == " " or UiPixelFont.ui_head_supports(ch), "%s in %s" % [ch, text])
-	assert_eq(UiPixelFont.ui_head_rows("a"), UiPixelFont.ui_head_rows("A"), "lowercase draws as capitals")
+	assert_true(UiPixelFont.ui_head_rows("a") != UiPixelFont.ui_head_rows("A"), "lowercase is its own small-cap set")
+	var small_top: int = 11
+	for ch: String in "abcdefghijklmnopqrstuvwxyz":
+		var rows: PackedInt32Array = UiPixelFont.ui_head_rows(ch)
+		for y: int in range(UiPixelFont.HEAD_ROWS):
+			if rows[y] != 0:
+				small_top = mini(small_top, y)
+		assert_true(rows[9] != 0, "%s sits on the capital baseline" % ch)
+	assert_true(small_top >= 3, "small caps are shorter than capitals")
 
 
 func test_head_glyphs_are_distinct() -> void:

@@ -152,13 +152,67 @@ func test_cursed_overlays_stay_inside_the_object() -> void:
 
 func test_horror_props_have_documented_sizes() -> void:
 	var sizes: Dictionary = {"eyes": Vector2i(16, 6), "portrait": Vector2i(24, 32), "silhouette": Vector2i(40, 96),
-		"hand": Vector2i(16, 12), "moth": Vector2i(6, 5), "clock": Vector2i(24, 48)}
+		"hand": Vector2i(16, 12), "moth": Vector2i(8, 7), "clock": Vector2i(24, 48)}
 	for k: String in sizes:
 		var img: Image = SpriteKit.horror_texture(k).get_image()
 		assert_eq(img.get_size(), sizes[k], k)
 		assert_true(_palette_ok(img), k)
 		assert_true(_opaque_count(img) >= 12, k + " too empty")
 		assert_true(img.get_pixel(0, 0).a < 0.01 or k == "portrait" or k == "clock" or k == "moth", k + " corner")
+	# the wake silhouette is a dark figure on a dark red backdrop, not a bare rim
+	var sil: Image = SpriteKit.horror_texture("silhouette").get_image()
+	var reds: int = 0
+	var blacks: int = 0
+	for y: int in range(sil.get_height()):
+		for x: int in range(sil.get_width()):
+			var c: Color = sil.get_pixel(x, y)
+			if c.a > 0.5 and c == RoomPalette.colors()[12]:
+				reds += 1
+			elif c.a > 0.5 and c == RoomPalette.colors()[0]:
+				blacks += 1
+	assert_true(reds > 600 and blacks > 600, "silhouette needs backdrop and figure: " + str(reds) + "/" + str(blacks))
 	# the portrait leaves its eye sockets dark so the room can draw pupils there
 	var pt: Image = SpriteKit.horror_texture("portrait").get_image()
 	assert_true(pt.get_pixel(9, 13) == RoomPalette.colors()[0] and pt.get_pixel(14, 14) == RoomPalette.colors()[0])
+
+
+func _mask_hash(img: Image) -> int:
+	var bits: PackedByteArray = PackedByteArray()
+	for y: int in range(img.get_height()):
+		for x: int in range(img.get_width()):
+			bits.append(1 if img.get_pixel(x, y).a > 0.5 else 0)
+	return hash(bits)
+
+
+func _top_row(img: Image) -> int:
+	for y: int in range(img.get_height()):
+		for x: int in range(img.get_width()):
+			if img.get_pixel(x, y).a > 0.5:
+				return y
+	return img.get_height()
+
+
+func test_customer_body_plans_give_distinct_silhouettes() -> void:
+	var masks: Dictionary = {}
+	var tops: Dictionary = {}
+	for row: Dictionary in _rows(CUSTOMERS_PATH):
+		var look: Dictionary = row.duplicate()
+		look["height"] = 1.0
+		var img: Image = SpriteKit.customer_texture(look).get_image()
+		masks[_mask_hash(img)] = true
+		tops[str(row["id"])] = _top_row(img)
+	assert_eq(masks.size(), 12, "every customer type has its own silhouette")
+	assert_true(int(tops["nervous_heir"]) > int(tops["medium"]) + 12, "the child figure stands much shorter")
+	var plain: Image = SpriteKit.customer_texture({"id": "x", "cloak": "#4b2a78", "height": 1.0}).get_image()
+	var broad: Image = SpriteKit.customer_texture({"id": "x", "cloak": "#4b2a78", "height": 1.0, "plan": "broad"}).get_image()
+	var thin: Image = SpriteKit.customer_texture({"id": "x", "cloak": "#4b2a78", "height": 1.0, "plan": "tall"}).get_image()
+	assert_true(_opaque_count(broad) > _opaque_count(plain) and _opaque_count(plain) > _opaque_count(thin), "broad > plain > thin")
+
+
+func test_redrawn_toys_and_books_are_distinct_shapes() -> void:
+	var masks: Dictionary = {}
+	for id: String in ["porcelain_doll", "jack_in_box", "marionette", "toy_theatre", "diary", "hymnal", "almanac", "photo_album", "herbarium", "first_edition"]:
+		var img: Image = SpriteKit.object_texture(id, "toy").get_image()
+		assert_true(_opaque_count(img) > 220, id + " should be a substantial silhouette")
+		masks[_mask_hash(img)] = true
+	assert_eq(masks.size(), 10)

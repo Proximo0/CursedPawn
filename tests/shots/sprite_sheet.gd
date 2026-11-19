@@ -7,7 +7,7 @@ const OUT_PATH: String = "/tmp/shots/sprite_sheet.png"
 const SCALE: int = 2
 const BG: Color = Color("3a2455")
 const SHEET_W: int = 1320
-const SHEET_H: int = 2400
+const SHEET_H: int = 2600
 
 
 func _initialize() -> void:
@@ -16,6 +16,12 @@ func _initialize() -> void:
 	var y: int = 4
 	var objs: Array = _load("res://game/data/objects.json")
 	var col: int = 0
+	# the redrawn toys and books first, at 3x
+	for rid: String in ["porcelain_doll", "jack_in_box", "marionette", "toy_theatre", "diary", "hymnal", "almanac", "photo_album", "herbarium", "first_edition"]:
+		_put(sheet, SpriteKit.object_texture(rid, "toy").get_image(), col * 132 + 4, y, rid, 3)
+		col += 1
+	y += 120
+	col = 0
 	for o: Dictionary in objs:
 		var tex: Image = SpriteKit.object_texture(str(o["id"]), str(o["category"])).get_image()
 		_put(sheet, tex, col * 132 + 4, y, str(o["id"]), SCALE)
@@ -94,8 +100,8 @@ func _initialize() -> void:
 		var bg: Image = Image.create_empty(img.get_width() + 8, img.get_height() + 8, false, Image.FORMAT_RGBA8)
 		bg.fill(Color("0b0710"))
 		bg.blend_rect(img, Rect2i(Vector2i.ZERO, img.get_size()), Vector2i(4, 4))
-		_put(sheet, bg, x, y, k, SCALE)
-		x += bg.get_width() * SCALE + 16
+		_put(sheet, bg, x, y, k, 3 if k == "moth" else SCALE)
+		x += bg.get_width() * (3 if k == "moth" else SCALE) + 16
 	y += 104 * SCALE + 18
 	DirAccess.make_dir_recursive_absolute("/tmp/shots")
 	sheet.get_region(Rect2i(0, 0, SHEET_W, mini(y, SHEET_H))).save_png(OUT_PATH)

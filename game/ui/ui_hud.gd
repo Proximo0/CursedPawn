@@ -329,8 +329,14 @@ func _draw_seller(r: RunState) -> void:
 		if _deck_tex == null:
 			_deck_tex = SpriteKit.card_texture("", false)
 		var hot: bool = cap >= 1 and (game.hover_id == deck_id or game.stake_open)
-		draw_texture(_deck_tex, DECK_RECT.position + Vector2(0.0, -1.0 if hot else 0.0), Color.WHITE if cap >= 1 else _c(4))
-		_text(DECK_RECT.position + Vector2(-8.0, -11.0), "TAROT [T]", 14 if cap >= 1 else 3)
+		# the HUD draws above the room, so while a customer walks past the deck the deck and its label step aside
+		var clear: float = game.room.customer_clearance(DECK_RECT.position.x - 8.0, DECK_RECT.end.x + 8.0) if game.room != null else 1.0
+		var deck_tint: Color = Color.WHITE if cap >= 1 else _c(4)
+		deck_tint.a = clear
+		if clear > 0.0:
+			draw_texture(_deck_tex, DECK_RECT.position + Vector2(0.0, -1.0 if hot else 0.0), deck_tint)
+		if clear >= 1.0:
+			_text(DECK_RECT.position + Vector2(-8.0, -11.0), "TAROT [T]", 14 if cap >= 1 else 3)
 	_draw_tells(r)
 	_draw_offer_row(r, live)
 

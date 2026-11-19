@@ -43,9 +43,6 @@ static func ui_image(kind: String, w: int, h: int) -> Image:
 	var hi: int = int(spec["hi"])
 	var lo: int = int(spec["lo"])
 	var fill: int = int(spec["fill"])
-	var blot_c: int = int(UiMotion.ui_hash(sd, 99) * 4.0)
-	var bx: float = 0.0 if blot_c % 2 == 0 else float(w - 1)
-	var by: float = 0.0 if blot_c < 2 else float(h - 1)
 	var blot_r: float = minf(11.0, float(h) * 0.7)
 	for y: int in range(h):
 		for x: int in range(w):
@@ -62,15 +59,18 @@ static func ui_image(kind: String, w: int, h: int) -> Image:
 				idx = lo if (y == h - 2 or x == w - 2) else (hi if (y == 1 or x == 1) else fill)
 			elif mode == "paper":
 				idx = fill
-				if n < 0.03:
+				if n < 0.006:
 					idx = 15
-				elif n > 0.996:
+				elif n > 0.998:
 					idx = 10
-				if d <= 4 and UiMotion.ui_hash(x, y, sd + 7) < 0.34 - 0.07 * float(d):
+				var wear: float = 0.2 - 0.07 * float(d)  # edge wear: only the outer rim, a gentle ragged tide
+				if d <= 3 and UiMotion.ui_hash(x / 2, y / 2, sd + 7) < wear:
 					idx = 10
-				var dist: float = Vector2(float(x) - bx, float(y) - by).length()
-				if dist < blot_r and UiMotion.ui_hash(x, y, sd + 3) < (1.0 - dist / blot_r) * 0.5:
-					idx = 10 if dist > blot_r * 0.4 else 9
+				var st: int = _uf_stain(x, y, w, h, sd, 3, blot_r)
+				if st == 1:
+					idx = 4  # the tide line of a water stain, cold lavender so the dark ink stays readable
+				elif st == 2 and (x + y) % 4 == 0:
+					idx = 10  # a sparse darker dither: a soaked-in stain, not a bright blot over the text
 				if bool(spec.get("rules", false)):
 					if x == LEDGER_MARGIN and y > 1 and y < h - 2:
 						idx = 13
@@ -79,20 +79,21 @@ static func ui_image(kind: String, w: int, h: int) -> Image:
 						idx = 4
 			elif mode == "wood":
 				var row_n: float = UiMotion.ui_hash(y, 0, sd + 11)
-				if n < 0.10 or (row_n > 0.82 and n < 0.7):
+				if n < 0.012 or (row_n > 0.86 and UiMotion.ui_hash(x / 9, y, sd + 4) < 0.8):
 					idx = 0
-				elif row_n < 0.22 and UiMotion.ui_hash(x / 3, y, sd + 2) < 0.7:
+				elif row_n < 0.2 and UiMotion.ui_hash(x / 7, y, sd + 2) < 0.6:
 					idx = 8
 				if d == 2:
 					idx = 0
-				var dd: float = Vector2(float(x) - bx, float(y) - by).length()
-				if dd < blot_r * 0.8 and UiMotion.ui_hash(x, y, sd + 3) < (1.0 - dd / (blot_r * 0.8)) * 0.6:
+				if _uf_stain(x, y, w, h, sd, 2, blot_r * 0.9) > 0:
 					idx = 0
 			elif mode == "metal":
-				if n < 0.035:
+				if n < 0.008:
 					idx = int(spec.get("s1", fill))
-				elif n > 0.975:
+				elif n > 0.994:
 					idx = int(spec.get("s2", fill))
+				elif d <= 2 and n > 0.9 and UiMotion.ui_hash(x / 2, y / 2, sd + 5) > 0.5:
+					idx = int(spec.get("s1", fill))  # edge wear
 			img.set_pixel(x, y, pal[idx])
 	if mode == "wood" and bool(spec.get("rivet", false)) and w >= 24 and h >= 14:
 		for cx: int in [3, w - 5]:
@@ -102,6 +103,22 @@ static func ui_image(kind: String, w: int, h: int) -> Image:
 				img.set_pixel(cx, cy + 1, pal[10])
 				img.set_pixel(cx + 1, cy + 1, pal[9])
 	return img
+
+
+## A few big soft stains: `count` blobs with ragged chunky edges (2-px cells). 0 outside, 1 on the thin rim, 2 in the core.
+static func _uf_stain(x: int, y: int, w: int, h: int, sd: int, count: int, radius: float) -> int:
+	var best: int = 0
+	for k: int in range(count):
+		var cx: float = 4.0 + UiMotion.ui_hash(sd, k, 41) * float(maxi(w - 8, 1))
+		var cy: float = 3.0 + UiMotion.ui_hash(sd, k, 42) * float(maxi(h - 6, 1))
+		var r: float = radius * (0.55 + 0.5 * UiMotion.ui_hash(sd, k, 43))
+		var wob: float = 0.75 + 0.5 * UiMotion.ui_hash(x / 2, y / 2, sd + k * 5)
+		var dist: float = Vector2(float(x) - cx, float(y) - cy).length() / wob
+		if dist < r * 0.82:
+			best = maxi(best, 2)
+		elif dist < r:
+			best = maxi(best, 1)
+	return best
 
 
 ## True when the pixel is cut away: every corner loses its tip, paper loses more (torn, per corner).
@@ -170,7 +187,8 @@ static func ui_button(ci: CanvasItem, rect: Rect2, label: String, enabled: bool,
 
 ## A small flame (5 wide) with its top-left at tl. size 0 full (7 rows), 1 short (5), 2 tiny (3). warm false is the
 ## normal amber; true shades it to guttering red. The shape changes about eight times a second.
-static func ui_flame(ci: CanvasItem, tl: Vector2, t: float, size: int = 0, red: bool = false, seed_in: int = 1) -> void:
+static func ui_flame(ci: CanvasItem, tl: Vector2, t: float, size: int = 0, red: bool = false, seed_in: int = 1,
+		px: int = 1) -> void:
 	var pal: PackedColorArray = RoomPalette.colors()
 	var frame: Array = FLAME[int(UiMotion.ui_hash(int(t * 8.0), seed_in) * 3.0) % 3] as Array
 	var rows: int = 7 - size * 2
@@ -180,13 +198,58 @@ static func ui_flame(ci: CanvasItem, tl: Vector2, t: float, size: int = 0, red: 
 		for x: int in range(line.length()):
 			var ch: String = line[x]
 			if ch != ".":
-				ci.draw_rect(Rect2(tl.x + float(x), tl.y + float(i + size * 2), 1.0, 1.0), pal[int(cm[ch])])
+				ci.draw_rect(Rect2(tl.x + float(x * px), tl.y + float((i + size * 2) * px), float(px), float(px)), pal[int(cm[ch])])
+
+
+## A hero flame (`px` times the 5x7 flame): sways a pixel, with a licking tip and a bright core, over a wick glow.
+static func ui_flame_hero(ci: CanvasItem, cx: float, wick_y: float, t: float, px: int, seed_in: int = 1) -> void:
+	var pal: PackedColorArray = RoomPalette.colors()
+	var sway: float = floorf(sin(t * 5.3) * 1.4 + sin(t * 11.0) * 0.6 + 0.5)
+	var tick: int = int(t * 8.0)
+	var lift: float = float(int(UiMotion.ui_hash(tick, seed_in, 7) * 3.0))  # the flame stretches and shrinks
+	var tl := Vector2(floorf(cx) - float(px * 5) * 0.5 + sway, wick_y - float(px * 7) + lift - 1.0)
+	ui_flame(ci, tl, t, 0, false, seed_in, px)
+	ci.draw_rect(Rect2(floorf(cx) - 1.0, wick_y - float(px * 2), 2.0, float(px * 2) - 1.0), pal[15])  # white-hot core
+	if UiMotion.ui_hash(tick, seed_in, 8) < 0.3:
+		ci.draw_rect(Rect2(tl.x + float(px * 2) + (1.0 if sway < 0.0 else 0.0), tl.y - 2.0, float(px) - 1.0, 3.0), pal[10])  # a flicked tip
+
+
+static var _uf_glow: Dictionary = {}
+
+
+## A soft ordered-dither halo texture: dots of `outer` thinning outwards from the centre, `inner` dots in the bright
+## core. Square, side 2r+1, palette colours only. Cached per argument set.
+static func ui_glow_texture(r: int, outer: int, inner: int, strength: float) -> ImageTexture:
+	var key: String = "%d_%d_%d_%d" % [r, outer, inner, int(strength * 100.0)]
+	if _uf_glow.has(key):
+		return _uf_glow[key] as ImageTexture
+	var pal: PackedColorArray = RoomPalette.colors()
+	var bayer: Array[int] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
+	var side: int = r * 2 + 1
+	var img: Image = Image.create_empty(side, side, false, Image.FORMAT_RGBA8)
+	for y: int in range(side):
+		for x: int in range(side):
+			var d: float = Vector2(float(x - r), float(y - r)).length() / float(r)
+			if d >= 1.0:
+				continue
+			var k: float = (1.0 - d) * (1.0 - d) * strength  # quadratic fall-off: a strong core, a long faint tail
+			var thr: float = (float(bayer[(y & 3) * 4 + (x & 3)]) + 0.5) / 16.0
+			if k > thr:
+				img.set_pixel(x, y, pal[inner if k > 0.62 else outer])
+	var tex: ImageTexture = ImageTexture.create_from_image(img)
+	_uf_glow[key] = tex
+	return tex
+
+
+## Draws that halo centred on `at`.
+static func ui_glow(ci: CanvasItem, at: Vector2, r: int, outer: int, inner: int, strength: float = 1.0) -> void:
+	ci.draw_texture(ui_glow_texture(r, outer, inner, strength), at.floor() - Vector2(float(r), float(r)))
 
 
 ## A candle: brass dish at base_y, wax body (body_w wide, body_h tall, drips down its side), a wick and a flame.
 ## flame_size -1 draws a snuffed wick with smoke, -2 a bare glowing wick. Returns the y of the wax top.
 static func ui_candle(ci: CanvasItem, cx: float, base_y: float, body_w: int, body_h: int, t: float, flame_size: int = 0,
-		red: bool = false, seed_in: int = 1) -> float:
+		red: bool = false, seed_in: int = 1, flame_px: int = 1) -> float:
 	var pal: PackedColorArray = RoomPalette.colors()
 	var x0: float = floorf(cx - float(body_w) * 0.5)
 	var top: float = base_y - float(body_h)
@@ -206,7 +269,10 @@ static func ui_candle(ci: CanvasItem, cx: float, base_y: float, body_w: int, bod
 	ci.draw_rect(Rect2(cx, top - 3.0, 1.0, 3.0), pal[0])
 	if flame_size >= 0:
 		ci.draw_rect(Rect2(cx, top - 3.0, 1.0, 1.0), pal[9])
-		ui_flame(ci, Vector2(floorf(cx) - 2.0, top - 9.0), t, flame_size, red, seed_in)
+		if flame_px > 1:
+			ui_flame_hero(ci, cx, top - 3.0, t, flame_px, seed_in)
+		else:
+			ui_flame(ci, Vector2(floorf(cx) - 2.0, top - 9.0), t, flame_size, red, seed_in)
 	elif flame_size == -2:
 		ci.draw_rect(Rect2(cx, top - 3.0, 1.0, 1.0), pal[9])
 	elif flame_size == -1:

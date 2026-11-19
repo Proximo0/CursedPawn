@@ -116,6 +116,7 @@ var _embers: Array[CPUParticles2D] = []
 ## Scripted runs (shots, tests, headless) keep the parallax still so captures are repeatable.
 var _scripted: bool = OS.get_cmdline_user_args().has("--scripted") or OS.get_cmdline_user_args().has("--capture") or DisplayServer.get_name() == "headless"
 var _fog_tex: Texture2D
+var _bloom_tex: Texture2D
 var _fit_win := Vector2.ZERO
 var _par := Vector2.ZERO
 var _far_off := Vector2.ZERO
@@ -438,6 +439,21 @@ func customer_height() -> int:
 	if _customer == null or _customer.texture == null:
 		return 0
 	return _customer.texture.get_height()
+
+
+## How clear a horizontal span (x0..x1, e.g. the HUD's tarot deck) is of the walking customer: 0 while the figure
+## overlaps it during a walk, 1 when the customer is standing, absent or far enough away, easing in between.
+func customer_clearance(x0: float, x1: float) -> float:
+	if _cust_state != "enter" and _cust_state != "leave":
+		return 1.0
+	var half: float = 0.5 * float(_customer.texture.get_width()) if _customer.texture != null else 32.0
+	return span_clearance(_cust_x, half, x0, x1)
+
+
+## Pure form of customer_clearance: a figure centred at cx with half width `half` against the span x0..x1.
+static func span_clearance(cx: float, half: float, x0: float, x1: float) -> float:
+	var d: float = maxf(x0 - cx, cx - x1)  # distance of the centre outside the span (negative inside)
+	return clampf((d - (half - 16.0)) / 16.0, 0.0, 1.0)
 
 
 func bubble_text() -> String:
@@ -1395,10 +1411,13 @@ func _wake_step() -> void:
 
 ## Flash strength 0..1 for the silhouette beat. Full scares strobe hard; gentle shows it dimly without any flash.
 func _wake_flash(tick: int) -> float:
+	if scare_level == 0:
+		if tick < FLASH_FROM or tick >= BEAT_TICKS:
+			return 0.0
+		var k: float = sin(float(tick - FLASH_FROM) / float(BEAT_TICKS - FLASH_FROM) * PI)
+		return clampf(k * 1.6, 0.0, 1.0) * 0.9  # a plateau, not a spike
 	if tick < FLASH_FROM or tick >= FLASH_TO:
 		return 0.0
-	if scare_level == 0:
-		return 0.45 * sin(float(tick - FLASH_FROM) / float(FLASH_TO - FLASH_FROM) * PI)
 	return 1.0 if (tick - FLASH_FROM) % 4 < 2 else 0.0
 
 
@@ -1878,36 +1897,84 @@ func _draw_fx() -> void:
 		var breathe: float = 1.0
 		if n >= 0.9:
 			breathe = 0.65 + 0.35 * sin(_t * 0.55)
-		var ftex: Texture2D = _fog_texture()
-		for j: int in range(8):
-			var fx: float = fmod(float(j) * 91.0 + _t * (5.0 + float(j) * 2.0), vs.x + 160.0) - 80.0
-			var fy: float = 200.0 + sin(_t * 0.7 + float(j) * 1.7) * 18.0 - float(j % 3) * 30.0
-			var col: Color = pal[6]
-			col.a = minf(0.55 * n, 0.8) * breathe
-			var rad: float = 70.0 + float(j % 3) * 22.0
-			_fx.draw_texture_rect(ftex, Rect2(fx - rad, fy - rad * 0.6, rad * 2.0, rad * 1.2), false, col)
-		var tint: Color = pal[5]
-		tint.a = minf(0.2 * n, 0.3) * breathe
-		_fx.draw_rect(Rect2(Vector2.ZERO, vs), tint)
+		_draw_fog(pal, vs, n, breathe)
 	_fx_sys.draw(_fx, pal)
 	# the wake beat: red flicker and the tall silhouette behind the counter
 	if _flash > 0.0:
 		var full: bool = scare_level != 0
-		var rc2: Color = pal[13] if full else pal[12]
-		rc2.a = (0.55 if full else 1.5) * _flash
-		_fx.draw_rect(Rect2(Vector2.ZERO, vs), rc2)
-		_draw_silhouette(pal, 1.0 if full else 0.85)
+		if full:
+			var rc2: Color = pal[13]
+			rc2.a = 0.55 * _flash
+			_fx.draw_rect(Rect2(Vector2.ZERO, vs), rc2)
+			_draw_silhouette(pal, 1.0)
+		else:
+			# gentle: one slow swell, never a strobe. A pale cold backlight behind the figure so the black shape
+			# reads, a red wash at the edges, and the figure a little larger than life
+			var wash: Color = pal[12]
+			wash.a = 0.38 * _flash
+			_fx.draw_rect(Rect2(Vector2.ZERO, vs), wash)
+			var back: Color = pal[4]
+			back.a = 0.9 * _flash
+			_fx.draw_texture_rect(_bloom_texture(), Rect2(SILHOUETTE_X - 130.0, COUNTER_TOP - 220.0, 260.0, 250.0), false, back)
+			var back2: Color = pal[14]
+			back2.a = 0.5 * _flash
+			_fx.draw_texture_rect(_bloom_texture(), Rect2(SILHOUETTE_X - 60.0, COUNTER_TOP - 170.0, 120.0, 190.0), false, back2)
+			_draw_silhouette(pal, 1.0, 1.5)
 	if _red > 0.05:
 		var rc: Color = pal[12]
 		rc.a = 0.3 * clampf(_red, 0.0, 1.0)
 		_fx.draw_rect(Rect2(Vector2.ZERO, vs), rc)
 
 
-func _fog_texture() -> Texture2D:
-	if _fog_tex == null:
+## Dread fog: four layers of thin wisps (a tileable stretched-noise texture) drifting at different speeds and
+## directions, each in a cold palette purple, thicker near the floor. Palette 2-4 only, so it never reads green.
+func _draw_fog(pal: PackedColorArray, vs: Vector2, n: float, breathe: float) -> void:
+	var wt: Texture2D = _fog_texture()
+	var tile_w: float = 420.0
+	var layer_cols: Array[int] = [3, 4, 3, 4]
+	var layer_y: Array[float] = [168.0, 214.0, 258.0, 296.0]
+	var layer_h: Array[float] = [70.0, 84.0, 96.0, 70.0]
+	var layer_v: Array[float] = [6.0, -9.0, 13.0, -5.0]
+	for j: int in range(4):
+		var col: Color = pal[layer_cols[j]]
+		col.a = minf((0.34 + 0.08 * float(j)) * (0.5 + 1.2 * n), 0.85) * breathe
+		var drift: float = fposmod(_t * layer_v[j] + float(j) * 130.0, tile_w)
+		var bob: float = sin(_t * 0.35 + float(j) * 1.9) * 7.0
+		var y: float = layer_y[j] + bob
+		var x: float = -drift
+		while x < vs.x:
+			_fx.draw_texture_rect(wt, Rect2(x, y - layer_h[j] * 0.5, tile_w, layer_h[j]), false, col)
+			x += tile_w
+	var tint: Color = pal[1]
+	tint.a = minf(0.22 * n, 0.3) * breathe
+	_fx.draw_rect(Rect2(Vector2.ZERO, vs), tint)
+
+
+## Hash for the wisp noise (no global RNG: the fog has to look the same in every capture).
+static func wisp_hash(ix: int, iy: int, oct: int) -> float:
+	return fposmod(sin(float(ix) * 127.1 + float(iy) * 311.7 + float(oct) * 74.7) * 43758.5453, 1.0)
+
+
+static func wisp_noise(px: float, py: float, cells_x: int, oct: int) -> float:
+	var ix: int = int(floorf(px))
+	var iy: int = int(floorf(py))
+	var fx: float = px - float(ix)
+	var fy: float = py - float(iy)
+	fx = fx * fx * (3.0 - 2.0 * fx)
+	fy = fy * fy * (3.0 - 2.0 * fy)
+	var x0: int = posmod(ix, cells_x)  # wraps, so the tile repeats seamlessly sideways
+	var x1: int = posmod(ix + 1, cells_x)
+	var a: float = lerpf(wisp_hash(x0, iy, oct), wisp_hash(x1, iy, oct), fx)
+	var b: float = lerpf(wisp_hash(x0, iy + 1, oct), wisp_hash(x1, iy + 1, oct), fx)
+	return lerpf(a, b, fy)
+
+
+## A soft round bloom (white centre fading to nothing), tinted at draw time.
+func _bloom_texture() -> Texture2D:
+	if _bloom_tex == null:
 		var g := Gradient.new()
-		g.offsets = PackedFloat32Array([0.0, 1.0])
-		g.colors = PackedColorArray([Color(1.0, 1.0, 1.0, 1.0), Color(1.0, 1.0, 1.0, 0.0)])
+		g.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+		g.colors = PackedColorArray([Color(1.0, 1.0, 1.0, 1.0), Color(1.0, 1.0, 1.0, 0.45), Color(1.0, 1.0, 1.0, 0.0)])
 		var gt := GradientTexture2D.new()
 		gt.gradient = g
 		gt.width = 64
@@ -1915,7 +1982,28 @@ func _fog_texture() -> Texture2D:
 		gt.fill = GradientTexture2D.FILL_RADIAL
 		gt.fill_from = Vector2(0.5, 0.5)
 		gt.fill_to = Vector2(1.0, 0.5)
-		_fog_tex = gt
+		_bloom_tex = gt
+	return _bloom_tex
+
+
+func _fog_texture() -> Texture2D:
+	if _fog_tex == null:
+		var w: int = 128
+		var h: int = 40
+		var img: Image = Image.create_empty(w, h, false, Image.FORMAT_RGBA8)
+		for y: int in range(h):
+			var env: float = sin(PI * float(y) / float(h - 1))
+			for x: int in range(w):
+				var v: float = 0.0
+				var amp: float = 0.55
+				var f: int = 1
+				for o: int in range(3):
+					v += amp * wisp_noise(float(x) / float(w) * float(3 * f), float(y) / float(h) * float(2 * f) * 1.0, 3 * f, o)
+					amp *= 0.5
+					f *= 2
+				var a: float = clampf((v - 0.38) * 2.6, 0.0, 1.0) * env
+				img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a))
+		_fog_tex = ImageTexture.create_from_image(img)
 	return _fog_tex
 
 
@@ -1927,28 +2015,35 @@ func _draw_eyes(pal: PackedColorArray, _n: float) -> void:
 		o *= 0.2
 	var et: Texture2D = _art("eyes")
 	var ep: Vector2 = EYES_POS + _far_off
-	if et != null:
-		if o > 0.5:
-			_fx.draw_texture(et, ep - Vector2(et.get_width() * 0.5, et.get_height() * 0.5))
-		return
-	var h: float = maxf(roundf(o * 5.0), 1.0)
+	var pulse: float = 0.75 + 0.25 * sin(_t * 2.1)
 	var halo: Color = pal[12]
-	halo.a = 0.35 * o
-	_fx.draw_rect(Rect2(ep.x - 18.0, ep.y - 6.0, 36.0, 12.0), halo)
-	for sx: float in [-8.0, 8.0]:
-		_fx.draw_rect(Rect2(ep.x + sx - 4.0, ep.y - h * 0.5, 8.0, h), pal[12])
-		if h >= 2.0:
-			_fx.draw_rect(Rect2(ep.x + sx - 3.0, ep.y - h * 0.5 + 1.0, 6.0, maxf(h - 2.0, 1.0)), pal[13])
-		if h >= 4.0:
-			_fx.draw_rect(Rect2(ep.x + sx - 1.0, ep.y - 1.0, 2.0, 2.0), pal[11])
+	halo.a = 0.7 * o * pulse
+	_fx.draw_texture_rect(_bloom_texture(), Rect2(ep.x - 60.0, ep.y - 28.0, 120.0, 56.0), false, halo)  # a faint red bloom around them
+	var core: Color = pal[13]
+	core.a = 0.4 * o
+	_fx.draw_rect(Rect2(ep.x - 34.0, ep.y - 3.0, 68.0, 6.0), core)
+	if et != null:
+		var ew: float = float(et.get_width()) * 3.0
+		var eh: float = float(et.get_height()) * 3.0 * minf(o * 1.6, 1.0)
+		var tint := Color(1.0, 1.0, 1.0, minf(o * 1.5, 1.0))
+		_fx.draw_texture_rect(et, Rect2(ep.x - ew * 0.5, ep.y - eh * 0.5, ew, eh), false, tint)
+		return
+	var h: float = maxf(roundf(o * 8.0), 1.0)
+	for sx: float in [-13.0, 13.0]:
+		_fx.draw_rect(Rect2(ep.x + sx - 7.0, ep.y - h * 0.5, 14.0, h), pal[12])
+		if h >= 3.0:
+			_fx.draw_rect(Rect2(ep.x + sx - 5.0, ep.y - h * 0.5 + 1.0, 10.0, maxf(h - 2.0, 1.0)), pal[13])
+		if h >= 6.0:
+			_fx.draw_rect(Rect2(ep.x + sx - 1.0, ep.y - 2.0, 2.0, 4.0), pal[11])
 
 
-func _draw_silhouette(pal: PackedColorArray, a: float) -> void:
+func _draw_silhouette(pal: PackedColorArray, a: float, zoom: float = 1.0) -> void:
 	var st: Texture2D = _art("silhouette")
 	if st != null:
 		var w: float = float(st.get_width())
 		var h: float = float(st.get_height())
-		_fx.draw_texture_rect_region(st, Rect2(SILHOUETTE_X - w * 0.5, COUNTER_TOP - h + 14.0, w, h - 14.0), Rect2(0.0, 0.0, w, h - 14.0), Color(1.0, 1.0, 1.0, a))
+		_fx.draw_texture_rect_region(st, Rect2(SILHOUETTE_X - w * 0.5 * zoom, COUNTER_TOP - (h - 14.0) * zoom, w * zoom, (h - 14.0) * zoom),
+			Rect2(0.0, 0.0, w, h - 14.0), Color(1.0, 1.0, 1.0, a))
 		return
 	var c: Color = pal[0]
 	c.a = a
