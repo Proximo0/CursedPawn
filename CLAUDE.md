@@ -19,6 +19,8 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
   `node tools/web_smoke.mjs`: boots `build/web` in headless Chromium (no errors, a full screen within 30 s).
 - `tools/export_windows.sh`: Windows build zip in `build/`. `tools/export_android.sh`: debug APK in `build/`. Stock
   templates come from `tools/fetch_templates.py`, which range-reads only the ones needed out of the 1.28 GB file.
+- `.claude/hooks/lint-on-edit.sh`: after every Edit/Write of a `.gd` file, parse-checks that script and lints it (~0.3 s;
+  ~4 s when it adds a new `class_name`). Problems come back to the agent at once.
 - `tools/import.sh`: the shared import step; skipped when no file changed (`FORCE_IMPORT=1` to force). Every tool calls it.
 - CI: `checks` (unit, lint, sims, lab) and `web` (playable build; main deploys to GitHub Pages). Doc-only pushes to main skip both; every PR runs both, because main requires `unit`, `lint`, `sims`, `lab` and `build` to pass and PRs auto-merge when they do.
 - Run the game: `godot --path .` (add `-- --dev` for dev entries, `-- --stamp` to show the frame stamp). In the game
