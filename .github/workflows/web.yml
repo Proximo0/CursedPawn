@@ -9,8 +9,7 @@ on:
   push:
     branches: [main]
     paths-ignore: ["docs/**", "**/*.md"]
-  pull_request:
-    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:  # no path filter: auto-merge needs every required check to report, even on doc-only PRs
   workflow_dispatch:
 
 concurrency:
@@ -33,11 +32,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}  # tools/fetch_web_template.sh reads the 2D engine from the draft release
         run: tools/export_web.sh
+      - name: Cache Playwright
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.cache/ms-playwright
+          key: playwright-1.63.0-chromium-shell-${{ runner.os }}
       - name: Boot in headless Chrome
         run: |
           # Same Playwright and bundled Chromium as the cloud sessions (the runner's own Chrome hung after engine start).
-          npm install --no-save --no-audit --no-fund playwright@1.63.0 >/dev/null
-          npx playwright install --only-shell chromium >/dev/null
+          # The cache above skips the npm and browser install after the first run.
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" != "true" ]; then
+            npm install --no-save --no-audit --no-fund playwright@1.63.0 >/dev/null
+            npx playwright install --only-shell chromium >/dev/null
+          fi
           SMOKE_SHOT_B64=1 SMOKE_TIMEOUT_MS=60000 node tools/web_smoke.mjs build/web
       - uses: actions/upload-artifact@v4
         if: always()

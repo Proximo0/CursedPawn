@@ -5,9 +5,8 @@ name: checks
 on:
   push:
     branches: [main]
-    paths-ignore: ["docs/**", "**/*.md"]  # doc-only pushes skip CI; drop this if a check becomes required
-  pull_request:
-    paths-ignore: ["docs/**", "**/*.md"]
+    paths-ignore: ["docs/**", "**/*.md"]  # doc-only pushes to main skip CI (PRs always run it)
+  pull_request:  # no path filter: auto-merge needs every required check to report, even on doc-only PRs
   workflow_dispatch:
 
 concurrency:
