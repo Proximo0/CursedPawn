@@ -112,3 +112,68 @@ func test_version_1_profile_gets_the_default_grimoire() -> void:
 	assert_true(PlayerProfile.load_into(s, PP_PATH))
 	assert_eq(s.grimoire, Grimoire.DEFAULT_KNOWN)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+
+
+func test_record_result_unlocks_and_keeps_best() -> void:
+	var s := pp_store(1)
+	var run := RunState.new()
+	run.start(1, Catalog.load_default(), Tuning.new(), {}, {"haunting": 0})
+	run.won = true
+	run.cash = 300
+	var r: Dictionary = PlayerProfile.record_result(run, s)
+	assert_eq(r["unlocked"], 1)
+	assert_eq(s.haunting_unlocked, 1)
+	assert_eq(s.best_cash, 300)
+	run.cash = 100
+	assert_eq(PlayerProfile.record_result(run, s)["unlocked"], 0, "a win below the top unlocked level unlocks nothing")
+	assert_eq(s.best_cash, 300)
+	run.opts["haunting"] = 1
+	assert_eq(PlayerProfile.record_result(run, s)["unlocked"], 2)
+	run.won = false
+	run.opts["haunting"] = 2
+	assert_eq(PlayerProfile.record_result(run, s)["unlocked"], 0, "a loss unlocks nothing")
+	s.haunting_unlocked = 10
+	run.won = true
+	run.opts["haunting"] = 10
+	assert_eq(PlayerProfile.record_result(run, s)["unlocked"], 0)
+	assert_eq(s.haunting_unlocked, 10)
+
+
+func test_daily_first_attempt_counts_and_keeps_thirty() -> void:
+	var s := pp_store(1)
+	var run := RunState.new()
+	run.start(1, Catalog.load_default(), Tuning.new(), {}, {"daily": true, "date": "2026-12-18", "number": 1})
+	run.cash = 50
+	assert_true(PlayerProfile.record_result(run, s)["daily_counted"])
+	run.cash = 999
+	assert_false(PlayerProfile.record_result(run, s)["daily_counted"], "only the first attempt counts")
+	assert_eq(s.daily_best["2026-12-18"]["cash"], 50)
+	assert_eq(s.daily_last, "2026-12-18")
+	for d: int in range(1, 41):
+		run.opts["date"] = "2027-01-%02d" % d if d <= 31 else "2027-02-%02d" % (d - 31)
+		PlayerProfile.record_result(run, s)
+	assert_eq(s.daily_best.size(), 30)
+	assert_false(s.daily_best.has("2026-12-18"), "oldest dropped")
+
+
+func test_progress_round_trip_and_old_file_loads() -> void:
+	var a := pp_store(1)
+	a.haunting_unlocked = 4
+	a.best_cash = 321
+	a.daily_last = "2026-12-18"
+	a.daily_best = {"2026-12-18": {"number": 1, "night": 5, "cash": 9, "won": true, "wakes": 2}}
+	PlayerProfile.save(a, PP_PATH)
+	var b := pp_store(2)
+	assert_true(PlayerProfile.load_into(b, PP_PATH))
+	assert_eq(b.haunting_unlocked, 4)
+	assert_eq(b.best_cash, 321)
+	assert_eq(b.daily_last, "2026-12-18")
+	assert_eq(int(b.daily_best["2026-12-18"]["cash"]), 9)
+	var f := FileAccess.open(PP_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"version": 2, "store": a.to_dict(), "grimoire": ["scry"]}))
+	f.close()
+	var c := pp_store(3)
+	assert_true(PlayerProfile.load_into(c, PP_PATH), "a version 2 file still loads")
+	assert_eq(c.haunting_unlocked, 0)
+	assert_eq(c.daily_best.size(), 0)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))

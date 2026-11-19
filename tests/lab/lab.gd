@@ -43,6 +43,16 @@ func _ready() -> void:
 		print("LAB %s_info INFO won=%d/%d cash_mean=%.0f wakes_mean=%.2f wake_by_n3=%.2f lost_by_night=%s" % [
 			style, s["won"], runs, _lab_mean(s["won_cash"]), _lab_mean(s["wakes"]), _lab_rate(s["woke3"], runs),
 			s["lost_night"]])
+	for style: String in ShopBot.STYLES:
+		var s: Dictionary = stats[style]
+		print("LAB %s_requests INFO done=%.2f failed=%.2f per run" % [style, _lab_rate(s["req_done"], runs), _lab_rate(s["req_failed"], runs)])
+	for level: int in [5, 10]:
+		var hc: Dictionary = _lab_play(ShopBot.CAUTIOUS, runs, cat, {"haunting": level})
+		var hg: Dictionary = _lab_play(ShopBot.GREEDY, runs, cat, {"haunting": level})
+		_lab_line("haunting%d_checks" % level, hc["stuck"] + hg["stuck"] + hc["diverged"] + hg["diverged"] == 0, true,
+			"stuck/diverged with opts")
+		print("LAB haunting%d_info INFO cautious_survival=%.2f greedy_survival=%.2f (target for 10: about 0.05-0.15)" % [
+			level, _lab_rate(hc["won"], runs), _lab_rate(hg["won"], runs)])
 	print("LAB done runs=%d warn=%d fail=%d" % [runs, warns, fails])
 	var json_path: String = _lab_arg("json", "")
 	if json_path != "":
@@ -59,18 +69,18 @@ func _lab_arg(key: String, default: String) -> String:
 	return default
 
 
-func _lab_play(style: String, runs: int, cat: Catalog) -> Dictionary:
+func _lab_play(style: String, runs: int, cat: Catalog, opts: Dictionary = {}) -> Dictionary:
 	var s: Dictionary = {"won": 0, "won_cash": [], "minutes": [], "woke3": 0, "wakes": [], "stuck": 0,
-		"diverged": 0, "checked": 0, "lost_night": {}}
+		"diverged": 0, "checked": 0, "lost_night": {}, "req_done": 0, "req_failed": 0}
 	var bot := ShopBot.new(style)
 	for i: int in range(runs):
 		var tun := Tuning.new()
 		tun.copy_from(Tuning.shared())
 		var run := RunState.new()
 		var check: bool = i < 20
-		var rec: RunRecording = RunRecording.begin(run, 1000 + i, cat, tun) if check else null
+		var rec: RunRecording = RunRecording.begin(run, 1000 + i, cat, tun, {}, opts) if check else null
 		if not check:
-			run.start(1000 + i, cat, tun)
+			run.start(1000 + i, cat, tun, {}, opts)
 		if not bot.play(run, rec):
 			s["stuck"] += 1
 			continue
@@ -78,6 +88,8 @@ func _lab_play(style: String, runs: int, cat: Catalog) -> Dictionary:
 			s["checked"] += 1
 			if rec.first_divergence(cat) != -1:
 				s["diverged"] += 1
+		s["req_done"] += run.requests_done
+		s["req_failed"] += run.requests_failed
 		(s["minutes"] as Array).append(run.play_secs / 60.0)
 		(s["wakes"] as Array).append(float(run.wake_nights.size()))
 		if not run.wake_nights.is_empty() and run.wake_nights[0] <= 3:

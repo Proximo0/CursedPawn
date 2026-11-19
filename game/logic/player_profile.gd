@@ -5,7 +5,8 @@ extends RefCounted
 ## runs (`Flags.is_scripted_run()`), so tests and captures never touch player data.
 
 const PATH: String = "user://profile.json"
-const VERSION: int = 2  ## 2 adds the grimoire; version 1 files load with the default spells
+const VERSION: int = 3  ## 2 adds the grimoire, 3 the progress record (hauntings, best cash, daily); older files load with defaults
+const DAILY_KEEP: int = 30
 
 
 static func save(store: RelicStore, path: String = PATH) -> Error:
@@ -13,7 +14,9 @@ static func save(store: RelicStore, path: String = PATH) -> Error:
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		return FileAccess.get_open_error()
-	f.store_string(JSON.stringify({"version": VERSION, "store": store.to_dict(), "grimoire": Array(store.grimoire)}))
+	f.store_string(JSON.stringify({"version": VERSION, "store": store.to_dict(), "grimoire": Array(store.grimoire),
+		"progress": {"haunting_unlocked": store.haunting_unlocked, "best_cash": store.best_cash, "daily_last": store.daily_last,
+			"daily_best": store.daily_best}}))
 	f.close()
 	return DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path))
 
@@ -28,6 +31,11 @@ static func load_into(store: RelicStore, path: String = PATH) -> bool:
 		return false
 	store.from_dict(parsed["store"])
 	store.grimoire = PackedStringArray(parsed.get("grimoire", Array(Grimoire.DEFAULT_KNOWN)))
+	var pr: Dictionary = parsed.get("progress", {}) if parsed.get("progress") is Dictionary else {}
+	store.haunting_unlocked = clampi(int(pr.get("haunting_unlocked", 0)), 0, Hauntings.MAX_LEVEL)
+	store.best_cash = int(pr.get("best_cash", 0))
+	store.daily_last = str(pr.get("daily_last", ""))
+	store.daily_best = (pr.get("daily_best", {}) as Dictionary).duplicate(true) if pr.get("daily_best") is Dictionary else {}
 	return true
 
 
@@ -43,6 +51,33 @@ static func bank_finds(run: RunState, store: RelicStore) -> PackedStringArray:
 		elif f["kind"] == "curio":
 			store.collection.grant(str(f["id"]))
 	return added
+
+
+## Records a finished run: unlocks the next haunting on a win at the highest unlocked one, keeps the best winning
+## cash, and, for a daily run, the first attempt of the date (`opts.date`, else the system date). Returns
+## {unlocked: new haunting level or 0, new_best: bool, daily_counted: bool}. Callers skip it on scripted runs and save after.
+static func record_result(run: RunState, store: RelicStore) -> Dictionary:
+	var out: Dictionary = {"unlocked": 0, "new_best": false, "daily_counted": false}
+	var level: int = int(run.opts.get("haunting", 0))
+	if run.won:
+		if level >= store.haunting_unlocked and store.haunting_unlocked < Hauntings.MAX_LEVEL:
+			store.haunting_unlocked += 1
+			out["unlocked"] = store.haunting_unlocked
+		if run.cash > store.best_cash:
+			store.best_cash = run.cash
+			out["new_best"] = true
+	if bool(run.opts.get("daily", false)):
+		var date: String = str(run.opts.get("date", Time.get_date_string_from_system()))
+		if store.daily_last != date:
+			store.daily_last = date
+			store.daily_best[date] = {"number": int(run.opts.get("number", 0)), "night": run.night, "cash": run.cash,
+				"won": run.won, "wakes": run.wake_nights.size()}
+			var dates: Array = store.daily_best.keys()
+			dates.sort()
+			while dates.size() > DAILY_KEEP:
+				store.daily_best.erase(dates.pop_front())
+			out["daily_counted"] = true
+	return out
 
 
 ## The run in progress, saved after every command so closing the game never loses a night. Binary Variant data

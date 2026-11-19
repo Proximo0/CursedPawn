@@ -1,0 +1,20 @@
+{
+	"who": [
+		"Mrs. Harrow",
+		"Old Tobias",
+		"Sister Wren",
+		"Mr. Pell",
+		"Dottie Vane",
+		"The Colonel",
+		"Little Ned",
+		"Madame Ilse",
+		"Father Crowe",
+		"Aunt Marguerite"
+	],
+	"lines": [
+		"I will be back on night {due}. Hold {want} for me.",
+		"Find me {want}, and I will pay well. Night {due}.",
+		"Keep an eye out for {want}. I need it by night {due}.",
+		"They say you can find anything. I want {want}, night {due}."
+	]
+}

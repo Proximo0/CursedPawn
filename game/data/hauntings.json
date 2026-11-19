@@ -1,0 +1,12 @@
+[
+	{"level": 1, "name": "Rising Rent", "text": "The landlord counts the coins twice. Rent up 10%.", "set": {}, "mul": {"rent_base": 1.1}},
+	{"level": 2, "name": "Hungry Sellers", "text": "More cursed objects walk through the door.", "set": {}, "mul": {"cursed_share": 1.15}},
+	{"level": 3, "name": "Costly Magic", "text": "Spells cost 50% more Dread.", "set": {"spell_dread_mult": 1.5}, "mul": {}},
+	{"level": 4, "name": "Short Days", "text": "The sun sets early. The day is 7% shorter.", "set": {}, "mul": {"day_minutes": 0.93}},
+	{"level": 5, "name": "Quiet Tells", "text": "Curses hide better. Tells show 15% less often.", "set": {}, "mul": {"tell_chance": 0.85}},
+	{"level": 6, "name": "Light Sleepers", "text": "Something wakes sooner. The wake threshold drops 10%.", "set": {}, "mul": {"wake_threshold": 0.85}},
+	{"level": 7, "name": "Closed Lots", "text": "No sealed lots at the Midnight Table. Rent up 10% again.", "set": {"table_lots_per_night": 0}, "mul": {"rent_base": 1.1}},
+	{"level": 8, "name": "Compound Interest", "text": "Rent grows faster each night.", "set": {}, "mul": {"rent_growth": 1.12}},
+	{"level": 9, "name": "Thin Pockets", "text": "You start with 25% less cash. Sellers drive harder bargains.", "set": {}, "mul": {"start_cash": 0.7, "seller_reserve_frac": 1.08}},
+	{"level": 10, "name": "The Shop Remembers", "text": "You start with a cursed object. Wakes leave more Dread.", "set": {}, "mul": {"rent_base": 1.15, "wake_dread_keep": 1.3}, "flags": {"start_cursed": true}}
+]

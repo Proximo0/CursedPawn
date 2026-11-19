@@ -76,3 +76,20 @@ Washington gambling = paying + chance + a thing of value; each way to get a curi
 - `PlayerProfile.bank_finds(run, store)`; the grimoire lives on `RelicStore.grimoire`, saved in profile version 2.
 - Extra Tuning: `backfire_dread`, `backfire_cash_frac`. `ShopBot`: scry (cautious), hex, glamour, banish; greedy spins
   the wheel with 3% of spare cash once a night, cautious never gambles.
+
+## Engagement round (18 Nov 2026; contract in docs/engagement_brief.md)
+- `RunState.start(seed, cat, tun, gift = {}, run_opts = {})`, `run_opts = {haunting 0..10, omen, daily}` (optional `date`,
+  `number` for the profile). Applied as overrides on a **copy** of the tuning when any option is on; `run.opts` (with
+  `omen_name`) and `run.rules` (`all_cursed, no_tool, double_table, seller_type, start_cursed, start_spells`) are in
+  snapshot/restore and `RunRecording` (`opts`). Event `run_opts` comes first, only when an option is on. `run.tool_ok(tool)`.
+- `Hauntings` (`hauntings.json`, levels stack, entries may carry `flags: {start_cursed}`), `Omens` (`omens.json`,
+  `offer(seed)`, `get_omen(id)`), `Daily` (`seed_for`, `number`, `opts_for(seed)`, `result_text(run, number)`),
+  `Requests` (`requests.json`; `make`, `want_text`, `matches`), shared helpers in `DataFiles`. `Catalog.problems()` checks them.
+- Requests: `run.requests` (`{id, who, tid, want, due, pay_mult, reward, called}`), counters `requests_done/failed`. A new
+  request is announced (`request_new`) beside a normal customer slot, never instead of one. On the due night the
+  requester is the first customer (a buyer with `request: true`, `want`, `who`; `category` is "" for "any cursed object").
+  Sale pays `value * pay_mult`. Passing, fleeing or holding nothing fails it.
+- Tuning: `spell_dread_mult`, `cursed_buyer_mult`, `requests_max`, `request_chance`, `request_pay_mult`.
+- `PlayerProfile.record_result(run, store) -> {unlocked, new_best, daily_counted}`; `RelicStore` fields
+  `haunting_unlocked, best_cash, daily_last, daily_best`; profile VERSION 3 (older files load with defaults).
+- Lab INFO: survival at haunting 5 and 10, request counts. Haunting 10 lands near 13% (cautious).

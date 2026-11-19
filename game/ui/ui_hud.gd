@@ -48,10 +48,12 @@ var _coin_t: float = 9.0
 var _drips: Array[Dictionary] = []  ## wax drops falling off the Dread candle {x, y, vy}
 var _drip_wait: float = 1.0
 var _stake_t: float = 0.0
+var _end_t: float = 0.0  ## seconds the run-end panel has been showing
 var _rng := RandomNumberGenerator.new()
 var spell_bar := UiSpellBar.new()  ## the occult round: spells on keys 5-0, the Midnight Table, found popups
 var table := UiTable.new()
 var found := UiFound.new()
+var requests := UiRequests.new()  ## the engagement round: pinned customer requests
 
 
 func _init() -> void:
@@ -68,6 +70,7 @@ func feed(events: Array[Dictionary]) -> void:
 	spell_bar.feed(events)
 	table.feed(events)
 	found.feed(events)
+	requests.feed(events)
 
 
 ## The topmost enabled-or-not widget id under p (UI grid coordinates), "" for none.
@@ -119,6 +122,7 @@ func _process(delta: float) -> void:
 	elif r.cash != _cash_prev:
 		ui_pop(r.cash - _cash_prev)
 		_cash_prev = r.cash
+	_end_t = _end_t + delta if game.end_panel_visible() else 0.0
 	_coin_t += delta
 	for p: Dictionary in _pops:
 		p["age"] = float(p["age"]) + delta
@@ -128,6 +132,9 @@ func _process(delta: float) -> void:
 	spell_bar.tick(delta)
 	table.tick(delta, r)
 	found.tick(delta)
+	requests.tick(delta)
+	if "requests" in r:
+		requests.sync(r.get("requests") as Array)
 	_ui_drips(r, delta)
 
 
@@ -204,6 +211,11 @@ func _tool_icon(tool: String) -> ImageTexture:
 func _draw() -> void:
 	if game == null or game.run == null:
 		return
+	_draw_inner()
+	_draw_badge_tip(game.view_run())
+
+
+func _draw_inner() -> void:
 	widgets.clear()
 	var r: RunState = game.view_run()
 	_draw_top(r)
@@ -220,6 +232,7 @@ func _draw() -> void:
 			_draw_card(game.cards[0])
 		return
 	_draw_dread(r)
+	requests.draw(self, _t)
 	if game != null and game.hints != null:
 		TsHintFrame.ts_draw(self, game.hints.text(), game.hints.age)
 	if game.end_panel_visible():
@@ -263,6 +276,43 @@ func _draw_top(r: RunState) -> void:
 	_coin(Vector2(212.0, 9.0), _coin_t / COIN_FLIP_SECS)
 	_text(Vector2(221.0, 5.0), "%d" % r.cash, 11)
 	_text(Vector2(278.0, 5.0), "RENT %d" % r.rent_for(r.night), 15 if r.cash >= r.rent_for(r.night) else 13)
+	_draw_badge(r)
+
+
+## The omen and haunting badge by the night label ("HAUNTING 3 + THE MOTH"); hovering it shows their text.
+func _draw_badge(r: RunState) -> void:
+	var info: Dictionary = UiEngage.badge_info(r)
+	var label: String = str(info["text"])
+	if label == "":
+		return
+	var w: float = float(UiPixelFont.ui_width(label)) + 12.0
+	var rect := Rect2(344.0, 3.0, minf(w, 240.0), 12.0)
+	_add("badge", rect, true)
+	var hot: bool = game.hover_id == "badge"
+	_rect(rect, 0)
+	_rect(Rect2(rect.position.x, rect.position.y, rect.size.x, 1.0), 11 if hot else 9)
+	_rect(Rect2(rect.position.x, rect.end.y - 1.0, rect.size.x, 1.0), 8)
+	var gutter: bool = UiMotion.ui_hash(int(_t * 8.0), 6) < 0.15
+	_rect(Rect2(rect.position.x + 3.0, rect.position.y + 3.0, 3.0, 5.0), 11 if not gutter else 10)  # a tiny flame
+	_text(Vector2(rect.position.x + 9.0, rect.position.y + 3.0), label, 11 if hot else 10, 1, false)
+
+
+func _draw_badge_tip(r: RunState) -> void:
+	if game.hover_id != "badge" or game.cards.size() > 0:
+		return
+	var tip: Array = UiEngage.badge_info(r)["tip"] as Array
+	if tip.is_empty():
+		return
+	var lines: PackedStringArray = PackedStringArray()
+	for t: Variant in tip:
+		lines.append_array(UiPixelFont.ui_wrap(str(t), 220))
+	var u: float = UiMotion.ui_out(_hov_age / 0.18)
+	var h: float = float(lines.size() * UiPixelFont.LINE_H) + 12.0
+	var rect := Rect2(344.0, 20.0 + floorf((1.0 - u) * -6.0), 236.0, minf(h, 200.0))
+	_frame(rect, "note")
+	for i: int in range(lines.size()):
+		var head: bool = i == 0 or lines[i].begins_with("OMEN")
+		_text(rect.position + Vector2(8.0, 6.0 + float(i * UiPixelFont.LINE_H)), lines[i], 12 if head else 0, 1, false)
 
 
 func _draw_pops() -> void:
@@ -552,6 +602,13 @@ func _draw_end(r: RunState) -> void:
 	if won:
 		y += 14.0
 		_text_c(cx, y, "A FREE RELIQUARY WAITS ON THE COUNTER.", 11)
+	var extra: bool = game.unlocked_text != ""
+	if extra:
+		y += 14.0
+		var shown_n: int = int(maxf(_end_t - 0.5, 0.0) * LOG_CPS * 0.5)
+		var tw: float = float(UiPixelFont.ui_width(game.unlocked_text))
+		UiPixelFont.ui_draw_ink(self, Vector2(floorf(cx - tw * 0.5), y), game.unlocked_text, _c(11), _c(15), shown_n,
+			shown_n < game.unlocked_text.length(), _c(13), _t)
 	var finds: Array[Dictionary] = UiOccult.find_rows(UiOccult.run_finds(game.run))
 	y += 16.0 if not finds.is_empty() else 22.0
 	if not finds.is_empty():
@@ -564,19 +621,21 @@ func _draw_end(r: RunState) -> void:
 	_text(field.position + Vector2(8.0, 5.0), "SIGNED: %s" % shown if game.handle != "" else "TYPE YOUR NAME TO SIGN IT_", 0 if game.handle != "" else 8, 1, false)
 	y += 23.0
 	var code: String = game.pass_text()
-	var box := Rect2(field.position.x, y, field.size.x, 56.0 if finds.is_empty() else 38.0)
+	var box := Rect2(field.position.x, y, field.size.x, (56.0 if finds.is_empty() else 38.0) - (12.0 if extra else 0.0))
 	_frame(box, "ledger")
 	if code == "":
 		_text(box.position + Vector2(float(UiFrames.LEDGER_TEXT_X), 5.0), "NOTHING LEFT TO PASS ON.", 0, 1, false)
 	else:
 		var lines: PackedStringArray = UiPixelFont.ui_wrap(code, int(box.size.x) - UiFrames.LEDGER_TEXT_X - 8)
-		var rows: int = 5 if finds.is_empty() else 3
+		var rows: int = (5 if finds.is_empty() else 3) - (1 if extra else 0)
 		for i: int in range(mini(lines.size(), rows)):
 			var ln: String = lines[i] if i < rows - 1 or lines.size() <= rows else lines[i].substr(0, lines[i].length() - 2) + ".."
 			_text(box.position + Vector2(float(UiFrames.LEDGER_TEXT_X), 5.0 + float(UiPixelFont.LINE_H * i)), ln, 0, 1, false)
 	y += box.size.y + 8.0
 	_button("copy", Rect2(field.position.x, y, 70.0, 19.0), "COPY", code != "")
-	_button("paste", Rect2(field.position.x + 78.0, y, 210.0, 19.0), "PASTE A FRIEND'S LINK")
+	_button("paste", Rect2(field.position.x + 78.0, y, 150.0 if game.daily_run else 210.0, 19.0), "PASTE A FRIEND'S LINK")
+	if game.daily_run:
+		_button("copy_daily", Rect2(field.position.x + 236.0, y, 120.0, 19.0), "COPY RESULT", true, true)
 	y += 26.0
 	var status: String = game.gift_status if game.gift_status != "" else "A FRIEND'S LINK STARTS YOUR NEXT RUN WITH THEIR OBJECT."
 	var st_lines: PackedStringArray = UiPixelFont.ui_wrap(status, int(field.size.x))

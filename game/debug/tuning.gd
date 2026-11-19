@@ -69,6 +69,11 @@ const FIELDS: Array = [
 	["lot_price", 60, 0, 1000, 5, "Midnight Table", "Price of a sealed lot."],
 	["pairs_tries", 3, 1, 5, 1, "Midnight Table", "Tries (two flips each) in Tarot Pairs."],
 	["pairs_pay_scale", 0.4, 0.0, 2.0, 0.05, "Midnight Table", "Tarot Pairs: stake multiple added per matched card, times its tarot mult."],
+	["spell_dread_mult", 1.0, 0.5, 3.0, 0.1, "Grimoire", "Multiplier on every spell's Dread cost (hauntings raise it)."],
+	["cursed_buyer_mult", 1.0, 0.5, 3.0, 0.05, "Curses", "Extra multiplier on what buyers pay for cursed objects."],
+	["requests_max", 2, 0, 5, 1, "Requests", "Customer requests open at once."],
+	["request_chance", 0.15, 0.0, 1.0, 0.01, "Requests", "Chance a customer slot also brings a new request (when fewer than requests_max are open)."],
+	["request_pay_mult", 2.2, 1.0, 5.0, 0.1, "Requests", "A request pays this multiple of the item's true value."],
 	["secs_per_customer", 25.0, 1.0, 120.0, 1.0, "Pacing", "Estimated real seconds a player spends per customer (lab run length)."],
 	["secs_per_inspect", 5.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per tool use."],
 	["secs_per_haggle", 4.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per offer."],
@@ -136,6 +141,11 @@ var table_max_stake_frac: float
 var lot_price: float
 var pairs_tries: float
 var pairs_pay_scale: float
+var spell_dread_mult: float
+var cursed_buyer_mult: float
+var requests_max: float
+var request_chance: float
+var request_pay_mult: float
 var secs_per_customer: float
 var secs_per_inspect: float
 var secs_per_haggle: float

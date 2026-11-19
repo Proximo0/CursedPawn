@@ -43,6 +43,10 @@ var settings: TsSettings = TsSettings.shared()
 var hints: TsHintTracker
 var pause: PauseMenu
 var title: TitleScreen
+var setup: UiRunSetup  ## the haunting picker and omen draw while open
+var daily_run: bool = false  ## the run in progress is today's Daily Seance
+var daily_no: int = 0
+var unlocked_text: String = ""  ## "HAUNTING 3 UNLOCKED" once a won run earned it
 var _saved: Dictionary = {}  ## a run saved by an earlier launch, offered as Continue on the title
 
 var _overlay: DebugOverlay
@@ -56,6 +60,8 @@ var _hud_vp: SubViewport
 var _hud_view: TextureRect
 var _last_serial: int = -1
 var _banked: bool = false  ## this run's finds were handed to the profile
+var _recorded: bool = false  ## record_result was called for this run
+var _daily_done: Dictionary = {}  ## {key, line}: today's daily played in this session (when the profile cannot say)
 var _last_invalid: bool = false
 
 
@@ -176,11 +182,18 @@ func _show_title() -> void:
 	title.room = room
 	title.has_save = not _saved.is_empty() or (rec != null and not rec.commands.is_empty() and not run.is_over())
 	title.parcel = TitleScreen.ts_parcel_in_page()
+	title.daily_on = UiEngage.daily_available()
+	if title.daily_on:
+		title.daily_number = UiEngage.daily_number(UiEngage.today())
+		title.daily_line = _daily_played_line()
 	add_child(title)
 	title.start_new.connect(func() -> void:
 		title.hide()
+		_begin_setup(true))
+	title.start_daily.connect(func() -> void:
+		title.hide()
 		_saved = {}
-		new_run(seed_now + 1, _gift_from_text(gift_text)))
+		start_daily())
 	title.continue_run.connect(func() -> void:
 		title.hide()
 		if not _saved.is_empty():
@@ -188,7 +201,7 @@ func _show_title() -> void:
 			_saved = {}
 		_refresh())
 	title.quit.connect(get_tree().quit)
-	title.visibility_changed.connect(func() -> void: _hud_view.visible = not title.visible)
+	title.visibility_changed.connect(func() -> void: _hud_view.visible = not title.visible and setup == null)
 	_hud_view.visible = false  # the title owns the screen; the shop shows dimly behind it
 
 
@@ -246,7 +259,7 @@ func reload_data() -> PackedStringArray:
 	return problems
 
 
-func new_run(seed_in: int, gift: Dictionary = {}) -> void:
+func new_run(seed_in: int, gift: Dictionary = {}, opts: Dictionary = {}) -> void:
 	if catalog == null:
 		catalog = Catalog.load_default()
 	seed_now = seed_in
@@ -256,7 +269,10 @@ func new_run(seed_in: int, gift: Dictionary = {}) -> void:
 		run.spells_known = _relics.store.grimoire.duplicate()  # pages found in earlier runs carry into this one
 	if _overlay != null:
 		_overlay.run = run
-	rec = RunRecording.begin(run, seed_in, catalog, Tuning.shared(), gift)
+	rec = UiEngage.begin(run, seed_in, catalog, Tuning.shared(), gift, opts)
+	daily_run = bool(opts.get("daily", false))
+	unlocked_text = ""
+	_recorded = false
 	if room != null:
 		room.setup(run)
 	log_lines.clear()
@@ -271,6 +287,7 @@ func new_run(seed_in: int, gift: Dictionary = {}) -> void:
 		hud.spell_bar.pending_item_spell = ""
 		hud.table.reset_stage()
 		hud.found.popups.clear()
+		hud.requests.clear()
 	_on_events(run.last_events)
 	_refresh()
 
@@ -394,10 +411,102 @@ func _refresh() -> void:
 	if run.is_over() and not _banked and _relics != null:
 		_banked = true
 		_relics.bank_finds(run)
+	if run.is_over() and not _recorded and _relics != null:
+		_recorded = true
+		_record_result()
 	if run.is_over() and run.won and not _rewarded and _relics != null:
 		_rewarded = true
 		_relics.reward_run(run)
 		_log("A free reliquary appears on the counter.")
+
+
+## Hands the finished run to the profile (best cash, Haunting unlocks, daily record) and notes a new Haunting.
+## Guarded: no logic for it yet, or a scripted run, does nothing.
+func _record_result() -> void:
+	if Flags.is_scripted_run() or not UiOccult.static_has(PlayerProfile as GDScript, "record_result"):
+		return
+	var before: int = _profile_int("haunting_unlocked")
+	(PlayerProfile as GDScript).call("record_result", run, _relics.store)
+	var after: int = _profile_int("haunting_unlocked")
+	if after > before:
+		unlocked_text = "HAUNTING %d UNLOCKED" % after
+	if daily_run:
+		var nights: int = run.night
+		_daily_done = {"key": UiEngage.date_key(UiEngage.today()), "line": "NIGHT %d, %d COINS" % [nights, run.cash]}
+	_relics.save_profile()
+
+
+func _profile_int(field: String) -> int:
+	if _relics != null and _relics.store != null and field in _relics.store:
+		return int(_relics.store.get(field))
+	return 0
+
+
+func _daily_played_line() -> String:
+	var d: Dictionary = UiEngage.today()
+	var line: String = UiEngage.played_line(_relics.store if _relics != null else null, d)
+	if line == "" and str(_daily_done.get("key", "")) == UiEngage.date_key(d):
+		line = str(_daily_done["line"])
+	return line
+
+
+## New run flow: the Haunting picker (when one is unlocked) and the Omen draw, then the run. Scripted runs, and
+## logic without hauntings or omens, start at once with today's behaviour.
+func _begin_setup(from_title: bool) -> void:
+	var seed_next: int = seed_now + 1
+	var unlocked: int = UiEngage.picker_max(_profile_int("haunting_unlocked"))
+	var omens: Array[String] = UiEngage.omen_offer(seed_next)
+	if Flags.is_scripted_run() or (unlocked == 0 and omens.is_empty()):
+		_saved = {}
+		_start_chosen(seed_next, {})
+		return
+	if setup != null:
+		setup.queue_free()
+	setup = UiRunSetup.new()
+	setup.sfx = sfx
+	setup.room = room
+	setup.unlocked = unlocked
+	setup.omen_ids = omens
+	add_child(setup)
+	_hud_view.visible = false
+	setup.chosen.connect(func(opts: Dictionary) -> void:
+		setup.queue_free()
+		setup = null
+		_saved = {}
+		_hud_view.visible = true
+		_start_chosen(seed_next, opts))
+	setup.cancelled.connect(func() -> void:
+		setup.queue_free()
+		setup = null
+		if from_title and title != null:
+			title.show()
+		else:
+			_hud_view.visible = true)
+
+
+## Starts the run the picker chose, consuming a pasted gift link.
+func _start_chosen(seed_in: int, opts: Dictionary) -> void:
+	var gift: Dictionary = _gift_from_text(gift_text)
+	var tried: bool = gift_text.strip_edges() != ""
+	gift_text = ""
+	gift_status = ""
+	new_run(seed_in, gift, opts)
+	if tried and gift.is_empty():
+		_log("That link didn't take. The object is still out there somewhere.")
+	elif not gift.is_empty():
+		_log("A parcel arrives: %s." % gift["name"])
+
+
+## Today's Daily Seance: the day's seed, haunting 0, the day's first omen, no gift. The date is read here, in the UI.
+func start_daily() -> void:
+	if not UiEngage.daily_available():
+		return
+	var d: Dictionary = UiEngage.today()
+	var seed_in: int = UiEngage.daily_seed(d)
+	daily_no = UiEngage.daily_number(d)
+	gift_text = ""
+	new_run(seed_in, {}, UiEngage.daily_opts(seed_in, d))
+	_log("Daily Seance #%d. Everyone gets this shop today." % daily_no)
 
 
 func _held(uid: int) -> bool:
@@ -553,6 +662,9 @@ func _activate_end(id: String) -> void:
 		"copy":
 			DisplayServer.clipboard_set(pass_text())
 			gift_status = "COPIED. SEND IT TO A FRIEND."
+		"copy_daily":
+			DisplayServer.clipboard_set(UiEngage.daily_result(run, daily_no))
+			gift_status = "RESULT COPIED. PASTE IT ANYWHERE."
 		"paste":
 			paste_gift(DisplayServer.clipboard_get())
 		"newrun":
@@ -615,15 +727,7 @@ func paste_gift(text: String) -> void:
 
 
 func start_next_run() -> void:
-	var gift: Dictionary = _gift_from_text(gift_text)
-	var tried: bool = gift_text.strip_edges() != ""
-	gift_text = ""
-	gift_status = ""
-	new_run(seed_now + 1, gift)
-	if tried and gift.is_empty():
-		_log("That link didn't take. The object is still out there somewhere.")
-	elif not gift.is_empty():
-		_log("A parcel arrives: %s." % gift["name"])
+	_begin_setup(false)
 
 
 ## Instant replay of the last wake: rebuilds the run a few commands before it and plays them back into the room.

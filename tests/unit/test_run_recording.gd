@@ -36,3 +36,15 @@ func test_wake_clip() -> void:
 	rec.drive(run, {"t": "buy"})
 	assert_eq(rec.wake_at.size(), 1)
 	assert_eq(rec.wake_clip(0, 5), Vector2i(0, 2))
+
+
+func test_replay_with_opts() -> void:
+	var cat := Catalog.load_default()
+	for opts: Dictionary in [{"haunting": 10, "omen": "regular_crowd"}, {"haunting": 3, "omen": "open_book", "daily": true}]:
+		var run := RunState.new()
+		var rec := RunRecording.begin(run, 31, cat, Tuning.new(), {}, opts)
+		assert_true(ShopBot.new(ShopBot.CAUTIOUS).play(run, rec))
+		assert_eq(rec.first_divergence(cat), -1, "replay matches with opts")
+		var back := RunRecording.from_dict(JSON.parse_string(JSON.stringify(rec.to_dict())))
+		assert_eq(back.first_divergence(cat), -1, "after JSON")
+		assert_eq(back.replay(cat).opts, run.opts)

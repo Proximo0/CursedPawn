@@ -270,6 +270,12 @@ func _rebuild_book() -> void:
 			flow.add_child(_cell(collection.curio(str(id))))
 
 
+## Writes the profile (never for scripted runs).
+func save_profile() -> void:
+	if not Flags.is_scripted_run():
+		PlayerProfile.save(store)
+
+
 ## Hands the finished run's finds to the profile: pages join the grimoire, curios go to the collection. Guarded so the
 ## game runs on logic without PlayerProfile.bank_finds, and never for scripted runs (tests, captures).
 func bank_finds(run: RunState) -> void:

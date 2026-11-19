@@ -134,6 +134,8 @@ func problems() -> PackedStringArray:
 	elif tarot_return() >= 1.0:
 		out.append("tarot deck pays %.2f per coin staked; it must stay below 1" % tarot_return())
 	out.append_array(_table_problems())
+	out.append_array(Hauntings.problems())
+	out.append_array(Omens.problems())
 	return out
 
 

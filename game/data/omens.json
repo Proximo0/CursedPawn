@@ -1,0 +1,14 @@
+[
+	{"id": "gravedigger", "name": "Gravedigger's Luck", "text": "Every item is cursed, but buyers pay 50% more for them.", "set": {}, "mul": {"cursed_buyer_mult": 1.5}, "flags": {"all_cursed": true}},
+	{"id": "blind_lamp", "name": "The Blind Lamp", "text": "The UV lamp fails. You start with 40% more cash.", "set": {}, "mul": {"start_cash": 1.4}, "flags": {"no_tool": "uv"}},
+	{"id": "deaf_ear", "name": "The Deaf Ear", "text": "Listening fails. Rent is 15% lower.", "set": {}, "mul": {"rent_base": 0.85}, "flags": {"no_tool": "listen"}},
+	{"id": "numb_hands", "name": "Numb Hands", "text": "Touch fails. Sellers haggle for longer.", "set": {}, "mul": {"patience_base": 1.34}, "flags": {"no_tool": "touch"}},
+	{"id": "open_book", "name": "The Open Book", "text": "You know Seal from the start. The wake comes 10% sooner.", "set": {}, "mul": {"wake_threshold": 0.9}, "flags": {"start_spell": "seal"}},
+	{"id": "hungry_pages", "name": "Hungry Pages", "text": "You know Banish from the start. Cursed sellers are 20% more common.", "set": {}, "mul": {"cursed_share": 1.2}, "flags": {"start_spell": "banish"}},
+	{"id": "gamblers_moon", "name": "Gambler's Moon", "text": "Two table games each night. Rent is 15% higher.", "set": {}, "mul": {"rent_base": 1.15}, "flags": {"double_table": true}},
+	{"id": "regular_crowd", "name": "The Regular Crowd", "text": "One seller type only, 15% cheaper. Buyers pay 8% less.", "set": {}, "mul": {"seller_reserve_frac": 0.85, "buyer_pay_frac": 0.92}, "flags": {"one_customer_type": true}},
+	{"id": "long_night", "name": "The Long Night", "text": "Days are 20% longer. Curses stir 50% more each night.", "set": {}, "mul": {"day_minutes": 1.2, "dread_per_night": 1.5}, "flags": {}},
+	{"id": "landlords_pity", "name": "Landlord's Pity", "text": "Rent grows slower. Cursed sellers are 30% more common.", "set": {}, "mul": {"rent_growth": 0.92, "cursed_share": 1.3}, "flags": {}},
+	{"id": "thin_veil", "name": "The Thin Veil", "text": "Tells show every time. The wake comes 20% sooner.", "set": {"tell_chance": 1.0}, "mul": {"wake_threshold": 0.8}, "flags": {}},
+	{"id": "hollow_coin", "name": "The Hollow Coin", "text": "Buyers pay 15% more. You start with 40% less cash.", "set": {}, "mul": {"buyer_pay_frac": 1.15, "start_cash": 0.6}, "flags": {}}
+]

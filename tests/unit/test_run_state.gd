@@ -118,6 +118,7 @@ func test_cursed_buy_raises_dread_and_wakes() -> void:
 	tun.set_value("cursed_share", 1.0)
 	tun.set_value("wake_threshold", 1.0)
 	tun.set_value("start_cash", 1000.0)
+	tun.set_value("request_chance", 0.0)  # keeps this seed's rng sequence
 	var run := rs_run(9, tun)
 	var ev: Array[Dictionary] = run.apply({"t": "buy"})
 	var woke: bool = false
@@ -275,3 +276,21 @@ func test_customer_types_shape_customers() -> void:
 	var mult: float = run.sale_mult()
 	assert_eq(run.sale_price(cursed), int(round(100.0 * run.tuning.buyer_pay_frac * mult * 1.4)), "ghost hunters pay for curses")
 	assert_true(base > 0)
+
+
+func test_opts_survive_snapshot_restore() -> void:
+	var cat := Catalog.load_default()
+	var a := RunState.new()
+	var ev: Array[Dictionary] = a.start(12, cat, Tuning.new(), {}, {"haunting": 4, "omen": "gravedigger"})
+	assert_eq(ev[0]["e"], "run_opts")
+	assert_eq(ev[0]["omen_name"], "Gravedigger's Luck")
+	var bot := ShopBot.new(ShopBot.GREEDY)
+	for i: int in range(15):
+		a.apply(bot.decide(a))
+	var b := RunState.new()
+	b.restore(a.snapshot(), cat)
+	assert_eq(b.opts, a.opts)
+	assert_eq(b.rules, a.rules)
+	bot.play(a)
+	bot.play(b)
+	assert_eq(a.state_hash(), b.state_hash())

@@ -91,9 +91,15 @@ func _bot_cautious_buy(run: RunState) -> Dictionary:
 	var c: Dictionary = run.customer
 	if not (c["tells"] as Array).is_empty():
 		return {"t": "pass"}
-	for tool: String in ["uv", "listen"]:
+	var picked: int = 0
+	for tool: String in ["uv", "listen", "touch", "scale"]:  # the first two it can use (an omen can break one)
+		if not run.tool_ok(tool):
+			continue
+		picked += 1
 		if not (c["tools"] as Array).has(tool) and run.clock >= run.tuning.inspect_minutes:
 			return {"t": "inspect", "tool": tool}
+		if picked >= 2:
+			break
 	var mid: int = int(run.estimate()["mid"])
 	var ask: int = int(c["ask"])
 	var spendable: int = run.cash - _bot_reserve(run, 1.0)

@@ -18,6 +18,11 @@ var age_checked: bool = false
 var age_ok: bool = false
 var terms_accepted: String = ""  ## the TERMS_VERSION the player accepted, "" if none
 var grimoire: PackedStringArray = Grimoire.DEFAULT_KNOWN.duplicate()  ## known spell ids (earned only; saved by PlayerProfile)
+## Progress (saved by PlayerProfile, version 3): hauntings unlocked, best winning cash, and the Daily Seance records.
+var haunting_unlocked: int = 0
+var best_cash: int = 0
+var daily_last: String = ""  ## "YYYY-MM-DD" of the last daily played
+var daily_best: Dictionary = {}  ## date -> {number, night, cash, won, wakes}; only the latest 30 dates are kept
 var log: Array[Dictionary] = []  ## {n, id, price_cents, payment_ref, delivered, refunded}
 
 

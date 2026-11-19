@@ -44,12 +44,28 @@ var table: Dictionary = {}
 var summon_category: String = ""  ## set by a summon: the next customer is a buyer of this category
 var grimoire: Grimoire
 var house: MidnightTable
+## Engagement round. `opts` is what was applied ({haunting, omen, omen_name, daily}); `rules` are the omen and
+## haunting rule flags read below; `requests` are the open customer requests (see Requests).
+var opts: Dictionary = {}
+var rules: Dictionary = {}
+var requests: Array[Dictionary] = []
+var request_seq: int = 0
+var requests_done: int = 0
+var requests_failed: int = 0
 
 
 ## Starts a run. `gift` is an item passed on by a friend (its keys as in `inventory`); empty for none.
-func start(seed_value: int, cat: Catalog, tun: Tuning = null, gift: Dictionary = {}) -> Array[Dictionary]:
+## `run_opts` is {haunting: 0..10, omen: id or "", daily: bool}; it is applied as overrides on a copy of `tun`.
+func start(seed_value: int, cat: Catalog, tun: Tuning = null, gift: Dictionary = {}, run_opts: Dictionary = {}) -> Array[Dictionary]:
 	catalog = cat
-	tuning = tun if tun != null else Tuning.shared()
+	var base: Tuning = tun if tun != null else Tuning.shared()
+	var active: bool = _take_opts(run_opts)
+	if active:
+		tuning = Tuning.new()
+		tuning.copy_from(base)
+		_apply_opts()
+	else:
+		tuning = base
 	seed_used = seed_value
 	rng.seed = seed_value
 	_setup_rules()
@@ -70,15 +86,76 @@ func start(seed_value: int, cat: Catalog, tun: Tuning = null, gift: Dictionary =
 	play_secs = 0.0
 	commands = 0
 	next_uid = 1
+	requests.clear()
+	request_seq = 0
+	requests_done = 0
+	requests_failed = 0
+	if str(rules["seller_type"]) == "one":
+		var sellers: Array[Dictionary] = catalog.customer_types(SELLER)
+		rules["seller_type"] = str(sellers[rng.randi_range(0, sellers.size() - 1)]["id"]) if not sellers.is_empty() else ""
 	if not gift.is_empty():
 		var item: Dictionary = gift.duplicate(true)
 		item["uid"] = _take_uid()
 		inventory.append(item)
+	elif bool(rules["start_cursed"]):
+		_start_cursed_item()
+	for sp: String in rules["start_spells"]:
+		if not spells_known.has(sp):
+			spells_known.append(sp)
 	clock = tuning.day_minutes
 	var ev: Array[Dictionary] = [{"e": "night_start", "night": night, "rent": rent_for(night)}]
+	if active:
+		ev.push_front({"e": "run_opts", "haunting": opts["haunting"], "omen": opts["omen"], "omen_name": opts["omen_name"],
+			"daily": opts["daily"]})
 	_next_customer(ev)
 	last_events = ev
 	return ev
+
+
+## Normalises `run_opts` into `opts` and sets the rule flags. True when any option is on.
+func _take_opts(run_opts: Dictionary) -> bool:
+	var omen_id: String = str(run_opts.get("omen", ""))
+	var omen: Dictionary = Omens.get_omen(omen_id) if omen_id != "" else {}
+	opts = {"haunting": clampi(int(run_opts.get("haunting", 0)), 0, Hauntings.MAX_LEVEL),
+		"omen": omen_id if not omen.is_empty() else "", "omen_name": str(omen.get("name", "")),
+		"daily": bool(run_opts.get("daily", false))}
+	for key: String in ["date", "number"]:
+		if run_opts.has(key):
+			opts[key] = run_opts[key]
+	rules = {"all_cursed": false, "no_tool": "", "double_table": false, "seller_type": "", "start_cursed": false,
+		"start_spells": []}
+	for h: Dictionary in Hauntings.upto(int(opts["haunting"])):
+		for flag: Variant in (h.get("flags", {}) as Dictionary):
+			rules[str(flag)] = h["flags"][flag]
+	var flags: Dictionary = omen.get("flags", {})
+	rules["all_cursed"] = bool(flags.get("all_cursed", false))
+	rules["no_tool"] = str(flags.get("no_tool", ""))
+	rules["double_table"] = bool(flags.get("double_table", false))
+	rules["seller_type"] = "one" if bool(flags.get("one_customer_type", false)) else ""
+	if flags.has("start_spell"):
+		rules["start_spells"] = [str(flags["start_spell"])]
+	return int(opts["haunting"]) > 0 or not omen.is_empty() or bool(opts["daily"])
+
+
+func _apply_opts() -> void:
+	for h: Dictionary in Hauntings.upto(int(opts["haunting"])):
+		DataFiles.apply_rule(tuning, h)
+	if str(opts["omen"]) != "":
+		DataFiles.apply_rule(tuning, Omens.get_omen(str(opts["omen"])))
+
+
+## Haunting 10: the shop remembers. A cursed object is already on the shelf.
+func _start_cursed_item() -> void:
+	var obj: Dictionary = catalog.objects[rng.randi_range(0, catalog.objects.size() - 1)]
+	var cid: String = str(catalog.curses[rng.randi_range(0, catalog.curses.size() - 1)]["id"])
+	inventory.append({"id": obj["id"], "name": obj["name"], "category": obj["category"],
+		"value": int(round(float(obj["value"]) * tuning.cursed_value_mult)), "curse": cid, "uid": _take_uid(),
+		"est": int(obj["value"]), "tells": 0})
+
+
+## Whether a tool can be used this run (an omen can break one).
+func tool_ok(tool: String) -> bool:
+	return Catalog.TOOLS.has(tool) and str(rules.get("no_tool", "")) != tool
 
 
 func _setup_rules() -> void:
@@ -113,16 +190,25 @@ func sellable() -> Array[Dictionary]:
 	if customer.get("kind", "") != BUYER:
 		return out
 	for item: Dictionary in inventory:
-		if item["category"] == customer["category"]:
+		if _wants(item):
 			out.append(item)
 	return out
+
+
+## Whether the current buyer takes `item`.
+func _wants(item: Dictionary) -> bool:
+	if customer.get("request", false):
+		return Requests.matches(customer["want"], item)
+	return item["category"] == customer["category"]
 
 
 ## The price the current buyer offers for a held item. An imposter offers it too but never pays (see _sell).
 func sale_price(item: Dictionary) -> int:
 	if customer.get("kind", "") != BUYER:
 		return 0
-	var cursed: float = float(customer.get("cursed_mult", 1.0)) if str(item["curse"]) != "" else 1.0
+	if customer.get("request", false):
+		return int(round(float(item["value"]) * float(customer["pay_mult"])))
+	var cursed: float = float(customer.get("cursed_mult", 1.0)) * tuning.cursed_buyer_mult if str(item["curse"]) != "" else 1.0
 	return int(round(float(item["value"]) * tuning.buyer_pay_frac * float(customer["pay_mult"]) * sale_mult() * cursed))
 
 
@@ -184,7 +270,7 @@ func _take_uid() -> int:
 
 func _inspect(tool: String, ev: Array[Dictionary]) -> void:
 	var tools: Array = customer["tools"]
-	if not Catalog.TOOLS.has(tool) or tools.has(tool):
+	if not tool_ok(tool) or tools.has(tool):
 		ev.append({"e": "invalid", "why": "tool %s" % tool})
 		return
 	tools.append(tool)
@@ -246,12 +332,14 @@ func _sell(uid: int, ev: Array[Dictionary]) -> void:
 		var item: Dictionary = inventory[i]
 		if int(item["uid"]) != uid:
 			continue
-		if item["category"] != customer["category"]:
+		if not _wants(item):
 			break
 		var price: int = 0 if customer["imposter"] else sale_price(item)
 		cash += price
 		inventory.remove_at(i)
 		ev.append({"e": "sold", "uid": uid, "name": item["name"], "price": price, "imposter": customer["imposter"]})
+		if customer.get("request", false):
+			_complete_request(str(customer["request_id"]), price, ev)
 		_next_customer(ev)
 		return
 	ev.append({"e": "invalid", "why": "cannot sell %d" % uid})
@@ -300,12 +388,23 @@ func _imposter_every() -> int:
 
 
 func _next_customer(ev: Array[Dictionary]) -> void:
+	var prev: Dictionary = customer
 	customer = {}
 	if phase == PHASE_OVER:
 		return
+	if prev.get("request", false) and not _find_request(str(prev["request_id"])).is_empty():
+		_fail_request(_find_request(str(prev["request_id"])), ev)  # passed on, or fled
 	if clock < tuning.customer_minutes:
 		_end_night(ev)
 		return
+	if _call_requester(ev):
+		return
+	_roll_customer(ev)
+	if not customer.is_empty():
+		_maybe_new_request(ev)
+
+
+func _roll_customer(ev: Array[Dictionary]) -> void:
 	clock -= tuning.customer_minutes
 	play_secs += tuning.secs_per_customer
 	customers_seen += 1
@@ -333,10 +432,14 @@ func _next_customer(ev: Array[Dictionary]) -> void:
 			"line": bt.get("line", "")})
 		return
 	var st: Dictionary = _pick_type(SELLER)
+	if str(rules["seller_type"]) != "":
+		for t: Dictionary in catalog.customer_types(SELLER):
+			if str(t["id"]) == str(rules["seller_type"]):
+				st = t
 	var obj: Dictionary = catalog.objects[rng.randi_range(0, catalog.objects.size() - 1)]
 	var value: float = float(obj["value"]) * rng.randf_range(1.0 - tuning.value_spread, 1.0 + tuning.value_spread)
 	var cid: String = ""
-	if imposter or rng.randf() < tuning.cursed_share:
+	if imposter or bool(rules["all_cursed"]) or rng.randf() < tuning.cursed_share:
 		cid = catalog.curses[rng.randi_range(0, catalog.curses.size() - 1)]["id"]
 		value *= tuning.cursed_value_mult
 	var reserve: int = maxi(1, int(round(value * tuning.seller_reserve_frac * rng.randf_range(0.85, 1.15)
@@ -413,7 +516,7 @@ func _end_night(ev: Array[Dictionary]) -> void:
 		ev.append({"e": "run_won", "cash": cash})
 		return
 	phase = PHASE_TABLE
-	table = {"games_left": int(tuning.table_games_per_night), "lots_left": int(tuning.table_lots_per_night),
+	table = {"games_left": int(tuning.table_games_per_night) * (2 if bool(rules["double_table"]) else 1), "lots_left": int(tuning.table_lots_per_night),
 		"hand": {}, "pairs": {}}
 	if tuning.night_curio_chance > 0.0 and rng.randf() < tuning.night_curio_chance:
 		var nc: Dictionary = _pick_find(false)
@@ -443,6 +546,8 @@ func snapshot() -> Dictionary:
 		"play_secs": play_secs, "commands": commands, "next_uid": next_uid,
 		"spells_known": Array(spells_known), "found": found.duplicate(true), "casts_left": casts_left,
 		"sealed": sealed, "table": table.duplicate(true), "summon_category": summon_category,
+		"opts": opts.duplicate(true), "rules": rules.duplicate(true), "requests": requests.duplicate(true),
+		"request_seq": request_seq, "requests_done": requests_done, "requests_failed": requests_failed,
 	}
 
 
@@ -473,6 +578,14 @@ func restore(d: Dictionary, cat: Catalog) -> void:
 	sealed = bool(d.get("sealed", false))
 	table = (d.get("table", {}) as Dictionary).duplicate(true)
 	summon_category = str(d.get("summon_category", ""))
+	opts = (d.get("opts", {}) as Dictionary).duplicate(true)
+	rules = {"all_cursed": false, "no_tool": "", "double_table": false, "seller_type": "", "start_cursed": false,
+		"start_spells": []}
+	rules.merge((d.get("rules", {}) as Dictionary).duplicate(true), true)
+	requests.assign((d.get("requests", []) as Array).duplicate(true))
+	request_seq = int(d.get("request_seq", 0))
+	requests_done = int(d.get("requests_done", 0))
+	requests_failed = int(d.get("requests_failed", 0))
 
 
 func state_hash() -> int:
@@ -545,7 +658,7 @@ func _cast(cmd: Dictionary, ev: Array[Dictionary]) -> void:
 	var sp: Dictionary = grimoire.spell(id)
 	casts_left -= 1
 	var backfired: bool = rng.randf() < grimoire.backfire_chance(dread)
-	var cost: float = float(sp["dread"])
+	var cost: float = float(sp["dread"]) * tuning.spell_dread_mult
 	dread += cost
 	ev.append({"e": "cast", "spell": id, "ok": true, "backfire": backfired,
 		"text": str(sp["backfire"]) if backfired else str(sp["text"]), "dread": cost})
@@ -797,3 +910,85 @@ func _buy_lot(ev: Array[Dictionary]) -> void:
 	if cid != "":
 		dread += tuning.dread_on_buy * float(catalog.curse(cid).get("dread", 1.0))
 		_check_wake(ev)
+
+
+# ---- customer requests
+
+func _find_request(id: String) -> Dictionary:
+	for r: Dictionary in requests:
+		if str(r["id"]) == id:
+			return r
+	return {}
+
+
+func _holds_match(want: Dictionary) -> bool:
+	for item: Dictionary in inventory:
+		if Requests.matches(want, item):
+			return true
+	return false
+
+
+## Maybe a customer slot also brings a request: the requester speaks up and the slot goes on as usual.
+func _maybe_new_request(ev: Array[Dictionary]) -> void:
+	if requests.size() >= int(tuning.requests_max) or night >= int(tuning.nights) or tuning.request_chance <= 0.0 or rng.randf() >= tuning.request_chance:
+		return
+	var bt: Dictionary = _pick_type(BUYER)
+	var reward: Dictionary = _pick_find(false)
+	request_seq += 1
+	var req: Dictionary = Requests.make(rng, catalog, tuning, night, int(tuning.nights), request_seq, str(bt.get("id", "")), reward)
+	if req.is_empty():
+		return
+	requests.append(req)
+	ev.append({"e": "request_new", "id": req["id"], "who": req["who"], "line": Requests.line(rng, req),
+		"want_text": Requests.want_text(req["want"]), "due": req["due"]})
+
+
+## On a request's due night the requester is the first customer, a buyer. A requester with nothing to take fails
+## at once and the next customer comes instead. True when the requester is now the customer.
+func _call_requester(ev: Array[Dictionary]) -> bool:
+	while true:
+		var req: Dictionary = {}
+		for r: Dictionary in requests:
+			if int(r["due"]) <= night and not bool(r["called"]):
+				req = r
+				break
+		if req.is_empty():
+			return false
+		req["called"] = true
+		ev.append({"e": "request_due", "id": req["id"], "who": req["who"]})
+		if not _holds_match(req["want"]):
+			_fail_request(req, ev)
+			continue
+		var bt: Dictionary = {}
+		for t: Dictionary in catalog.customer_types(BUYER):
+			if str(t["id"]) == str(req["tid"]):
+				bt = t
+		clock -= tuning.customer_minutes
+		play_secs += tuning.secs_per_customer
+		customers_seen += 1
+		customer = {"kind": BUYER, "category": str(req["want"]["category"]), "imposter": false, "type": req["tid"],
+			"pay_mult": float(req["pay_mult"]), "cursed_mult": 1.0, "request": true, "request_id": req["id"],
+			"want": (req["want"] as Dictionary).duplicate(), "who": req["who"]}
+		ev.append({"e": "customer", "kind": BUYER, "category": customer["category"], "type": bt.get("name", ""),
+			"tid": req["tid"], "line": bt.get("line", ""), "request": true, "who": req["who"],
+			"want_text": Requests.want_text(req["want"])})
+		return true
+	return false
+
+
+func _fail_request(req: Dictionary, ev: Array[Dictionary]) -> void:
+	requests.erase(req)
+	requests_failed += 1
+	ev.append({"e": "request_failed", "id": req["id"]})
+
+
+func _complete_request(id: String, pay: int, ev: Array[Dictionary]) -> void:
+	var req: Dictionary = _find_request(id)
+	if req.is_empty():
+		return
+	requests.erase(req)
+	requests_done += 1
+	var reward: Dictionary = req["reward"]
+	ev.append({"e": "request_done", "id": id, "pay": pay, "reward": reward})
+	if not reward.is_empty():
+		_add_find(reward, ev)
