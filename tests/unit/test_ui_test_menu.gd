@@ -99,3 +99,14 @@ func test_wake_tiles_fire_their_wake_type() -> void:
 		if g.room != null:
 			assert_eq(g.room.wake_type(), w, "wake tile " + w)
 		g.queue_free()
+
+
+func test_pressing_a_tile_opens_it() -> void:
+	## The real path a click or Enter takes: the menu's own activation, through its picked signal.
+	var g: ShopGame = tm_game()
+	g.open_test_menu()
+	var id: String = g.test_menu.tm_page_ids()[0]
+	g.test_menu.ts_activate(id)
+	assert_true(g.test_active, "clicking %s opens the tile" % id)
+	assert_false(g.test_menu.visible, "the menu steps aside")
+	g.free()
