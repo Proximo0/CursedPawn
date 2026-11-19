@@ -43,7 +43,7 @@ func test_every_object_is_drawn_small_transparent_and_palette_only() -> void:
 	for row: Dictionary in _rows(OBJECTS_PATH):
 		var id: String = str(row["id"])
 		var img: Image = SpriteKit.object_texture(id, str(row["category"])).get_image()
-		assert_true(img.get_width() <= 32 and img.get_height() <= 32, id + " size")
+		assert_true(img.get_width() <= 40 and img.get_height() <= 40, id + " size")
 		assert_true(_opaque_count(img) > 60, id + " too empty")
 		for corner: Vector2i in [Vector2i(0, 0), Vector2i(img.get_width() - 1, 0), Vector2i(0, img.get_height() - 1),
 				Vector2i(img.get_width() - 1, img.get_height() - 1)]:
@@ -75,8 +75,8 @@ func test_unknown_id_uses_category_fallback() -> void:
 func test_customers_follow_height_and_use_palette() -> void:
 	for row: Dictionary in _rows(CUSTOMERS_PATH):
 		var img: Image = SpriteKit.customer_texture(row).get_image()
-		assert_eq(img.get_width(), 48)
-		assert_eq(img.get_height(), int(64.0 * clampf(float(row["height"]), 0.7, 1.3)), str(row["id"]))
+		assert_eq(img.get_width(), 64)
+		assert_eq(img.get_height(), roundi(96.0 * clampf(float(row["height"]), 0.7, 1.3)), str(row["id"]))
 		assert_true(_palette_ok(img), str(row["id"]))
 		assert_true(img.get_pixel(0, 0).a < 0.01)
 	var a: Image = SpriteKit.customer_texture({"cloak": "#4b2a78", "eyes": "#c58cff", "height": 1.0}).get_image()
@@ -105,3 +105,60 @@ func test_tools_cards_and_tiles() -> void:
 		var tile: Image = SpriteKit.tile_texture(k).get_image()
 		assert_true(tile.get_width() in [16, 32] and tile.get_height() in [16, 32, 48], k)
 		assert_true(_palette_ok(tile), k)
+
+
+func test_customer_frames_are_same_size_distinct_and_palette_only() -> void:
+	for row: Dictionary in _rows(CUSTOMERS_PATH):
+		var frames: Array[ImageTexture] = SpriteKit.customer_frames(row)
+		assert_eq(frames.size(), 4, str(row["id"]))
+		var base: Image = SpriteKit.customer_texture(row).get_image()
+		var seen: Dictionary = {}
+		for f: ImageTexture in frames:
+			var img: Image = f.get_image()
+			assert_eq(img.get_size(), base.get_size(), str(row["id"]))
+			assert_true(_palette_ok(img), str(row["id"]))
+			assert_true(_opaque_count(img) > 900, str(row["id"]))
+			seen[hash(img.get_data())] = true
+		assert_eq(seen.size(), 4, str(row["id"]) + " frames must differ")
+		assert_true(frames[0].get_image().get_data() == base.get_data(), "frame 0 is the still")
+	var eyes: Dictionary = {}
+	for row: Dictionary in _rows(CUSTOMERS_PATH):
+		var look: Dictionary = row.duplicate()
+		look["cloak"] = "#4b2a78"
+		look["eyes"] = "#ffd27a"
+		look["height"] = 1.0
+		eyes[hash(SpriteKit.customer_texture(look).get_image().get_data())] = true
+	assert_true(eyes.size() >= 8, "eye styles should differ per customer type")
+
+
+func test_cursed_overlays_stay_inside_the_object() -> void:
+	var seen: Dictionary = {}
+	for row: Dictionary in _rows(OBJECTS_PATH):
+		var id: String = str(row["id"])
+		var base: Image = SpriteKit.object_texture(id, str(row["category"])).get_image()
+		var ov: Image = SpriteKit.object_cursed_overlay(id).get_image()
+		assert_eq(ov.get_size(), base.get_size(), id)
+		assert_true(_palette_ok(ov), id)
+		var n: int = _opaque_count(ov)
+		assert_true(n >= 3 and n < 120, id + " overlay should be faint but present: " + str(n))
+		for y: int in range(ov.get_height()):
+			for x: int in range(ov.get_width()):
+				if ov.get_pixel(x, y).a > 0.5:
+					assert_true(base.get_pixel(x, y).a > 0.5, id + " overlay outside object")
+		seen[hash(ov.get_data())] = true
+		assert_true(ov.get_data() == SpriteKit.object_cursed_overlay(id).get_image().get_data(), id + " deterministic")
+	assert_true(seen.size() >= 30, "distinct overlays: " + str(seen.size()))
+
+
+func test_horror_props_have_documented_sizes() -> void:
+	var sizes: Dictionary = {"eyes": Vector2i(16, 6), "portrait": Vector2i(24, 32), "silhouette": Vector2i(40, 96),
+		"hand": Vector2i(16, 12), "moth": Vector2i(6, 5), "clock": Vector2i(24, 48)}
+	for k: String in sizes:
+		var img: Image = SpriteKit.horror_texture(k).get_image()
+		assert_eq(img.get_size(), sizes[k], k)
+		assert_true(_palette_ok(img), k)
+		assert_true(_opaque_count(img) >= 12, k + " too empty")
+		assert_true(img.get_pixel(0, 0).a < 0.01 or k == "portrait" or k == "clock" or k == "moth", k + " corner")
+	# the portrait leaves its eye sockets dark so the room can draw pupils there
+	var pt: Image = SpriteKit.horror_texture("portrait").get_image()
+	assert_true(pt.get_pixel(9, 13) == RoomPalette.colors()[0] and pt.get_pixel(14, 14) == RoomPalette.colors()[0])

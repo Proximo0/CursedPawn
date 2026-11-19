@@ -1,28 +1,56 @@
 class_name RoomPalette
 extends RefCounted
-## The occult palette for the shop room and the post shader that squeezes the 480x270 render into it:
-## 16 colours (deep purples, sickly greens, candle amber, bone white, blood reds) and a 4x4 Bayer ordered dither.
+## The occult palette for the shop room and the post shader that squeezes the 640x360 render into it:
+## 16 colours (cold purples, sickly greens, candle amber, bone white, blood reds) and a 4x4 Bayer ordered dither.
 
 const SIZE: int = 16
 const HEX: Array[int] = [
-	0x0b0710, 0x1c1030, 0x3a2455, 0x5c3d80, 0x8a6bb0,  # purples, dark to light
-	0x20382a, 0x3f6b3a, 0x8fb04a,  # sickly greens
-	0x4a2a1a, 0x8a5028, 0xd98a2b, 0xf2c15a,  # wood browns and candle ambers
-	0x6e1a26, 0xc8363f,  # blood reds
-	0xcfc6b0, 0xf5efe0,  # bone
+	0x05060b, 0x121528, 0x2a2346, 0x4a3f72, 0x7d78a8,  # cold purples, dark to light
+	0x15291f, 0x2f5a3c, 0x7fa84a,  # sickly greens
+	0x3a2218, 0x7a4a26, 0xd98a2b, 0xf2c15a,  # wood browns and candle ambers
+	0x5c1020, 0xc8363f,  # blood reds
+	0xc4c0b0, 0xf0ead8,  # bone
 ]
+
+const VIEW_W: float = 640.0
+const VIEW_H: float = 360.0
 
 const SHADER_HEAD: String = """shader_type canvas_item;
 uniform bool dither_on = true;
 uniform float dither_strength = 0.14;
-uniform vec2 res = vec2(480.0, 270.0);
+uniform vec2 res = vec2(640.0, 360.0);
+uniform float vignette = 0.55;
+uniform float grain = 0.035;
+uniform vec4 heat0 = vec4(0.0, 0.0, 0.1, 0.0);
+uniform vec4 heat1 = vec4(0.0, 0.0, 0.1, 0.0);
+uniform vec4 heat2 = vec4(0.0, 0.0, 0.1, 0.0);
+uniform vec4 heat3 = vec4(0.0, 0.0, 0.1, 0.0);
 const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
 """
 
 const SHADER_BODY: String = """
+float noise_hash(vec2 p) {
+	p = fract(p * vec2(123.34, 456.21));
+	p += dot(p, p + 45.32);
+	return fract(p.x * p.y);
+}
+
+// heat shimmer: a wobble of the picture just above each flame (xy = flame uv, z = radius, w = strength)
+vec2 heat_off(vec2 uv, vec4 h) {
+	vec2 d = (uv - h.xy) / max(h.z, 0.001);
+	float m = smoothstep(1.0, 0.0, length(vec2(d.x * 1.8, (d.y + 0.6) * 0.7)));
+	float w = sin(uv.y * 220.0 + TIME * 6.0) + 0.5 * sin(uv.y * 410.0 - TIME * 9.0);
+	return vec2(w * 0.0016 * h.w * m, 0.0);
+}
+
 void fragment() {
-	vec3 c = texture(TEXTURE, UV).rgb;
+	vec2 suv = UV + heat_off(UV, heat0) + heat_off(UV, heat1) + heat_off(UV, heat2) + heat_off(UV, heat3);
+	vec3 c = texture(TEXTURE, suv).rgb;
 	ivec2 p = ivec2(floor(UV * res));
+	vec2 q = UV - vec2(0.5);
+	c *= clamp(1.0 - vignette * dot(q, q) * 2.4, 0.0, 1.0);
+	float f = floor(TIME * 12.0);
+	c += vec3((noise_hash(vec2(p) + vec2(f * 17.0, f * 31.0)) - 0.5) * grain);
 	float t = (BAYER[(p.x & 3) + (p.y & 3) * 4] + 0.5) / 16.0 - 0.5;
 	if (dither_on) {
 		c += vec3(t * dither_strength);

@@ -1,10 +1,10 @@
 class_name TsScreen
 extends Control
-## Base of the title screen and the pause menu: a 480x270 canvas in a SubViewport scaled like the room (letterboxed),
+## Base of the title screen and the pause menu: a 640x360 canvas in a SubViewport scaled like the room (letterboxed),
 ## keyboard focus (Up/Down/Enter/Esc) and mouse mapped back to the grid, and the settings panel both share.
 ## While visible the screen eats all input (it is a modal). Subclasses fill the ts_* hooks and never override _ready.
 
-const SETTINGS_RECT := Rect2(110.0, 34.0, 260.0, 202.0)
+const SETTINGS_RECT := Rect2(190.0, 46.0, 260.0, 268.0)
 const FOCUS_VOLUME: String = "volume"
 
 var settings: TsSettings = TsSettings.shared()
@@ -38,9 +38,9 @@ func _ready() -> void:
 	_view.texture = _vp.get_texture()
 	_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_view.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_view.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_view.stretch_mode = TextureRect.STRETCH_SCALE
 	_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ShopGame.ui_place(_view, get_viewport().get_visible_rect().size)
 	_view.z_index = 100
 	_view.z_as_relative = false
 	add_child(_view)
@@ -48,6 +48,11 @@ func _ready() -> void:
 	settings.apply(sfx, room)
 	ts_ready()
 	_ts_on_visibility()
+
+
+func _process(_delta: float) -> void:
+	if _view != null:
+		ShopGame.ui_place(_view, get_viewport().get_visible_rect().size)
 
 
 ## A hidden screen stops rendering (its SubViewport would otherwise redraw 60 times a second for nothing).
@@ -82,6 +87,11 @@ func ts_activate_menu(_id: String) -> void:
 	pass
 
 
+## True when the screen swallows this input event itself (the title's intro skip). Default: never.
+func ts_swallow(_event: InputEvent) -> bool:
+	return false
+
+
 ## Esc on the main menu.
 func ts_escape_menu() -> void:
 	pass
@@ -107,7 +117,7 @@ func ts_focus_ids() -> Array[String]:
 
 
 static func ts_settings_ids(has_fullscreen: bool) -> Array[String]:
-	var out: Array[String] = [FOCUS_VOLUME, "mute", "dither"]
+	var out: Array[String] = [FOCUS_VOLUME, "mute", "dither", "scares"]
 	if has_fullscreen:
 		out.append("fullscreen")
 	out.append("reset_hints")
@@ -163,6 +173,8 @@ func ts_activate(id: String) -> void:
 			settings.muted = not settings.muted
 		"dither":
 			settings.dither = not settings.dither
+		"scares":
+			settings.scares_full = not settings.scares_full
 		"fullscreen":
 			settings.fullscreen = not settings.fullscreen
 		"reset_hints":
@@ -209,50 +221,60 @@ func _ts_draw_settings(c: TsCanvas) -> void:
 	var r: Rect2 = SETTINGS_RECT
 	c.frame(r, "panel")
 	var cx: float = r.position.x + r.size.x * 0.5
-	c.text_c(cx, r.position.y + 8.0, "SETTINGS", 11, 2)
-	var y: float = r.position.y + 32.0
-	var lx: float = r.position.x + 14.0
-	var rx: float = r.end.x - 14.0
+	c.head_c(cx, r.position.y + 12.0, "SETTINGS", 11, 2)
+	c.fill(Rect2(r.position.x + 14.0, r.position.y + 38.0, r.size.x - 28.0, 1.0), 9)
+	c.fill(Rect2(r.position.x + 14.0, r.position.y + 39.0, r.size.x - 28.0, 1.0), 8)
+	var y: float = r.position.y + 48.0
+	var lx: float = r.position.x + 22.0
+	var rx: float = r.end.x - 16.0
 	# volume: label, [-], value box, [+]
-	c.text(Vector2(lx, y + 5.0), "VOLUME", 15)
-	c.button("vol_dec", Rect2(rx - 90.0, y, 14.0, 17.0), "-", true)
-	c.frame(Rect2(rx - 74.0, y, 44.0, 17.0), "btn_off")
-	c.text_c(rx - 52.0, y + 5.0, "%d%%" % settings.volume_percent(), 11, 1)
-	c.button("vol_inc", Rect2(rx - 28.0, y, 14.0, 17.0), "+", true)
-	_ts_focus_mark(c, FOCUS_VOLUME, Vector2(lx - 8.0, y + 5.0))
-	y += 22.0
+	c.text(Vector2(lx, y + 6.0), "VOLUME", 15)
+	c.button("vol_dec", Rect2(rx - 90.0, y, 16.0, 19.0), "-", true)
+	c.frame(Rect2(rx - 72.0, y, 44.0, 19.0), "btn_off")
+	c.text_c(rx - 50.0, y + 6.0, "%d%%" % settings.volume_percent(), 11, 1)
+	c.button("vol_inc", Rect2(rx - 26.0, y, 16.0, 19.0), "+", true)
+	_ts_focus_mark(c, FOCUS_VOLUME, Vector2(lx - 11.0, y + 6.0))
+	y += 26.0
 	_ts_toggle_row(c, "mute", "SOUND", "MUTED" if settings.muted else "ON", lx, rx, y)
-	y += 22.0
+	y += 26.0
 	_ts_toggle_row(c, "dither", "DITHER", "ON" if settings.dither else "OFF", lx, rx, y)
-	y += 22.0
+	y += 26.0
+	_ts_toggle_row(c, "scares", "SCARES", "FULL" if settings.scares_full else "GENTLE", lx, rx, y)
+	y += 26.0
 	if desktop:
 		_ts_toggle_row(c, "fullscreen", "FULLSCREEN", "ON" if settings.fullscreen else "OFF", lx, rx, y)
-		y += 22.0
-	c.button("reset_hints", Rect2(lx, y, r.size.x - 28.0, 17.0), "RESET TUTORIAL HINTS", true)
-	_ts_focus_mark(c, "reset_hints", Vector2(lx - 8.0, y + 5.0))
-	y += 19.0
-	if reset_msg != "":
-		c.text_c(cx, y + 1.0, reset_msg, 14, 1)
-	c.button("settings_back", Rect2(cx - 40.0, r.end.y - 26.0, 80.0, 18.0), "BACK [ESC]", true, true)
-	_ts_focus_mark(c, "settings_back", Vector2(cx - 50.0, r.end.y - 21.0))
+		y += 26.0
+	c.button("reset_hints", Rect2(lx, y, r.size.x - 38.0, 19.0), "RESET TUTORIAL HINTS", true)
+	_ts_focus_mark(c, "reset_hints", Vector2(lx - 11.0, y + 6.0))
+	y += 24.0
+	var note: String = reset_msg
+	if focus_id == "scares":
+		note = "GENTLE: NO FLASHES, NO LOUD STINGERS."
+	if note != "":
+		c.text_c(cx, y, note, 14, 1)
+	c.button("settings_back", Rect2(cx - 44.0, r.end.y - 30.0, 88.0, 20.0), "BACK [ESC]", true, true)
+	_ts_focus_mark(c, "settings_back", Vector2(cx - 56.0, r.end.y - 24.0))
 
 
 func _ts_toggle_row(c: TsCanvas, id: String, label: String, value: String, lx: float, rx: float, y: float) -> void:
-	c.text(Vector2(lx, y + 5.0), label, 15)
-	c.button(id, Rect2(rx - 74.0, y, 74.0, 17.0), value, true)
-	_ts_focus_mark(c, id, Vector2(lx - 8.0, y + 5.0))
+	c.text(Vector2(lx, y + 6.0), label, 15)
+	c.button(id, Rect2(rx - 78.0, y, 78.0, 19.0), value, true)
+	_ts_focus_mark(c, id, Vector2(lx - 11.0, y + 6.0))
 
 
-## A small ">" marker beside the focused row, so keyboard focus reads at a glance.
+## A small flickering flame beside the focused row, so keyboard focus reads at a glance.
 func _ts_focus_mark(c: TsCanvas, id: String, at: Vector2) -> void:
 	if focus_id == id:
-		c.text(at, ">", 11)
+		c.cursor_flame(at - Vector2(0.0, 1.0))
 
 
 # ---------------------------------------------------------------- input
 
 func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or canvas == null:
+		return
+	if ts_swallow(event):
+		get_viewport().set_input_as_handled()
 		return
 	var mm := event as InputEventMouseMotion
 	if mm != null:

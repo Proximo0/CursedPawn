@@ -1,12 +1,13 @@
 class_name ShopGame
 extends Control
 ## The player-facing pixel-art shop screen (docs/ui_brief.md). The 2D room draws behind; UiHud draws every panel,
-## button and word at the room's native 480x270 grid into its own SubViewport that is scaled exactly like the room.
+## button and word at the room's native 640x360 grid into its own SubViewport that is scaled exactly like the room.
 ## All input is mapped back to that grid. Every command goes through RunRecording.drive (see act).
 ## Keys: 1-4 tools, Left/Right offer (or pick an item), Enter offer/sell, B buy, P pass/decline, T tarot, R replay,
 ## F1 tuning, F2 debug overlay, F3 reliquary, F5 save recording, F11 room dither.
 
-const VIEW := Vector2(480.0, 270.0)
+const VIEW := Vector2(640.0, 360.0)
+const WHOLE_SCALE_MIN: float = 0.8  ## use a whole-number scale when it keeps at least this share of the fitted size
 const RECORDING_PATH: String = "user://last_run.json"
 const CARD_SECS: float = 2.0
 const CARD_SKIP_AFTER: float = 0.35
@@ -24,6 +25,7 @@ var catalog: Catalog
 var seed_now: int = 1
 var tell_texts: Dictionary = {}  ## tool -> tell text for the current seller
 var log_lines: Array[String] = []
+var log_age: Array[float] = []  ## seconds since each log line was written (the HUD writes the newest in like ink)
 var offer_amount: int = 1
 var stake_amount: int = 1
 var stake_open: bool = false
@@ -57,11 +59,35 @@ var _last_serial: int = -1
 
 # ---------------------------------------------------------------- pure helpers (unit-tested)
 
-## Window pixel position -> 480x270 UI grid position, matching the room's keep-aspect (letterboxed, never cropped) scaling.
+## The scale the 640x360 grid is drawn at in a window of size win: the largest whole number (2x at 1280x720, 3x at
+## 1920x1080) when it keeps at least WHOLE_SCALE_MIN of the fitted size, else the plain fit (never below it for tiny windows).
+static func ui_scale(win: Vector2) -> float:
+	var fit: float = minf(win.x / VIEW.x, win.y / VIEW.y)
+	if fit < 1.0:
+		return fit
+	var whole: float = floorf(fit + 0.0001)
+	return whole if whole >= fit * WHOLE_SCALE_MIN else fit
+
+
+## Where the grid sits in the window: scaled by ui_scale, centred on whole pixels (letterboxed, never cropped).
+static func ui_rect(win: Vector2) -> Rect2:
+	var s: float = ui_scale(win)
+	var sz: Vector2 = VIEW * s
+	return Rect2(((win - sz) * 0.5).floor(), sz)
+
+
+## Puts a TextureRect showing a 640x360 SubViewport where ui_rect says.
+static func ui_place(view: TextureRect, win: Vector2) -> void:
+	var r: Rect2 = ui_rect(win)
+	view.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	view.position = r.position
+	view.size = r.size
+
+
+## Window pixel position -> 640x360 UI grid position, matching ui_rect.
 static func ui_to_view(p: Vector2, win: Vector2) -> Vector2:
-	var s: float = minf(win.x / VIEW.x, win.y / VIEW.y)
-	var off: Vector2 = (win - VIEW * s) * 0.5
-	return (p - off) / s
+	var r: Rect2 = ui_rect(win)
+	return (p - r.position) / ui_scale(win)
 
 
 ## The command a key press means for this run ({} when it means none). offer = coins in the offer row,
@@ -118,6 +144,7 @@ func _ready() -> void:
 	add_child(toggles)
 	room = ShopRoom2D.new()
 	add_child(room)
+	room.bubble_blip.connect(sfx.blip)
 	_relics = RelicShopPanel.new()
 	add_child(_relics)
 	_build_hud()
@@ -180,9 +207,9 @@ func _build_hud() -> void:
 	_hud_view.texture = _hud_vp.get_texture()
 	_hud_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_hud_view.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_hud_view.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_hud_view.stretch_mode = TextureRect.STRETCH_SCALE
 	_hud_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hud_view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ui_place(_hud_view, get_viewport().get_visible_rect().size)
 	layer.add_child(_hud_view)
 
 
@@ -227,6 +254,7 @@ func new_run(seed_in: int, gift: Dictionary = {}) -> void:
 	if room != null:
 		room.setup(run)
 	log_lines.clear()
+	log_age.clear()
 	cards.clear()
 	tell_texts.clear()
 	_rewarded = false
@@ -244,6 +272,7 @@ func _resume(saved_run: RunState, saved_rec: RunRecording) -> void:
 	_overlay.run = run
 	room.setup(run)
 	log_lines.clear()
+	log_age.clear()
 	cards.clear()
 	_rewarded = false
 	_log("Welcome back. Night %d, the shop is as you left it." % run.night)
@@ -316,8 +345,10 @@ func _on_events(events: Array[Dictionary]) -> void:
 
 func _log(line: String) -> void:
 	log_lines.append(line)
+	log_age.append(0.0)
 	while log_lines.size() > LOG_KEEP:
 		log_lines.pop_front()
+		log_age.pop_front()
 
 
 func _refresh() -> void:
@@ -370,7 +401,7 @@ func shelf_rects() -> Dictionary:
 		return out
 	for i: int in range(bodies.size()):
 		var c: Vector2 = bodies[i].position
-		out[int((inv[i] as Dictionary)["uid"])] = Rect2(c - Vector2(17.0, 17.0), Vector2(34.0, 34.0))
+		out[int((inv[i] as Dictionary)["uid"])] = Rect2(c - Vector2(20.0, 20.0), Vector2(40.0, 40.0))
 	return out
 
 
@@ -537,6 +568,10 @@ func _replay_tick(delta: float) -> void:
 # ---------------------------------------------------------------- frame and input
 
 func _process(delta: float) -> void:
+	if _hud_view != null:
+		ui_place(_hud_view, get_viewport().get_visible_rect().size)
+	for i: int in range(log_age.size()):
+		log_age[i] += delta
 	if hints != null:
 		hints.tick(delta)
 	if _replay_run != null:

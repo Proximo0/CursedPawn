@@ -11,6 +11,7 @@ const AMBIENT_DB: float = -6.0  ## ambient is already -18 dBFS RMS in the file
 const DREAD_MAX_DB: float = -4.0
 const DREAD_EASE: float = 2.0  ## per second
 const PITCH_JITTER: float = 0.04
+const BLIP_DB: float = -18.0  ## speech-bubble typing blips sit well under the other sounds
 const TOOL_SOUNDS: Dictionary = {"uv": "uv_lamp", "scale": "scale_clank", "listen": "listen", "touch": "touch"}
 const TELL_DELAY_MAX: float = 0.9
 ## Every event kind in docs/core_brief.md. Kinds with no entry here are a mapping bug (see unit test).
@@ -91,7 +92,7 @@ func build_all() -> float:
 
 # ---------------------------------------------------------------- playing
 
-func play(name: String, vol_db: float = 0.0) -> void:
+func play(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
 	var w: AudioStreamWAV = stream_for(name)
 	if w == null:
 		return
@@ -106,7 +107,7 @@ func play(name: String, vol_db: float = 0.0) -> void:
 			break
 	_next = (_pool.find(p) + 1) % POOL_SIZE
 	p.stream = w
-	p.pitch_scale = 1.0 + (_rng.randf() * 2.0 - 1.0) * PITCH_JITTER
+	p.pitch_scale = pitch * (1.0 + (_rng.randf() * 2.0 - 1.0) * PITCH_JITTER)
 	p.volume_db = _db(vol_db)
 	p.play()
 
@@ -175,6 +176,11 @@ func ui(kind: String) -> void:
 		play("ui_click")
 	elif kind == "hover":
 		play("ui_hover", -6.0)
+
+
+## A soft typing blip for one letter of a speech bubble; `pitch` comes from the room bubble.
+func blip(pitch: float) -> void:
+	play("ui_hover", BLIP_DB, clampf(pitch, 0.5, 2.0))
 
 
 ## Starts the ambient bed (loops until stop_ambient).
