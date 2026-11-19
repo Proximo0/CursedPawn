@@ -216,3 +216,70 @@ func test_redrawn_toys_and_books_are_distinct_shapes() -> void:
 		assert_true(_opaque_count(img) > 220, id + " should be a substantial silhouette")
 		masks[_mask_hash(img)] = true
 	assert_eq(masks.size(), 10)
+
+
+func test_croupier_has_four_distinct_palette_frames() -> void:
+	var frames: Array[ImageTexture] = SpriteKit.croupier_frames()
+	assert_eq(frames.size(), 4)
+	var seen: Dictionary = {}
+	for f: ImageTexture in frames:
+		var img: Image = f.get_image()
+		assert_eq(img.get_size(), Vector2i(64, 96))
+		assert_true(_palette_ok(img))
+		assert_true(_opaque_count(img) > 900)
+		seen[hash(img.get_data())] = true
+	assert_eq(seen.size(), 4)
+
+
+func test_dice_and_card_faces_are_distinct_and_in_palette() -> void:
+	var seen: Dictionary = {}
+	for face: int in range(1, 7):
+		var img: Image = SpriteKit.dice_texture(face).get_image()
+		assert_eq(img.get_size(), Vector2i(12, 12))
+		assert_true(_palette_ok(img), "dice %d" % face)
+		seen[hash(img.get_data())] = true
+	assert_eq(seen.size(), 6)
+	assert_true(SpriteKit.dice_texture(7).get_image().get_data() == SpriteKit.dice_texture(1).get_image().get_data())
+	seen.clear()
+	for rank: int in range(1, 14):
+		var img2: Image = SpriteKit.card_face_texture(rank).get_image()
+		assert_eq(img2.get_size(), Vector2i(20, 30))
+		assert_true(_palette_ok(img2), "card %d" % rank)
+		seen[hash(img2.get_data())] = true
+	assert_eq(seen.size(), 13)
+
+
+func test_wheel_lot_and_page_sizes() -> void:
+	var sizes: Dictionary = {"wheel": Vector2i(64, 64), "lot": Vector2i(32, 32), "page": Vector2i(24, 32)}
+	var texes: Dictionary = {"wheel": SpriteKit.wheel_texture(), "lot": SpriteKit.lot_texture(), "page": SpriteKit.spell_page_texture()}
+	for k: String in sizes:
+		var img: Image = (texes[k] as ImageTexture).get_image()
+		assert_eq(img.get_size(), sizes[k], k)
+		assert_true(_palette_ok(img), k)
+		assert_true(_opaque_count(img) > 300, k)
+
+
+func test_spell_icons_are_distinct() -> void:
+	var seen: Dictionary = {}
+	for id: String in ["scry", "hex", "glamour", "banish", "summon", "seal"]:
+		var img: Image = SpriteKit.spell_icon(id).get_image()
+		assert_eq(img.get_size(), Vector2i(16, 16))
+		assert_true(_palette_ok(img), id)
+		assert_true(_opaque_count(img) > 50, id)
+		seen[hash(img.get_data())] = true
+	assert_eq(seen.size(), 6)
+
+
+func test_every_curio_has_a_24px_icon_and_a_repeatable_one() -> void:
+	var seen: Dictionary = {}
+	var rows: Array = _rows("res://game/data/curios.json")
+	for row: Dictionary in rows:
+		var id: String = str(row["id"])
+		var img: Image = SpriteKit.curio_icon(id).get_image()
+		assert_eq(img.get_size(), Vector2i(24, 24), id)
+		assert_true(_palette_ok(img), id)
+		assert_true(_opaque_count(img) > 60, id)
+		assert_true(img.get_data() == SpriteKit.curio_icon(id).get_image().get_data(), id + " repeat")
+		seen[hash(img.get_data())] = true
+	assert_eq(seen.size(), rows.size())
+	assert_true(_opaque_count(SpriteKit.curio_icon("not_in_the_file").get_image()) > 60)

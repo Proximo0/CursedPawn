@@ -5,7 +5,7 @@ extends RefCounted
 ## runs (`Flags.is_scripted_run()`), so tests and captures never touch player data.
 
 const PATH: String = "user://profile.json"
-const VERSION: int = 1
+const VERSION: int = 2  ## 2 adds the grimoire; version 1 files load with the default spells
 
 
 static func save(store: RelicStore, path: String = PATH) -> Error:
@@ -13,7 +13,7 @@ static func save(store: RelicStore, path: String = PATH) -> Error:
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		return FileAccess.get_open_error()
-	f.store_string(JSON.stringify({"version": VERSION, "store": store.to_dict()}))
+	f.store_string(JSON.stringify({"version": VERSION, "store": store.to_dict(), "grimoire": Array(store.grimoire)}))
 	f.close()
 	return DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path))
 
@@ -27,7 +27,22 @@ static func load_into(store: RelicStore, path: String = PATH) -> bool:
 	if not parsed is Dictionary or int(parsed.get("version", 0)) > VERSION or not parsed.get("store") is Dictionary:
 		return false
 	store.from_dict(parsed["store"])
+	store.grimoire = PackedStringArray(parsed.get("grimoire", Array(Grimoire.DEFAULT_KNOWN)))
 	return true
+
+
+## Banks what a finished run found: pages join the grimoire, curios are granted (tradeable, earned). Returns the
+## ids newly added to the grimoire. Callers skip saving on scripted runs.
+static func bank_finds(run: RunState, store: RelicStore) -> PackedStringArray:
+	var added := PackedStringArray()
+	for f: Dictionary in run.found:
+		if f["kind"] == "page":
+			if not store.grimoire.has(str(f["id"])):
+				store.grimoire.append(str(f["id"]))
+				added.append(str(f["id"]))
+		elif f["kind"] == "curio":
+			store.collection.grant(str(f["id"]))
+	return added
 
 
 ## The run in progress, saved after every command so closing the game never loses a night. Binary Variant data

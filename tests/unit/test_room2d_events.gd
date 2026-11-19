@@ -142,3 +142,63 @@ func test_selling_a_sliding_prop_does_not_touch_the_freed_body() -> void:
 	room._update_slides(0.1)
 	assert_eq(room._slides.size(), 0, "freed slide dropped without a cast error")
 	room.free()
+
+
+const OCCULT_EVENTS: Array = [
+	{"e": "customer", "kind": "seller", "name": "Hand mirror", "ask": 40, "tid": "widow", "line": "Hello."},
+	{"e": "scry_reveal", "tool": "uv", "tell": "glows"},
+	{"e": "hexed", "reserve": 10, "ask": 20},
+	{"e": "glamoured", "mult": 1.3},
+	{"e": "banished", "uid": 10, "name": "Hand mirror"},
+	{"e": "banished", "uid": 999, "name": "Nothing"},
+	{"e": "summoned", "category": "toy"},
+	{"e": "sealed"},
+	{"e": "backfire", "spell": "hex", "kind": "dread_spike", "text": "x"},
+	{"e": "found_hint", "kind": "page"},
+	{"e": "table_open", "night": 1, "games_left": 2, "lots_left": 1},
+]
+
+
+func test_occult_events_are_accepted_with_and_without_setup() -> void:
+	var bare := ShopRoom2D.new()
+	for e: Dictionary in OCCULT_EVENTS:
+		bare.apply_events([e] as Array[Dictionary])
+	bare.free()
+	var room := ShopRoom2D.new()
+	room.setup(_run_with(3))
+	for e: Dictionary in OCCULT_EVENTS:
+		room.apply_events([e] as Array[Dictionary])
+	assert_eq(room.prop_count(), 2)  # the banished prop is gone
+	room.free()
+
+
+func test_occult_states_follow_the_events() -> void:
+	var room := ShopRoom2D.new()
+	room.setup(_run_with(1))
+	room.apply_events([{"e": "customer", "kind": "seller", "name": "Hand mirror", "ask": 40, "tid": "widow"}] as Array[Dictionary])
+	room.apply_events([{"e": "hexed"}, {"e": "sealed"}, {"e": "summoned", "category": "toy"}] as Array[Dictionary])
+	assert_true(room.occult_state("hexed"))
+	assert_true(room.occult_state("sealed"))
+	assert_true(room.occult_state("sigil"))
+	room.apply_events([{"e": "table_open", "night": 1, "games_left": 1, "lots_left": 1}] as Array[Dictionary])
+	assert_true(room.occult_state("table"))
+	assert_false(room.occult_state("hexed"))
+	room.apply_events([{"e": "night_start", "night": 2, "rent": 60}] as Array[Dictionary])
+	assert_false(room.occult_state("table"))
+	assert_false(room.occult_state("sealed"))
+	room.free()
+
+
+func test_backfire_shake_is_smaller_when_gentle() -> void:
+	var full := ShopRoom2D.new()
+	full.setup(_run_with(1))
+	full.scare_level = 1
+	full.apply_events([{"e": "backfire", "spell": "hex", "kind": "cash_burn", "text": "x"}] as Array[Dictionary])
+	var gentle := ShopRoom2D.new()
+	gentle.setup(_run_with(1))
+	gentle.scare_level = 0
+	gentle.apply_events([{"e": "backfire", "spell": "hex", "kind": "cash_burn", "text": "x"}] as Array[Dictionary])
+	assert_true(full.shake_amount() > gentle.shake_amount())
+	assert_true(gentle.shake_amount() > 0.0)
+	full.free()
+	gentle.free()

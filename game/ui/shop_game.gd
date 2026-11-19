@@ -17,7 +17,7 @@ const REPLAY_TAIL_SECS: float = 4.5
 const HOLD_DELAY: float = 0.4
 const HOLD_STEP: float = 0.06
 const LOG_KEEP: int = 12
-const REPEAT_IDS: PackedStringArray = ["dec", "inc", "stake_dec", "stake_inc"]
+const REPEAT_IDS: PackedStringArray = ["dec", "inc", "stake_dec", "stake_inc", "t_stake_dec", "t_stake_inc"]
 
 var run: RunState = RunState.new()
 var rec: RunRecording
@@ -55,6 +55,8 @@ var _hold_t: float = 0.0
 var _hud_vp: SubViewport
 var _hud_view: TextureRect
 var _last_serial: int = -1
+var _banked: bool = false  ## this run's finds were handed to the profile
+var _last_invalid: bool = false
 
 
 # ---------------------------------------------------------------- pure helpers (unit-tested)
@@ -199,6 +201,8 @@ func _build_hud() -> void:
 	add_child(_hud_vp)
 	hud = UiHud.new()
 	hud.game = self
+	hud.table.sfx = sfx
+	hud.found.sfx = sfx
 	_hud_vp.add_child(hud)
 	var layer := CanvasLayer.new()
 	layer.layer = -5  # above the room (-10), below the debug panels
@@ -248,6 +252,8 @@ func new_run(seed_in: int, gift: Dictionary = {}) -> void:
 	seed_now = seed_in
 	_replay_run = null
 	run = RunState.new()
+	if _relics != null and _relics.store != null:
+		run.spells_known = _relics.store.grimoire.duplicate()  # pages found in earlier runs carry into this one
 	if _overlay != null:
 		_overlay.run = run
 	rec = RunRecording.begin(run, seed_in, catalog, Tuning.shared(), gift)
@@ -258,8 +264,13 @@ func new_run(seed_in: int, gift: Dictionary = {}) -> void:
 	cards.clear()
 	tell_texts.clear()
 	_rewarded = false
+	_banked = false
 	stake_open = false
 	selected_uid = -1
+	if hud != null:
+		hud.spell_bar.pending_item_spell = ""
+		hud.table.reset_stage()
+		hud.found.popups.clear()
 	_on_events(run.last_events)
 	_refresh()
 
@@ -318,8 +329,15 @@ func _on_events(events: Array[Dictionary]) -> void:
 		room.apply_events(events)
 	if sfx != null:
 		sfx.on_events(events)
+	_last_invalid = false
+	if hud != null:
+		hud.feed(events)
 	for e: Dictionary in events:
 		match str(e["e"]):
+			"invalid":
+				_last_invalid = true
+			"table_open":
+				push_card("THE MIDNIGHT TABLE", "STAKE WHAT YOU DARE", 11)
 			"customer":
 				tell_texts.clear()
 				selected_uid = -1
@@ -340,7 +358,12 @@ func _on_events(events: Array[Dictionary]) -> void:
 				push_card("YOU SURVIVED", "%d COINS IN HAND" % int(e["cash"]), 7)
 			"run_lost":
 				push_card("THE SHOP IS LOST", "NIGHT %d. RENT %d. CASH %d" % [int(e["night"]), int(e["rent"]), int(e["cash"])], 13)
-		_log(ShopDebug.sd_event_text(e))
+		if UiOccult.OCCULT_EVENTS.has(str(e["e"])):
+			var line: String = UiOccult.event_text(e)
+			if line != "":
+				_log(line)
+		else:
+			_log(ShopDebug.sd_event_text(e))
 
 
 func _log(line: String) -> void:
@@ -366,6 +389,11 @@ func _refresh() -> void:
 	offer_amount = clampi(offer_amount, 1, maxi(1, r.cash))
 	if selected_uid >= 0 and not _held(selected_uid):
 		selected_uid = -1
+	if hud != null:
+		hud.table.clamp_stake(r)
+	if run.is_over() and not _banked and _relics != null:
+		_banked = true
+		_relics.bank_finds(run)
 	if run.is_over() and run.won and not _rewarded and _relics != null:
 		_rewarded = true
 		_relics.reward_run(run)
@@ -419,6 +447,14 @@ func activate(id: String) -> void:
 		act({"t": "inspect", "tool": id.trim_prefix("tool:")})
 	elif id.begins_with("item:"):
 		_pick_item(int(id.trim_prefix("item:")))
+	elif id.begins_with("spell:"):
+		cast_spell(id.trim_prefix("spell:"))
+	elif id.begins_with("pick:"):
+		pick_held(int(id.trim_prefix("pick:")))
+	elif id.begins_with("pair:"):
+		act({"t": "pairs_flip", "i": int(id.trim_prefix("pair:"))})
+	elif id.begins_with("t_") or id == "pick_cancel":
+		_activate_table(id)
 	else:
 		match id:
 			"offer":
@@ -449,6 +485,67 @@ func activate(id: String) -> void:
 			"relics":
 				if _relics != null:
 					_relics.toggle()
+
+
+## Casts a known spell (keys 5-0 or its bar slot). Banish first asks which held item to send away.
+func cast_spell(id: String) -> void:
+	var r: RunState = view_run()
+	if hud == null or is_replaying() or not UiOccult.spells_enabled(r) or not UiOccult.known_spells(r).has(id):
+		return
+	if UiOccult.needs_item(id):
+		hud.spell_bar.pending_item_spell = "" if hud.spell_bar.pending_item_spell == id else id
+		return
+	act(UiOccult.cast_command(id))
+
+
+## A held item was picked: for a pending Banish, or as the item stake at the Midnight Table.
+func pick_held(uid: int) -> void:
+	if hud == null or not _held(uid):
+		return
+	if hud.spell_bar.pending_item_spell != "":
+		var spell: String = hud.spell_bar.pending_item_spell
+		hud.spell_bar.pending_item_spell = ""
+		act(UiOccult.cast_command(spell, uid))
+	elif UiOccult.in_table(view_run()):
+		hud.table.picker_open = false
+		act({"t": "table_stake_item", "uid": uid})
+
+
+func _activate_table(id: String) -> void:
+	if hud == null:
+		return
+	var tb: UiTable = hud.table
+	var r: RunState = view_run()
+	match id:
+		"pick_cancel":
+			hud.spell_bar.pending_item_spell = ""
+		"t_stake_dec":
+			tb.stake = clampi(tb.stake - 1, 1, tb.stake_max(r))
+		"t_stake_inc":
+			tb.stake = clampi(tb.stake + 1, 1, tb.stake_max(r))
+		"t_stake_max":
+			tb.stake = tb.stake_max(r)
+		"t_dice_high":
+			act({"t": "table_dice", "stake": tb.stake, "call": "high"})
+		"t_dice_low":
+			act({"t": "table_dice", "stake": tb.stake, "call": "low"})
+		"t_hand":
+			act({"t": "table_hand", "stake": tb.stake})
+			tb.hand_active = tb.hand_active or not _last_invalid
+		"t_draw":
+			act({"t": "hand_draw"})
+		"t_stand":
+			act({"t": "hand_stand"})
+		"t_wheel":
+			act({"t": "table_wheel", "stake": tb.stake})
+		"t_pairs":
+			act({"t": "table_pairs", "stake": tb.stake})
+		"t_item":
+			tb.picker_open = not tb.picker_open
+		"t_lot":
+			act({"t": "table_lot"})
+		"t_leave":
+			act({"t": "table_leave"})
 
 
 func _activate_end(id: String) -> void:
@@ -589,13 +686,29 @@ func _process(delta: float) -> void:
 		hud.queue_redraw()
 
 
+## True while an occult overlay owns Esc and clicks (a found popup, a pending Banish pick, the table's item picker).
+func _occult_modal() -> bool:
+	return hud != null and (hud.found.active() or hud.spell_bar.pending_item_spell != "" or hud.table.picker_open)
+
+
+## Spells the player knows: this run's, plus the profile grimoire when the logic provides one.
+func _known_spells() -> PackedStringArray:
+	var out: PackedStringArray = UiOccult.known_spells(run)
+	if _relics != null and UiOccult.has_prop(_relics.store, "grimoire"):
+		for id: Variant in _relics.store.get("grimoire"):
+			if not out.has(str(id)):
+				out.append(str(id))
+	return out
+
+
 func _view_pos(p: Vector2) -> Vector2:
 	return ui_to_view(p, get_viewport().get_visible_rect().size)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if pause != null:
-		pause.blocked = stake_open or not cards.is_empty() or (title != null and title.visible)
+		pause.blocked = stake_open or not cards.is_empty() or (title != null and title.visible) or _occult_modal()
+		pause.known = _known_spells()
 	var mb := event as InputEventMouseButton
 	if mb != null:
 		_on_mouse_button(mb)
@@ -631,6 +744,10 @@ func _on_mouse_button(mb: InputEventMouseButton) -> void:
 			cards.pop_front()
 			get_viewport().set_input_as_handled()
 			return
+		if hud != null and hud.found.active():
+			hud.found.dismiss()
+			get_viewport().set_input_as_handled()
+			return
 		var id: String = hud.widget_at(p) if hud != null else ""
 		down_id = id
 		if id != "" and REPEAT_IDS.has(id):
@@ -664,6 +781,11 @@ func _on_key(key: InputEventKey) -> void:
 	if end_panel_visible():
 		_end_key(key)
 		return
+	if hud != null and hud.found.active():
+		if (k == KEY_ENTER or k == KEY_ESCAPE or k == KEY_SPACE) and not key.echo:
+			hud.found.dismiss()
+		get_viewport().set_input_as_handled()
+		return
 	if not cards.is_empty() and k == KEY_ENTER:
 		cards.pop_front()
 		return
@@ -677,6 +799,11 @@ func _on_key(key: InputEventKey) -> void:
 		start_replay()
 	elif k == KEY_ESCAPE:
 		stake_open = false
+		if hud != null:
+			hud.spell_bar.pending_item_spell = ""
+			hud.table.picker_open = false
+	elif UiOccult.spell_for_key(k, UiOccult.known_spells(run)) != "" and not key.echo:
+		cast_spell(UiOccult.spell_for_key(k, UiOccult.known_spells(run)))
 	elif k == KEY_ENTER and stake_open and not key.echo:
 		act({"t": "wager", "amount": stake_amount})
 	elif not key.echo:

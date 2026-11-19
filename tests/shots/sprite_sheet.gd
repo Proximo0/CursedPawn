@@ -7,7 +7,7 @@ const OUT_PATH: String = "/tmp/shots/sprite_sheet.png"
 const SCALE: int = 2
 const BG: Color = Color("3a2455")
 const SHEET_W: int = 1320
-const SHEET_H: int = 2600
+const SHEET_H: int = 3400
 
 
 func _initialize() -> void:
@@ -103,6 +103,42 @@ func _initialize() -> void:
 		_put(sheet, bg, x, y, k, 3 if k == "moth" else SCALE)
 		x += bg.get_width() * (3 if k == "moth" else SCALE) + 16
 	y += 104 * SCALE + 18
+	# the occult round: croupier frames, dice, cards, wheel, lot, page, spell icons, then every curio icon at 3x
+	x = 4
+	var rh: int = 0
+	for f: ImageTexture in SpriteKit.croupier_frames():
+		_put(sheet, f.get_image(), x, y, "croupier", SCALE)
+		x += 136
+		rh = maxi(rh, 96 * SCALE + 14)
+	_put(sheet, SpriteKit.wheel_texture().get_image(), x, y, "wheel", 3)
+	x += 200
+	_put(sheet, SpriteKit.lot_texture().get_image(), x, y, "lot", 3)
+	x += 110
+	_put(sheet, SpriteKit.spell_page_texture().get_image(), x, y, "page", 3)
+	y += rh + 8
+	x = 4
+	for fc: int in range(1, 7):
+		_put(sheet, SpriteKit.dice_texture(fc).get_image(), x, y, "d%d" % fc, 3)
+		x += 48
+	for sid: String in SpriteKit.SK_SPELL_IDS:
+		_put(sheet, SpriteKit.spell_icon(sid).get_image(), x, y, sid, 3)
+		x += 64
+	y += 56
+	x = 4
+	for rk: int in range(1, 14):
+		_put(sheet, SpriteKit.card_face_texture(rk).get_image(), x, y, "r%d" % rk, 2)
+		x += 50
+	y += 30 * 2 + 18
+	x = 4
+	var cn: int = 0
+	for cr: Dictionary in _load("res://game/data/curios.json"):
+		_put(sheet, SpriteKit.curio_icon(str(cr["id"])).get_image(), x, y, str(cr["id"]).substr(0, 14), 3)
+		x += 108
+		cn += 1
+		if cn % 12 == 0:
+			x = 4
+			y += 24 * 3 + 18
+	y += 24 * 3 + 18
 	DirAccess.make_dir_recursive_absolute("/tmp/shots")
 	sheet.get_region(Rect2i(0, 0, SHEET_W, mini(y, SHEET_H))).save_png(OUT_PATH)
 	print("SPRITE SHEET ", OUT_PATH, " h=", y)

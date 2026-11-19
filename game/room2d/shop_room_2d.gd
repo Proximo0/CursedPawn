@@ -71,6 +71,14 @@ const FLASH_FROM: int = 33
 const FLASH_TO: int = 46
 const SILHOUETTE_X: float = 300.0
 const FLAME_FPS: float = 8.0
+const LAMP_POS := Vector2(500.0, 150.0)  ## the single green lamp over the counter while the Midnight Table is open
+const SIGIL_POS := Vector2(300.0, 318.0)
+const CHALK_POS := Vector2(COUNTER_OBJ_X, COUNTER_TOP + 8.0)
+const SCRY_SECS: float = 2.4
+const GLAMOUR_SECS: float = 1.6
+const GLIMMER_SECS: float = 1.4
+const TABLE_TONE := Color(0.02, 0.06, 0.04)
+const LAMP_LIGHT := Color(0.35, 1.0, 0.55)
 const FLAMES: Array = [
 	["..o..", ".ooo.", ".oio.", ".oio.", ".oco.", "..o.."],
 	[".o...", ".oo..", ".oio.", ".oio.", ".oco.", "..o.."],
@@ -127,6 +135,22 @@ var _outside: Node2D
 var _hall: Node2D
 var _bubble: RoomBubble
 var _fx_sys := RoomFx.new()
+## Occult effects (grimoire spells, Midnight Table): timers count down, flags hold until the matching event ends them.
+var _scry_t: float = 0.0
+var _hexed: bool = false
+var _glam_t: float = 0.0
+var _glim_t: float = 0.0
+var _sigil_on: bool = false
+var _sigil_a: float = 0.0
+var _sealed_on: bool = false
+var _seal_a: float = 0.0
+var _bf: float = 0.0
+var _table: bool = false
+var _table_k: float = 0.0
+var _occ_acc: float = 0.0
+var _occ_rng := RandomNumberGenerator.new()
+var _occ_tex: Dictionary = {}
+var _lamp: PointLight2D
 var _lights: Array[PointLight2D] = []
 var _torch_lights: Array[PointLight2D] = []
 var _moon: PointLight2D
@@ -190,6 +214,7 @@ var _tex_cache: Dictionary = {}
 
 
 func _init() -> void:
+	_occ_rng.seed = 90210
 	name = "ShopRoom2D"
 	_build_view()
 	_rebuild_world()
@@ -298,8 +323,15 @@ func apply_events(events: Array[Dictionary]) -> void:
 			"night_start":
 				_level_target = 1.0
 				_hide_card()
+				_table = false
+				_sealed_on = false
+				_hexed = false
 			"customer":
 				_hide_card()
+				_hexed = false
+				if _sigil_on:
+					_sigil_on = false
+					_fx_sys.emit("ash", SIGIL_POS + Vector2(0.0, -6.0), 10)
 				_seller_here = str(e.get("kind", "")) == RunState.SELLER
 				var oname: String = ""
 				var cat: String = ""
@@ -313,13 +345,37 @@ func apply_events(events: Array[Dictionary]) -> void:
 					_line = str(_look_row(tid).get("line", ""))
 				_cust_start_enter(oname, cat)
 			"passed", "left":
+				_hexed = false
 				_cust_start_leave()
 			"bought":
+				_hexed = false
 				_on_bought(e)
 				_cust_start_leave()
 			"sold":
+				_hexed = false
 				_on_sold(e)
 				_cust_start_leave()
+			"scry_reveal":
+				_scry_t = SCRY_SECS
+			"hexed":
+				_hexed = true
+			"glamoured":
+				_glam_t = GLAMOUR_SECS
+			"banished":
+				_on_banished(e)
+			"summoned":
+				_sigil_on = true
+				_fx_sys.emit("ash", SIGIL_POS, 14)
+			"sealed":
+				_sealed_on = true
+			"backfire":
+				_on_backfire()
+			"found_hint":
+				_glim_t = GLIMMER_SECS
+			"table_open":
+				_table = true
+				_hexed = false
+				_hide_card()
 			"inspected":
 				_start_fx(str(e.get("tool", "")))
 				if str(e.get("tell", "")) != "":
@@ -329,18 +385,87 @@ func apply_events(events: Array[Dictionary]) -> void:
 			"wake":
 				_on_wake_event(e)
 			"night_end":
+				_hexed = false
+				_sealed_on = false
 				_cust_start_leave()
 				_level = minf(_level, 0.2)
 				_level_target = 0.2
 			"run_lost":
+				_table = false
+				_sealed_on = false
+				_hexed = false
 				_cust_start_leave()
 				_level = minf(_level, 0.25)
 				_level_target = 0.06
 			"run_won":
+				_table = false
+				_sealed_on = false
+				_hexed = false
 				_cust_start_leave()
 				_level_target = 1.35
 			_:
 				pass
+
+
+func _on_banished(e: Dictionary) -> void:
+	var at := Vector2(float(UNIT_XS[1]), float(BOARD_YS[1]) - 14.0)
+	var uid: int = int(e.get("uid", -1))
+	if _props.has(uid):
+		var rec: Dictionary = _props[uid]
+		var body: RigidBody2D = rec["body"] as RigidBody2D
+		at = body.position + Vector2(0.0, 6.0)
+		_remove_prop(uid)
+	_fx_sys.emit("inksmoke", at, 24)
+	_fx_sys.emit("ash", at + Vector2(0.0, -8.0), 6)
+
+
+## A backfire: a red flash and a shake. Gentle scares keep a soft, slow wash and a tiny shake, never a hard flash.
+func _on_backfire() -> void:
+	_bf = 1.0
+	_shake = maxf(_shake, 3.5 if scare_level != 0 else 1.2)
+
+
+func _reset_occult() -> void:
+	_scry_t = 0.0
+	_hexed = false
+	_glam_t = 0.0
+	_glim_t = 0.0
+	_sigil_on = false
+	_sigil_a = 0.0
+	_sealed_on = false
+	_seal_a = 0.0
+	_bf = 0.0
+	_table = false
+	_table_k = 0.0
+
+
+## Per-frame timers for the occult effects: sparkles on the shelves, a glimmer on the counter object, fades.
+func _update_occult(delta: float) -> void:
+	_scry_t = maxf(_scry_t - delta, 0.0)
+	_bf = maxf(_bf - delta * (2.2 if scare_level != 0 else 0.9), 0.0)
+	_sigil_a = move_toward(_sigil_a, 1.0 if _sigil_on else 0.0, delta * 1.5)
+	_seal_a = move_toward(_seal_a, 1.0 if _sealed_on else 0.0, delta * 1.2)
+	_table_k = move_toward(_table_k, 1.0 if _table else 0.0, delta * 1.3)
+	_occ_acc += delta
+	if _occ_acc < 0.08:
+		return
+	_occ_acc = 0.0
+	if _glam_t > 0.0:
+		_glam_t = maxf(_glam_t - 0.08, 0.0)
+		var ui: int = _occ_rng.randi_range(0, UNIT_XS.size() - 1)
+		var gx: float = UNIT_XS[ui] + _occ_rng.randf_range(-UNIT_W * 0.5 + 8.0, UNIT_W * 0.5 - 8.0)
+		var gy: float = BOARD_YS[_occ_rng.randi_range(0, BOARD_YS.size() - 1)] - _occ_rng.randf_range(4.0, 30.0)
+		_fx_sys.emit("gold", Vector2(gx, gy), 4)
+	if _glim_t > 0.0 and _counter_obj != null and _counter_obj.visible:
+		_glim_t = maxf(_glim_t - 0.08, 0.0)
+		_fx_sys.emit("glimmer", _counter_obj.position + Vector2(_occ_rng.randf_range(-12.0, 12.0), _occ_rng.randf_range(-14.0, 12.0)), 2)
+	elif _glim_t > 0.0:
+		_glim_t = 0.0
+
+
+## Overall light, scaled right down while the Midnight Table is open (the one green lamp stays).
+func _lv() -> float:
+	return clampf(_level, 0.0, 1.0) * (1.0 - 0.95 * _table_k)
 
 
 ## Deterministic chaos for about WAKE_SECS: shelf props are unfrozen and thrown, one shelf tears off the wall and
@@ -356,6 +481,7 @@ func wake(seed_value: int) -> void:
 	if _cust_state != "none":
 		_finish_leave()
 	_hide_fx()
+	_reset_occult()
 	var bodies: Array[RigidBody2D] = []
 	for uid: Variant in _props:
 		bodies.append((_props[uid] as Dictionary)["body"] as RigidBody2D)
@@ -476,6 +602,20 @@ func viewport() -> SubViewport:
 	return _vp
 
 
+## Test hook: "hexed", "sealed", "sigil" (summon sigil waiting for its customer), "table" (Midnight Table lighting).
+func occult_state(which: String) -> bool:
+	match which:
+		"hexed":
+			return _hexed
+		"sealed":
+			return _sealed_on
+		"sigil":
+			return _sigil_on
+		"table":
+			return _table
+	return false
+
+
 func shake_amount() -> float:
 	return _shake
 
@@ -526,6 +666,7 @@ func _rebuild_world() -> void:
 	_settle_tick = -1
 	_wake_plan.clear()
 	_shake = 0.0
+	_reset_occult()
 	_red = 0.0
 	_flash = 0.0
 	_eye_open = 0.0
@@ -832,6 +973,14 @@ func _build_lights() -> void:
 	_moon.height = 40.0
 	_moon.energy = 0.9
 	_world.add_child(_moon)
+	_lamp = PointLight2D.new()  # the Midnight Table lamp
+	_lamp.texture = gt
+	_lamp.texture_scale = 3.8
+	_lamp.position = LAMP_POS + Vector2(0.0, 26.0)
+	_lamp.color = LAMP_LIGHT
+	_lamp.energy = 0.0
+	_lamp.height = 30.0
+	_world.add_child(_lamp)
 
 
 func _build_motes() -> void:
@@ -1196,6 +1345,7 @@ func _process(delta: float) -> void:
 		_update_light_level(delta)
 	_bubble.advance(delta)
 	_fx_sys.update(delta)
+	_update_occult(delta)
 	_update_eyes(delta)
 	_update_watcher(delta)
 	_update_overlay()
@@ -1291,14 +1441,16 @@ func _update_watcher(delta: float) -> void:
 
 
 func _apply_ambient() -> void:
-	var lv: float = clampf(_level, 0.0, 1.0)
+	var lv: float = _lv()
 	var tone: Color = NIGHT_TONE.lerp(CALM_TONE, lv)
 	if _level > 1.0:
 		tone = CALM_TONE * (1.0 + (_level - 1.0) * 2.2)
 		tone.a = 1.0
 	tone = tone.lerp(RED_TONE * 0.7, clampf(_red, 0.0, 1.0) * 0.95)
+	tone = tone.lerp(TABLE_TONE, _table_k * 0.8)
 	tone.a = 1.0
 	_modulate.color = tone
+	_lamp.energy = 3.4 * _table_k * (1.0 + sin(_t * 7.0) * 0.04 + sin(_t * 19.0) * 0.03)
 	var n: float = dread_norm()
 	var gut: float = clampf((n - 0.3) / 0.3, 0.0, 1.0)  # candles gutter from 0.3
 	var i: int = 0
@@ -1846,7 +1998,7 @@ func _draw_fx() -> void:
 	var pal: PackedColorArray = RoomPalette.colors()
 	var vs: Vector2 = _vsize()
 	var n: float = dread_norm()
-	var lv: float = clampf(_level, 0.0, 1.0)
+	var lv: float = _lv()
 	var red: bool = _red > 0.3
 	var gut: float = clampf((n - 0.3) / 0.3, 0.0, 1.0)
 	# candles: wax and a 4-frame pixel flame loop at 8 fps; from Dread 0.3 they gutter
@@ -1898,6 +2050,7 @@ func _draw_fx() -> void:
 		if n >= 0.9:
 			breathe = 0.65 + 0.35 * sin(_t * 0.55)
 		_draw_fog(pal, vs, n, breathe)
+	_draw_occult(pal)
 	_fx_sys.draw(_fx, pal)
 	# the wake beat: red flicker and the tall silhouette behind the counter
 	if _flash > 0.0:
@@ -1924,6 +2077,113 @@ func _draw_fx() -> void:
 		var rc: Color = pal[12]
 		rc.a = 0.3 * clampf(_red, 0.0, 1.0)
 		_fx.draw_rect(Rect2(Vector2.ZERO, vs), rc)
+	if _bf > 0.01:
+		var bc: Color = pal[13]
+		bc.a = (0.42 if scare_level != 0 else 0.1) * _bf
+		_fx.draw_rect(Rect2(Vector2.ZERO, vs), bc)
+
+
+func _occ_icon(id: String) -> Texture2D:
+	if not _occ_tex.has(id):
+		_occ_tex[id] = SpriteKit.spell_icon(id)
+	return _occ_tex[id] as Texture2D
+
+
+## Elliptical ring (a circle seen from above the counter or the floor) as a pixel-snapped polyline.
+func _ellipse_pts(c: Vector2, rx: float, ry: float, n: int, rot: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i: int in range(n + 1):
+		var a: float = rot + TAU * float(i) / float(n)
+		pts.append(Vector2(roundf(c.x + cos(a) * rx), roundf(c.y + sin(a) * ry)))
+	return pts
+
+
+## Occult effects drawn above the lit world: the Midnight Table lamp, the summoning sigil, the seal's chalk circle,
+## the scrying eye and the hex chains. Everything is a few rects or lines, so the cost is tiny.
+func _draw_occult(pal: PackedColorArray) -> void:
+	if _table_k > 0.02:
+		var lc: Color = pal[7]
+		lc.a = 0.3 * _table_k
+		_fx.draw_texture_rect(_bloom_texture(), Rect2(LAMP_POS.x - 90.0, LAMP_POS.y - 40.0, 180.0, 150.0), false, lc)
+		var cord: Color = pal[1]
+		_fx.draw_line(Vector2(LAMP_POS.x, 0.0), LAMP_POS + Vector2(0.0, -2.0), cord, 1.0)
+		_fx.draw_colored_polygon(PackedVector2Array([LAMP_POS + Vector2(-4.0, -2.0), LAMP_POS + Vector2(4.0, -2.0),
+			LAMP_POS + Vector2(10.0, 12.0), LAMP_POS + Vector2(-10.0, 12.0)]), pal[5].lerp(pal[6], _table_k))
+		_fx.draw_rect(Rect2(LAMP_POS.x - 10.0, LAMP_POS.y + 12.0, 20.0, 1.0), pal[0])
+		_fx.draw_rect(Rect2(LAMP_POS.x - 2.0, LAMP_POS.y + 13.0, 4.0, 3.0), pal[7])
+		var cone: Color = pal[7]
+		cone.a = 0.12 * _table_k
+		_fx.draw_colored_polygon(PackedVector2Array([LAMP_POS + Vector2(-8.0, 14.0), LAMP_POS + Vector2(8.0, 14.0),
+			Vector2(LAMP_POS.x + 56.0, COUNTER_TOP + 14.0), Vector2(LAMP_POS.x - 56.0, COUNTER_TOP + 14.0)]), cone)
+	if _sigil_a > 0.02:
+		var pulse: float = 0.75 + 0.25 * sin(_t * 4.0)
+		var sc: Color = pal[13]
+		sc.a = _sigil_a * (0.85 + 0.15 * sin(_t * 4.0))
+		var glow: Color = pal[12]
+		glow.a = 0.5 * _sigil_a
+		_fx.draw_texture_rect(_bloom_texture(), Rect2(SIGIL_POS.x - 54.0, SIGIL_POS.y - 20.0, 108.0, 40.0), false, glow)
+		_fx.draw_polyline(_ellipse_pts(SIGIL_POS, 52.0, 11.0, 40, 0.0), sc, 2.0)
+		_fx.draw_polyline(_ellipse_pts(SIGIL_POS, 43.0, 9.0, 36, 0.0), sc, 1.0)
+		var star := PackedVector2Array()
+		for k: int in range(6):
+			var a2: float = -PI * 0.5 + float(k) * TAU * 2.0 / 5.0 + _t * 0.2
+			star.append(Vector2(roundf(SIGIL_POS.x + cos(a2) * 41.0), roundf(SIGIL_POS.y + sin(a2) * 8.5)))
+		_fx.draw_polyline(star, sc, 1.0)
+		var core: Color = pal[11]
+		core.a = _sigil_a * pulse
+		_fx.draw_rect(Rect2(SIGIL_POS.x - 1.0, SIGIL_POS.y - 1.0, 3.0, 2.0), core)
+	if _seal_a > 0.02:
+		var cp: float = 0.7 + 0.3 * sin(_t * 2.6)
+		var ch: Color = pal[15]
+		ch.a = _seal_a * (0.8 + 0.2 * sin(_t * 2.6))
+		var hc: Color = pal[14]
+		hc.a = 0.5 * _seal_a * cp
+		_fx.draw_texture_rect(_bloom_texture(), Rect2(CHALK_POS.x - 52.0, CHALK_POS.y - 16.0, 104.0, 32.0), false, hc)
+		_fx.draw_polyline(_ellipse_pts(CHALK_POS, 40.0, 7.0, 40, 0.0), ch, 2.0)
+		_fx.draw_polyline(_ellipse_pts(CHALK_POS, 33.0, 5.0, 32, 0.0), ch, 1.0)
+		for k2: int in range(8):
+			var a3: float = float(k2) * TAU / 8.0
+			_fx.draw_rect(Rect2(roundf(CHALK_POS.x + cos(a3) * 36.5) - 1.0, roundf(CHALK_POS.y + sin(a3) * 6.0) - 1.0, 3.0, 3.0), ch)
+	if _scry_t > 0.0:
+		var k3: float = _scry_t / SCRY_SECS
+		var ea: float = clampf(minf(k3 * 4.0, (1.0 - k3) * 5.0), 0.0, 1.0)
+		var ep := Vector2(COUNTER_OBJ_X, COUNTER_TOP - 64.0 - (1.0 - k3) * 6.0)
+		var eg: Color = pal[7]
+		eg.a = 0.5 * ea
+		_fx.draw_texture_rect(_bloom_texture(), Rect2(ep.x - 40.0, ep.y - 28.0, 80.0, 56.0), false, eg)
+		var ec := Color(1.0, 1.0, 1.0, ea)
+		_fx.draw_texture_rect(_occ_icon("scry"), Rect2(ep.x - 24.0, ep.y - 24.0, 48.0, 48.0), false, ec)
+		var beam: Color = pal[7]
+		beam.a = 0.18 * ea
+		_fx.draw_colored_polygon(PackedVector2Array([ep + Vector2(-3.0, 18.0), ep + Vector2(3.0, 18.0),
+			Vector2(COUNTER_OBJ_X + 16.0, COUNTER_TOP - 8.0), Vector2(COUNTER_OBJ_X - 16.0, COUNTER_TOP - 8.0)]), beam)
+	if _hexed and _customer != null and _cust_state != "none":
+		_draw_hex_chains(pal)
+
+
+func _draw_hex_chains(pal: PackedColorArray) -> void:
+	var h: float = float(_customer.texture.get_height()) if _customer.texture != null else 96.0
+	var c := Vector2(_customer.position.x, _customer.position.y - h * 0.58)
+	var halo: Color = pal[3]
+	halo.a = 0.4
+	_fx.draw_texture_rect(_bloom_texture(), Rect2(c.x - 44.0, c.y - 40.0, 88.0, 80.0), false, halo)
+	for ring: int in range(2):
+		var ry: float = 12.0 + float(ring) * 10.0
+		var rx: float = 30.0 - float(ring) * 4.0
+		var cc := Vector2(c.x, c.y - 10.0 + float(ring) * 22.0)
+		for i: int in range(14):
+			var a: float = TAU * float(i) / 14.0 + _t * (0.9 - float(ring) * 1.8)
+			var p := Vector2(roundf(cc.x + cos(a) * rx), roundf(cc.y + sin(a) * ry))
+			var front: bool = sin(a) > 0.0
+			var col: Color = pal[4] if front else pal[3]
+			if i % 2 == 0:  # a link seen end on (tall) and one side on (wide), each with a bright top edge
+				_fx.draw_rect(Rect2(p.x - 2.0, p.y - 3.0, 4.0, 6.0), pal[0])
+				_fx.draw_rect(Rect2(p.x - 1.0, p.y - 2.0, 2.0, 4.0), col)
+				_fx.draw_rect(Rect2(p.x - 1.0, p.y - 2.0, 2.0, 1.0), pal[14])
+			else:
+				_fx.draw_rect(Rect2(p.x - 3.0, p.y - 2.0, 6.0, 4.0), pal[0])
+				_fx.draw_rect(Rect2(p.x - 2.0, p.y - 1.0, 4.0, 2.0), col)
+				_fx.draw_rect(Rect2(p.x - 2.0, p.y - 1.0, 4.0, 1.0), pal[14])
 
 
 ## Dread fog: four layers of thin wisps (a tileable stretched-noise texture) drifting at different speeds and

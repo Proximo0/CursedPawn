@@ -9,6 +9,7 @@ const CAUTIOUS: String = "cautious"
 const STYLES: PackedStringArray = ["greedy", "cautious"]
 
 var style: String = GREEDY
+var _cast_key: String = ""  ## the customer the bot last cast hex or glamour on (casts are not repeated)
 
 
 func _init(style_in: String = GREEDY) -> void:
@@ -16,11 +17,50 @@ func _init(style_in: String = GREEDY) -> void:
 
 
 func decide(run: RunState) -> Dictionary:
+	if run.phase == RunState.PHASE_TABLE:
+		return _bot_table(run)
+	var spell: Dictionary = _bot_cast(run)
+	if not spell.is_empty():
+		return spell
 	if run.customer.get("kind", "") == RunState.BUYER:
 		return _bot_sell(run)
 	if run.customer.get("kind", "") == RunState.SELLER:
 		return _bot_greedy_buy(run) if style == GREEDY else _bot_cautious_buy(run)
 	return {"t": "pass"}
+
+
+## The bots never gamble at the Midnight Table: every house game loses on average, so a bot that plays only measures
+## the house edge, and the lab's feel targets are about shop strategy. The games are covered by unit tests.
+func _bot_table(_run: RunState) -> Dictionary:
+	return {"t": "table_leave"}
+
+
+## A sensible spell, or {} for none. Scry before any tool on a fresh seller (cautious only), hex a seller before
+## haggling, glamour a buyer, banish a held object that showed a tell when Dread is near a wake.
+func _bot_cast(run: RunState) -> Dictionary:
+	if run.casts_left <= 0:
+		return {}
+	var known: PackedStringArray = run.spells_known
+	var key: String = "%d:%d" % [run.get_instance_id(), run.customers_seen]
+	var kind: String = str(run.customer.get("kind", ""))
+	if known.has("banish") and run.dread >= run.tuning.wake_threshold * 0.8:
+		for item: Dictionary in run.inventory:
+			if int(item.get("tells", 0)) > 0:
+				return {"t": "cast", "spell": "banish", "uid": item["uid"]}
+	if run.dread > run.tuning.wake_threshold * 0.6:
+		return {}
+	if kind == RunState.SELLER:
+		if not (run.customer["tells"] as Array).is_empty():
+			return {}  # walking away from it
+		if style == CAUTIOUS and known.has("scry") and (run.customer["tools"] as Array).is_empty():
+			return {"t": "cast", "spell": "scry"}
+		if known.has("hex") and _cast_key != key and run.casts_left > 1:
+			_cast_key = key
+			return {"t": "cast", "spell": "hex"}
+	elif kind == RunState.BUYER and known.has("glamour") and _cast_key != key and not run.sellable().is_empty():
+		_cast_key = key
+		return {"t": "cast", "spell": "glamour"}
+	return {}
 
 
 func _bot_sell(run: RunState) -> Dictionary:

@@ -1,0 +1,8 @@
+[
+	{"id": "scry", "name": "Scry", "dread": 0.4, "text": "Show the one tell this object hides.", "backfire": "The glass shows you something instead."},
+	{"id": "hex", "name": "Hex", "dread": 0.5, "text": "Weaken the seller's resolve: a lower price.", "backfire": "The hex turns on your purse."},
+	{"id": "glamour", "name": "Glamour", "dread": 0.5, "text": "Make a buyer see more in your goods.", "backfire": "The glamour slips and the room notices."},
+	{"id": "banish", "name": "Banish", "dread": 0.3, "text": "Send a cursed object away and lower Dread.", "backfire": "It does not want to go."},
+	{"id": "summon", "name": "Summon", "dread": 0.6, "text": "Call a buyer for the goods you hold most of.", "backfire": "Something else answers the bell."},
+	{"id": "seal", "name": "Seal", "dread": 0.7, "text": "Seal the shop tonight: nothing wakes, but the landlord charges more.", "backfire": "The seal cracks before it sets."}
+]

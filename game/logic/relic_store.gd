@@ -17,6 +17,7 @@ var collection: CurioCollection
 var age_checked: bool = false
 var age_ok: bool = false
 var terms_accepted: String = ""  ## the TERMS_VERSION the player accepted, "" if none
+var grimoire: PackedStringArray = Grimoire.DEFAULT_KNOWN.duplicate()  ## known spell ids (earned only; saved by PlayerProfile)
 var log: Array[Dictionary] = []  ## {n, id, price_cents, payment_ref, delivered, refunded}
 
 

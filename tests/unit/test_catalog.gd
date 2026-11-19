@@ -27,3 +27,20 @@ func test_tarot_deck_that_favors_player_is_a_problem() -> void:
 	var c := Catalog.load_default()
 	c.tarot = [{"id": "t", "name": "T", "weight": 1, "mult": 1.5, "dread": 0.0, "text": ""}]
 	assert_true(c.problems().size() == 1, "one problem")
+
+
+func test_occult_data() -> void:
+	var c := Catalog.load_default()
+	assert_eq(c.spells.size(), 6)
+	assert_eq(c.curios.size(), 24)
+	var rarity: Dictionary = {}
+	var sets: Dictionary = {}
+	for cu: Dictionary in c.curios:
+		rarity[cu["rarity"]] = int(rarity.get(cu["rarity"], 0)) + 1
+		sets[cu["set"]] = true
+		assert_true(str(cu["text"]) != "" and not str(cu["name"]).begins_with("Placeholder"), str(cu["id"]))
+	assert_eq(rarity, {"common": 14, "rare": 7, "legendary": 3})
+	assert_eq(sets.keys().size(), 4)
+	for n: int in range(1, 13):
+		assert_true(not c.curio("curio_%02d" % n).is_empty(), "old id %d kept" % n)
+	assert_true(not c.table.is_empty())

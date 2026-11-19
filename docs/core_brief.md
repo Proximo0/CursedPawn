@@ -59,3 +59,20 @@ Washington gambling = paying + chance + a thing of value; each way to get a curi
   cat, tun)` returns a gift for `RunState.start(..., gift)` or {}; value is re-derived from the receiver's catalog.
   Items may carry `history`: [[handle, night reached, wakes, won], ...], newest last, at most 6.
 - `PlayerProfile.save_run(run)` after every command (clears the file when the run is over), `load_run(cat)` on boot.
+
+## Occult round (18 Nov 2026; contract in docs/occult_brief.md)
+- `Grimoire` (`grimoire.gd`): spell rules from `game/data/spells.json` (`scry, hex, glamour, banish, summon, seal`):
+  `why_invalid`, `backfire_chance(dread)`, `backfire_kind(rng, inventory)`, `scry_pick`, `hexed`, `summon_category`.
+- `MidnightTable` (`midnight_table.gd`): house games from `game/data/table.json`: `dice_roll`, `hand_card`,
+  `hand_house_draws`, `hand_result`, `wheel_spin`, `stake_item_flip`, `pairs_deal`, `pairs_add`, and the
+  `*_return()` odds (dice, hand with best play, wheel, item stake, Tarot Pairs with perfect memory over 400 fixed seeds).
+  `Catalog.problems()` fails any of them at 1.0 or more.
+- `RunState`: `PHASE_TABLE` after a survived night (`table_open` before `night_start`; `table_leave` starts the next
+  night, `night` in `table_open` is the night just survived). Fields `spells_known` (set before `start()`),
+  `found`, `casts_left`, `sealed`, `table`, `summon_category`, all in snapshot/restore. Commands `cast`, `table_*`,
+  `hand_draw`, `hand_stand`, `pairs_flip`. A stake is paid up front; a game or lot uses one of `games_left` or
+  `lots_left`. Seller items carry `hidden` ({} or {kind, id}); touch shows `found_hint`, buying gives `found`.
+  Pairs events carry the tarot id in `card`. `RunRecording` also stores `spells`.
+- `PlayerProfile.bank_finds(run, store)`; the grimoire lives on `RelicStore.grimoire`, saved in profile version 2.
+- Extra Tuning: `backfire_dread`, `backfire_cash_frac`. `ShopBot`: scry (cautious), hex, glamour, banish; greedy spins
+  the wheel with 3% of spare cash once a night, cautious never gambles.

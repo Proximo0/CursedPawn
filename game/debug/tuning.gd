@@ -12,7 +12,7 @@ signal changed(field: String, value: float)
 const FIELDS: Array = [
 	["nights", 5.0, 1.0, 10.0, 1.0, "Run", "Nights in one run; survive them all to win."],
 	["start_cash", 190.0, 0.0, 1000.0, 5.0, "Run", "Cash at the start of a run."],
-	["rent_base", 40.0, 0.0, 500.0, 5.0, "Run", "Rent due at the end of night 1."],
+	["rent_base", 38.0, 0.0, 500.0, 1.0, "Run", "Rent due at the end of night 1."],
 	["rent_growth", 1.45, 1.0, 3.0, 0.05, "Run", "Rent multiplier per night (night n pays base * growth^(n-1))."],
 	["day_minutes", 280.0, 60.0, 720.0, 10.0, "Clock", "Shop minutes per day on the day clock."],
 	["customer_minutes", 25.0, 5.0, 120.0, 5.0, "Clock", "Day-clock minutes each customer takes before any tool or haggle."],
@@ -51,6 +51,24 @@ const FIELDS: Array = [
 	["box_per_won_run", 1, 0, 10, 1, "Estate boxes", "Free estate boxes for surviving a run (every curio can be earned in play)."],
 	["wager_minutes", 10, 0, 60, 1, "Tarot wager", "Day-clock minutes a tarot wager takes."],
 	["wager_max_frac", 0.5, 0.0, 1.0, 0.05, "Tarot wager", "Largest stake, as a fraction of cash on hand."],
+	["spell_casts_per_night", 3, 0, 10, 1, "Grimoire", "Spell casts per night."],
+	["spell_backfire_base", 0.1, 0.0, 1.0, 0.01, "Grimoire", "Backfire chance of a cast at zero Dread."],
+	["spell_backfire_per_dread", 0.06, 0.0, 0.5, 0.01, "Grimoire", "Backfire chance added per point of Dread."],
+	["hex_mult", 0.65, 0.1, 1.0, 0.05, "Grimoire", "Hex multiplies the seller's lowest price and ask by this."],
+	["glamour_mult", 1.3, 1.0, 3.0, 0.05, "Grimoire", "Glamour multiplies the next buyer's payment."],
+	["banish_dread", 2.0, 0.0, 10.0, 0.1, "Grimoire", "Dread removed by banishing a cursed object."],
+	["seal_debt_mult", 1.3, 1.0, 3.0, 0.05, "Grimoire", "Rent multiplier on a night the shop was sealed."],
+	["backfire_dread", 1.0, 0.0, 10.0, 0.1, "Grimoire", "Dread added by a dread_spike backfire."],
+	["backfire_cash_frac", 0.25, 0.0, 1.0, 0.05, "Grimoire", "Share of cash burned by a cash_burn backfire."],
+	["hidden_find_chance", 0.12, 0.0, 1.0, 0.01, "Midnight Table", "Chance a seller's object hides a page or curio."],
+	["hidden_page_share", 0.5, 0.0, 1.0, 0.05, "Midnight Table", "Share of hidden finds that are spell pages (the rest curios)."],
+	["night_curio_chance", 0.0, 0.0, 1.0, 0.01, "Midnight Table", "Chance a survived night leaves a curio at the table door."],
+	["table_games_per_night", 1, 0, 5, 1, "Midnight Table", "House games allowed per night at the Midnight Table."],
+	["table_lots_per_night", 1, 0, 5, 1, "Midnight Table", "Sealed lots on offer per night."],
+	["table_max_stake_frac", 0.5, 0.0, 1.0, 0.05, "Midnight Table", "Largest table stake, as a fraction of cash on hand."],
+	["lot_price", 60, 0, 1000, 5, "Midnight Table", "Price of a sealed lot."],
+	["pairs_tries", 3, 1, 5, 1, "Midnight Table", "Tries (two flips each) in Tarot Pairs."],
+	["pairs_pay_scale", 0.4, 0.0, 2.0, 0.05, "Midnight Table", "Tarot Pairs: stake multiple added per matched card, times its tarot mult."],
 	["secs_per_customer", 25.0, 1.0, 120.0, 1.0, "Pacing", "Estimated real seconds a player spends per customer (lab run length)."],
 	["secs_per_inspect", 5.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per tool use."],
 	["secs_per_haggle", 4.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per offer."],
@@ -100,6 +118,24 @@ var craft_legendary: float
 var box_per_won_run: float
 var wager_minutes: float
 var wager_max_frac: float
+var spell_casts_per_night: float
+var spell_backfire_base: float
+var spell_backfire_per_dread: float
+var hex_mult: float
+var glamour_mult: float
+var banish_dread: float
+var seal_debt_mult: float
+var backfire_dread: float
+var backfire_cash_frac: float
+var hidden_find_chance: float
+var hidden_page_share: float
+var night_curio_chance: float
+var table_games_per_night: float
+var table_lots_per_night: float
+var table_max_stake_frac: float
+var lot_price: float
+var pairs_tries: float
+var pairs_pay_scale: float
 var secs_per_customer: float
 var secs_per_inspect: float
 var secs_per_haggle: float

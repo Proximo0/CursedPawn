@@ -11,6 +11,9 @@ const KINDS: Dictionary = {
 	"trail": {"life": [0.25, 0.45], "speed": [6.0, 26.0], "gravity": 30.0, "size": 1, "cols": [4, 15, 11]},
 	"dust": {"life": [0.3, 0.55], "speed": [14.0, 50.0], "gravity": 40.0, "size": 2, "cols": [14, 4, 14]},
 	"ash": {"life": [0.6, 1.1], "speed": [6.0, 18.0], "gravity": -16.0, "size": 1, "cols": [14, 4, 1, 14]},
+	"gold": {"life": [0.7, 1.2], "speed": [4.0, 16.0], "gravity": -6.0, "size": 2, "cols": [11, 10, 15, 11]},
+	"inksmoke": {"life": [1.1, 1.8], "speed": [8.0, 22.0], "gravity": -10.0, "size": 5, "cols": [0, 0, 1, 0]},
+	"glimmer": {"life": [0.6, 1.0], "speed": [1.0, 5.0], "gravity": -3.0, "size": 1, "cols": [15, 11, 15]},
 }
 
 var _rng := RandomNumberGenerator.new()
@@ -41,18 +44,18 @@ func emit(kind: String, pos: Vector2, n: int) -> void:
 		if _p.size() >= MAX_PARTICLES:
 			return
 		var a: float = _rng.randf_range(0.0, TAU)
-		if kind == "sparkle":
+		if kind == "sparkle" or kind == "gold":
 			a = _rng.randf_range(-PI * 0.95, -PI * 0.05)
 		var sp: float = _rng.randf_range(float(speed[0]), float(speed[1]))
 		var lf: float = _rng.randf_range(float(life[0]), float(life[1]))
 		var jitter := Vector2(_rng.randf_range(-3.0, 3.0), _rng.randf_range(-3.0, 3.0))
 		var v := Vector2(cos(a), sin(a)) * sp
-		if kind == "smoke":
+		if kind == "smoke" or kind == "inksmoke":
 			v = Vector2(_rng.randf_range(-8.0, 8.0), -sp)
 		elif kind == "dust":
 			v = Vector2(cos(a) * sp, -absf(sin(a)) * sp * 0.6)
 		_p.append({"x": pos.x + jitter.x, "y": pos.y + jitter.y, "vx": v.x, "vy": v.y, "g": float(k["gravity"]),
-			"life": lf, "max": lf, "s": int(k["size"]) if kind != "sparkle" else _rng.randi_range(1, 2),
+			"life": lf, "max": lf, "s": int(k["size"]) if kind != "sparkle" and kind != "gold" else _rng.randi_range(1, 2),
 			"c": int(cols[_rng.randi_range(0, cols.size() - 1)]), "kind": kind})
 
 
@@ -76,11 +79,15 @@ func draw(ci: CanvasItem, pal: PackedColorArray) -> void:
 		var y: float = roundf(float(q["y"]))
 		var sz: float = float(q["s"])
 		match str(q["kind"]):
-			"smoke":
+			"smoke", "inksmoke":
 				sz = 3.0 + (1.0 - f) * 4.0
-				col.a = clampf(f * 1.4, 0.0, 0.75)
+				col.a = clampf(f * 1.4, 0.0, 0.75 if str(q["kind"]) == "smoke" else 0.92)
+				if str(q["kind"]) == "inksmoke":  # black puff with a violet rim so it reads against dark shelves
+					var rim: Color = pal[3]
+					rim.a = col.a * 0.8
+					ci.draw_rect(Rect2(x - sz * 0.5 - 1.0, y - sz * 0.5 - 1.0, sz + 2.0, sz + 2.0), rim)
 				ci.draw_rect(Rect2(x - sz * 0.5, y - sz * 0.5, sz, sz), col)
-			"sparkle":
+			"sparkle", "gold":
 				col.a = clampf(f * 3.0, 0.0, 1.0)
 				if sz >= 2.0 and f < 0.45:  # twinkle: a tiny plus
 					ci.draw_rect(Rect2(x - 1.0, y, 3.0, 1.0), col)

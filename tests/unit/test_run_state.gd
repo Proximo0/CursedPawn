@@ -107,7 +107,7 @@ func test_paying_every_rent_wins() -> void:
 	var run := rs_run(5, tun)
 	var guard: int = 0
 	while not run.is_over() and guard < 500:
-		run.apply({"t": "pass"})
+		run.apply({"t": "table_leave"} if run.phase == RunState.PHASE_TABLE else {"t": "pass"})
 		guard += 1
 	assert_true(run.won)
 	assert_eq(run.night, 5)

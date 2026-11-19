@@ -7,6 +7,7 @@ extends RefCounted
 var seed_value: int = 0
 var tuning: Dictionary = {}
 var gift: Dictionary = {}
+var spells: Array = []  ## spells known at the start (RunState.spells_known)
 var commands: Array[Dictionary] = []
 var hashes: Array[int] = []
 var wake_at: Array[int] = []  ## command indexes whose events include a wake
@@ -18,6 +19,7 @@ static func begin(run: RunState, seed_in: int, cat: Catalog, tun: Tuning, gift_i
 	rec.seed_value = seed_in
 	rec.tuning = tun.to_dict()
 	rec.gift = gift_in.duplicate(true)
+	rec.spells = Array(run.spells_known)
 	run.start(seed_in, cat, tun, gift_in)
 	return rec
 
@@ -38,6 +40,7 @@ func replay(cat: Catalog, upto: int = -1) -> RunState:
 	var tun := Tuning.new()
 	tun.apply_dict(tuning)
 	var run := RunState.new()
+	run.spells_known = PackedStringArray(spells)
 	run.start(seed_value, cat, tun, gift)
 	var n: int = commands.size() if upto < 0 else mini(upto, commands.size())
 	for i: int in range(n):
@@ -50,6 +53,7 @@ func first_divergence(cat: Catalog) -> int:
 	var tun := Tuning.new()
 	tun.apply_dict(tuning)
 	var run := RunState.new()
+	run.spells_known = PackedStringArray(spells)
 	run.start(seed_value, cat, tun, gift)
 	for i: int in range(commands.size()):
 		run.apply(commands[i])
@@ -65,7 +69,7 @@ func wake_clip(wake_index: int, before: int) -> Vector2i:
 
 
 func to_dict() -> Dictionary:
-	return {"seed": seed_value, "tuning": tuning, "gift": gift, "commands": commands, "hashes": hashes, "wake_at": wake_at}
+	return {"seed": seed_value, "tuning": tuning, "gift": gift, "spells": spells, "commands": commands, "hashes": hashes, "wake_at": wake_at}
 
 
 static func from_dict(d: Dictionary) -> RunRecording:
@@ -73,6 +77,7 @@ static func from_dict(d: Dictionary) -> RunRecording:
 	rec.seed_value = int(d.get("seed", 0))
 	rec.tuning = d.get("tuning", {})
 	rec.gift = d.get("gift", {})
+	rec.spells = d.get("spells", Array(Grimoire.DEFAULT_KNOWN))
 	for c: Variant in d.get("commands", []):
 		rec.commands.append(c)
 	for h: Variant in d.get("hashes", []):

@@ -114,6 +114,7 @@ func _go() -> void:
 	await _snap("customer: priest (tall)")
 	_customer("buyer", "", "haggler")
 	await _snap("customer: haggler (short)")
+	await _occult_cells(cat, picks)
 	var thr: float = Tuning.shared().wake_threshold
 	for lvl: float in [0.3, 0.5, 0.7, 0.9]:
 		_room.set_dread(lvl * thr)
@@ -146,6 +147,31 @@ func _go() -> void:
 		await _snap("wake %.1f s" % (float(target) / 60.0))
 	await _measure(cat, picks)
 	_save_sheet()
+
+
+## The occult round: one cell per spell effect, the backfire flash and the Midnight Table lighting.
+func _occult_cells(cat: Catalog, picks: PackedStringArray) -> void:
+	var cases: Array = [
+		["scry_reveal", {"e": "scry_reveal", "tool": "uv", "tell": "glows"}, 25],
+		["hexed: chains", {"e": "hexed", "reserve": 10, "ask": 20}, 20],
+		["glamoured: gold", {"e": "glamoured", "mult": 1.3}, 30],
+		["banished: smoke", {"e": "banished", "uid": 100, "name": picks[0]}, 22],
+		["summoned: sigil", {"e": "summoned", "category": "toy"}, 25],
+		["sealed: chalk", {"e": "sealed"}, 25],
+		["backfire (full)", {"e": "backfire", "spell": "hex", "kind": "dread_spike", "text": "x"}, 2],
+		["found_hint: glimmer", {"e": "found_hint", "kind": "curio"}, 20],
+		["table_open: green lamp", {"e": "table_open", "night": 1, "games_left": 2, "lots_left": 1}, 60],
+	]
+	for c: Array in cases:
+		_room.setup(_run_with(cat, picks))
+		_room.scare_level = 1
+		_customer("seller", picks[1], "widow")
+		_room._bubble.hide_now()
+		await _frames(10)
+		_room.apply_events([c[1] as Dictionary] as Array[Dictionary])
+		await _frames(int(c[2]))
+		await _snap(str(c[0]))
+		_room.apply_events([{"e": "night_start", "night": 2, "rent": 60}] as Array[Dictionary])
 
 
 ## Script cost (the room's _process) and wall time per frame with a busy scene (dread 0.9, customer, bubble, particles).

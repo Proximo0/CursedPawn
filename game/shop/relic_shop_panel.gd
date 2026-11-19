@@ -83,9 +83,17 @@ static func rsp_reveal_text(r: Dictionary) -> String:
 	return "\n".join(lines)
 
 
-## One collection book cell: "<name> x<owned> (<tradeable> tradeable)".
+## One collection book cell: "<name>\n<rarity> x<owned> (<tradeable> tradeable)" plus the curio's text when it has one.
 static func rsp_cell_text(c: Dictionary, owned: int, trade: int) -> String:
-	return "%s\n%s  x%d (%d tradeable)" % [str(c["name"]), str(c["rarity"]), owned, trade]
+	var body: String = "%s\n%s  x%d (%d tradeable)" % [str(c["name"]), str(c["rarity"]), owned, trade]
+	if str(c.get("text", "")) != "":
+		body += "\n" + str(c["text"])
+	return body
+
+
+## "Parlor set 3/6 (complete)": a set header with its completion count.
+static func rsp_set_header(set_name: String, have: int, total: int) -> String:
+	return "%s set  %d / %d%s" % [set_name.capitalize(), have, total, "  (complete)" if total > 0 and have >= total else ""]
 
 
 static func rsp_set_done_text(set_name: String) -> String:
@@ -239,14 +247,38 @@ func _rebuild_products() -> void:
 func _rebuild_book() -> void:
 	_clear(_book_box)
 	_book_box.add_child(_label_of("Collection book (%d / %d owned)" % [collection.owned.size(), collection.curios.size()], 18))
+	var counts: Dictionary = UiOccult.set_groups(collection.curios, collection.owned)
 	var groups: Dictionary = collection.sets()
+	var order: Array[String] = []
+	for set_name: String in UiOccult.SET_IDS:
+		if groups.has(set_name):
+			order.append(set_name)
 	for set_name: String in groups:
-		_book_box.add_child(_label_of("%s set%s" % [set_name.capitalize(), "  (complete)" if collection.claimed_sets.has(set_name) else ""], 16))
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		_book_box.add_child(row)
+		if not order.has(set_name):
+			order.append(set_name)
+	for set_name: String in order:
+		var cnt: Dictionary = counts.get(set_name, {"have": 0, "total": 0}) as Dictionary
+		var head: Label = _label_of(rsp_set_header(set_name, int(cnt["have"]), int(cnt["total"])), 16)
+		if collection.claimed_sets.has(set_name):
+			head.add_theme_color_override("font_color", COLOR_LEGENDARY)
+		_book_box.add_child(head)
+		var flow := HFlowContainer.new()
+		flow.add_theme_constant_override("h_separation", 6)
+		flow.add_theme_constant_override("v_separation", 6)
+		_book_box.add_child(flow)
 		for id: Variant in groups[set_name]:
-			row.add_child(_cell(collection.curio(str(id))))
+			flow.add_child(_cell(collection.curio(str(id))))
+
+
+## Hands the finished run's finds to the profile: pages join the grimoire, curios go to the collection. Guarded so the
+## game runs on logic without PlayerProfile.bank_finds, and never for scripted runs (tests, captures).
+func bank_finds(run: RunState) -> void:
+	if Flags.is_scripted_run():
+		return
+	if not UiOccult.static_has(PlayerProfile as GDScript, "bank_finds"):
+		return
+	(PlayerProfile as GDScript).call("bank_finds", run, store)
+	_refresh()
 
 
 func _cell(cur: Dictionary) -> Control:
@@ -254,6 +286,7 @@ func _cell(cur: Dictionary) -> Control:
 	var have: int = int(collection.owned.get(id, 0))
 	var pc := PanelContainer.new()
 	pc.custom_minimum_size = Vector2(190, 0)
+	pc.tooltip_text = str(cur.get("text", ""))
 	var sb := StyleBoxFlat.new()
 	var col: Color = rsp_rarity_color(str(cur["rarity"]))
 	sb.bg_color = col.darkened(0.6) if have > 0 else Color(0.14, 0.13, 0.16)
@@ -264,6 +297,7 @@ func _cell(cur: Dictionary) -> Control:
 	var v := VBoxContainer.new()
 	pc.add_child(v)
 	var l := _label_of(rsp_cell_text(cur, have, int(collection.tradeable.get(id, 0))), 13, 175.0)
+	l.add_theme_color_override("font_color", rsp_rarity_color(str(cur["rarity"])).lightened(0.3))
 	if have <= 0:
 		l.modulate = Color(1, 1, 1, 0.4)
 	v.add_child(l)

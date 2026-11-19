@@ -69,14 +69,14 @@ func test_new_curios_before_duplicates() -> void:
 
 func test_paid_box_curios_are_locked_and_dupes_become_locked_shards() -> void:
 	var c := cc_make(11, cc_commons_only())
-	c.add_boxes(8, true)
+	c.add_boxes(16, true)
 	var shards: int = 0
-	for i: int in range(8):
+	for i: int in range(16):
 		var r: Dictionary = c.open_box()
 		assert_false(r["tradeable"], "paid box %d" % i)
 		shards += int(r["shards"])
 	assert_true(c.tradeable.is_empty())
-	assert_eq(shards, 2, "two duplicates of six commons")
+	assert_eq(shards, 2, "two duplicates of fourteen commons")
 	assert_eq(c.shards_locked, 2)
 	assert_eq(c.shards_free, 0)
 

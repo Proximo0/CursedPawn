@@ -49,6 +49,9 @@ var _drips: Array[Dictionary] = []  ## wax drops falling off the Dread candle {x
 var _drip_wait: float = 1.0
 var _stake_t: float = 0.0
 var _rng := RandomNumberGenerator.new()
+var spell_bar := UiSpellBar.new()  ## the occult round: spells on keys 5-0, the Midnight Table, found popups
+var table := UiTable.new()
+var found := UiFound.new()
 
 
 func _init() -> void:
@@ -58,6 +61,13 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_rng.seed = 20261118
+
+
+## Run events for the occult widgets (spell flashes, table animations, found popups). Called by ShopGame.
+func feed(events: Array[Dictionary]) -> void:
+	spell_bar.feed(events)
+	table.feed(events)
+	found.feed(events)
 
 
 ## The topmost enabled-or-not widget id under p (UI grid coordinates), "" for none.
@@ -115,6 +125,9 @@ func _process(delta: float) -> void:
 	while not _pops.is_empty() and float(_pops[0]["age"]) > POP_SECS:
 		_pops.pop_front()
 	_stake_t = UiMotion.ui_approach(_stake_t, 1.0 if game.stake_open else 0.0, delta, 14.0)
+	spell_bar.tick(delta)
+	table.tick(delta, r)
+	found.tick(delta)
 	_ui_drips(r, delta)
 
 
@@ -194,6 +207,18 @@ func _draw() -> void:
 	widgets.clear()
 	var r: RunState = game.view_run()
 	_draw_top(r)
+	if UiOccult.in_table(r) and not game.end_panel_visible():
+		table.draw(self, r, spell_bar, game.hover_id)
+		_draw_dread(r)
+		_draw_log()
+		_draw_pops()
+		found.draw(self)
+		if found.active():
+			widgets.clear()
+		if not game.cards.is_empty():
+			widgets.clear()
+			_draw_card(game.cards[0])
+		return
 	_draw_dread(r)
 	if game != null and game.hints != null:
 		TsHintFrame.ts_draw(self, game.hints.text(), game.hints.age)
@@ -212,11 +237,20 @@ func _draw() -> void:
 		_text(Vector2(80.0, 240.0), "THE SHOP IS QUIET...", 14)
 	_draw_log()
 	_draw_side_buttons(r)
+	if not game.is_replaying():
+		spell_bar.draw(self, r, game.hover_id)
 	if (game.stake_open or _stake_t > 0.02) and not game.is_replaying():
 		_draw_stake(r)
+	if spell_bar.pending_item_spell != "":
+		widgets.clear()
+		spell_bar.draw_chips(self, r, Rect2(60.0, 112.0, 440.0, 78.0), game.hover_id, "%s: PICK A HELD ITEM" % spell_bar.pending_item_spell.to_upper())
+		_button("pick_cancel", Rect2(430.0, 116.0, 64.0, 15.0), "CANCEL", true)
 	if game.is_replaying():
 		_draw_replay_banner()
 	_draw_pops()
+	found.draw(self)
+	if found.active():
+		widgets.clear()
 	if not game.cards.is_empty():
 		widgets.clear()
 		_draw_card(game.cards[0])
@@ -518,7 +552,10 @@ func _draw_end(r: RunState) -> void:
 	if won:
 		y += 14.0
 		_text_c(cx, y, "A FREE RELIQUARY WAITS ON THE COUNTER.", 11)
-	y += 22.0
+	var finds: Array[Dictionary] = UiOccult.find_rows(UiOccult.run_finds(game.run))
+	y += 16.0 if not finds.is_empty() else 22.0
+	if not finds.is_empty():
+		y = _draw_finds(finds, y, cx)
 	_text_c(cx, y, "PASS YOUR WORST OBJECT ON TO A FRIEND", 15)
 	y += 16.0
 	var field := Rect2(END_RECT.position.x + 18.0, y, END_RECT.size.x - 36.0, 17.0)
@@ -527,16 +564,17 @@ func _draw_end(r: RunState) -> void:
 	_text(field.position + Vector2(8.0, 5.0), "SIGNED: %s" % shown if game.handle != "" else "TYPE YOUR NAME TO SIGN IT_", 0 if game.handle != "" else 8, 1, false)
 	y += 23.0
 	var code: String = game.pass_text()
-	var box := Rect2(field.position.x, y, field.size.x, 56.0)
+	var box := Rect2(field.position.x, y, field.size.x, 56.0 if finds.is_empty() else 38.0)
 	_frame(box, "ledger")
 	if code == "":
 		_text(box.position + Vector2(float(UiFrames.LEDGER_TEXT_X), 5.0), "NOTHING LEFT TO PASS ON.", 0, 1, false)
 	else:
 		var lines: PackedStringArray = UiPixelFont.ui_wrap(code, int(box.size.x) - UiFrames.LEDGER_TEXT_X - 8)
-		for i: int in range(mini(lines.size(), 5)):
-			var ln: String = lines[i] if i < 4 or lines.size() <= 5 else lines[i].substr(0, lines[i].length() - 2) + ".."
+		var rows: int = 5 if finds.is_empty() else 3
+		for i: int in range(mini(lines.size(), rows)):
+			var ln: String = lines[i] if i < rows - 1 or lines.size() <= rows else lines[i].substr(0, lines[i].length() - 2) + ".."
 			_text(box.position + Vector2(float(UiFrames.LEDGER_TEXT_X), 5.0 + float(UiPixelFont.LINE_H * i)), ln, 0, 1, false)
-	y += 64.0
+	y += box.size.y + 8.0
 	_button("copy", Rect2(field.position.x, y, 70.0, 19.0), "COPY", code != "")
 	_button("paste", Rect2(field.position.x + 78.0, y, 210.0, 19.0), "PASTE A FRIEND'S LINK")
 	y += 26.0
@@ -545,3 +583,27 @@ func _draw_end(r: RunState) -> void:
 	for i: int in range(mini(2, st_lines.size())):
 		_text(Vector2(field.position.x, y + float(UiPixelFont.LINE_H * i)), st_lines[i], 14)
 	_button("newrun", Rect2(cx - 80.0, END_RECT.end.y - 36.0, 160.0, 24.0), "NEW RUN [ENTER]", true, true)
+
+
+## The run-end "FOUND THIS RUN" strip: a header, then each find as a coloured name (pages gold, curios by rarity),
+## each sliding in a beat after the one before. Returns the y below it.
+func _draw_finds(finds: Array[Dictionary], y: float, cx: float) -> float:
+	var x0: float = END_RECT.position.x + 18.0
+	_rect(Rect2(x0, y, END_RECT.size.x - 36.0, 1.0), 8)
+	_text(Vector2(x0, y + 4.0), "FOUND THIS RUN: %d" % finds.size(), 11)
+	var x: float = x0 + 120.0
+	var row: float = y + 4.0
+	for i: int in range(finds.size()):
+		var f: Dictionary = finds[i]
+		var shown: float = UiMotion.ui_out((_t - 0.25 * float(i)) / 0.3)
+		var nm: String = str(f["name"]).to_upper()
+		var w: float = float(UiPixelFont.ui_width(nm)) + 12.0
+		if x + w > END_RECT.end.x - 18.0:
+			x = x0 + 4.0
+			row += 11.0
+		if shown > 0.0 and row < y + 26.0:
+			var gem: int = int(f["col"])
+			_rect(Rect2(x, row + 2.0 - (1.0 - shown) * 4.0, 4.0, 4.0), gem)
+			_text(Vector2(x + 7.0, row - (1.0 - shown) * 4.0), nm, gem if shown > 0.5 else 4, 1, true)
+		x += w + 4.0
+	return y + 30.0

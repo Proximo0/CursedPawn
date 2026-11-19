@@ -2312,3 +2312,545 @@ static func _sk_polish(g: Image, id: String, kind: int) -> void:
 			var v: int = out[y * w + x]
 			if v >= 0 and v != idx[y * w + x]:
 				_sk_p(g, x, y, v)
+
+
+# ---------------------------------------------------------------- occult round: Midnight Table, grimoire, curios
+
+const SK_DIGITS: Dictionary = {
+	"0": "111101101101111", "1": "010110010010111", "2": "110001010100111", "3": "110001010001110",
+	"4": "101101111001001", "5": "111100110001110", "6": "011100111101111", "7": "111001010010010",
+	"8": "111101111101111", "9": "111101111001110",
+}
+const SK_PIPS: Dictionary = {
+	1: [[1, 1]], 2: [[1, 0], [1, 2]], 3: [[1, 0], [1, 1], [1, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]],
+	5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]],
+	7: [[0, 0], [2, 0], [1, 0.5], [0, 1], [2, 1], [0, 2], [2, 2]],
+	8: [[0, 0], [2, 0], [1, 0.5], [0, 1], [2, 1], [1, 1.5], [0, 2], [2, 2]],
+	9: [[0, 0], [2, 0], [0, 0.67], [2, 0.67], [1, 1], [0, 1.33], [2, 1.33], [0, 2], [2, 2]],
+	10: [[0, 0], [2, 0], [1, 0.5], [0, 0.67], [2, 0.67], [0, 1.33], [2, 1.33], [1, 1.5], [0, 2], [2, 2]],
+}
+const SK_SPELL_IDS: Array[String] = ["scry", "hex", "glamour", "banish", "summon", "seal"]
+const SK_CURIO_SHAPES: Array[String] = ["skull", "eye", "key", "candle", "bell", "doll", "mirror", "tooth", "coin", "feather",
+	"jar", "book", "hand", "lantern", "dagger", "chalice", "ring", "clock"]
+const SK_CURIO_WORDS: Dictionary = {
+	"skull": "skull", "eye": "eye", "key": "key", "candle": "candle", "wax": "candle", "bell": "bell", "doll": "doll",
+	"puppet": "doll", "mirror": "mirror", "tooth": "tooth", "molar": "tooth", "fang": "tooth", "coin": "coin",
+	"penny": "coin", "florin": "coin", "feather": "feather", "raven": "feather", "crow": "feather", "quill": "feather",
+	"jar": "jar", "bottle": "jar", "vial": "jar", "specimen": "jar", "book": "book", "tome": "book", "grimoire": "book",
+	"ledger": "book", "diary": "book", "hand": "hand", "finger": "hand", "lantern": "lantern", "lamp": "lantern",
+	"dagger": "dagger", "knife": "dagger", "blade": "dagger", "razor": "dagger", "chalice": "chalice", "cup": "chalice",
+	"goblet": "chalice", "ring": "ring", "clock": "clock", "watch": "clock", "hourglass": "clock",
+}
+## Accent colour per curio set (palette index): parlor amber, attic bone, cellar green, chapel purple.
+const SK_SET_ACCENT: Dictionary = {"parlor": 10, "attic": 14, "cellar": 7, "chapel": 4}
+
+
+## The croupier of the Midnight Table, 4 idle frames at 64x96: rest, finger drum, blink, head tilt. Pale, gaunt, a
+## green eyeshade, hollow eyes, a thin stitched smile and far too many knuckles in each hand.
+static func croupier_frames() -> Array[ImageTexture]:
+	var out: Array[ImageTexture] = []
+	for f: int in range(4):
+		out.append(ImageTexture.create_from_image(_sk_croupier(f)))
+	return out
+
+
+static func _sk_croupier(f: int) -> Image:
+	var g: Image = _sk_new(SK_CUST_W, SK_CUST_H)
+	var bob: int = 1 if f == 1 else 0
+	var hx: int = 32 + (2 if f == 3 else 0)
+	# tailcoat: narrow shoulders, one higher than the other, flaring to the table
+	for y: int in range(34, 96):
+		var k: float = float(y - 34) / 61.0
+		var xl: int = int(roundf(17.0 - k * 9.0)) + (1 if y < 44 else 0)
+		var xr: int = int(roundf(47.0 + k * 8.0)) - (2 if y < 44 else 0)
+		_sk_r(g, xl, y + bob, xr - xl, 1, 1 if (y + xl) % 7 != 0 else 2)
+	_sk_r(g, 20, 36 + bob, 4, 40, 2)  # lit lapel edge
+	_sk_r(g, 40, 38 + bob, 3, 40, 0)
+	_sk_r(g, 29, 35 + bob, 7, 26, 14)  # shirt front
+	_sk_r(g, 29, 35 + bob, 2, 26, 15)
+	for by: int in [44, 51, 58]:
+		_sk_p(g, 33, by + bob, 10)
+	_sk_r(g, 28, 35 + bob, 9, 3, 12)  # bow tie
+	_sk_p(g, 32, 36 + bob, 13)
+	# neck and head
+	_sk_r(g, hx - 3, 27 + bob, 6, 8, 14)
+	_sk_p(g, hx - 3, 28 + bob, 15)
+	_sk_e(g, float(hx), float(17 + bob), 8.0, 11.0, 14)
+	_sk_e(g, float(hx) - 1.5, float(16 + bob), 5.0, 9.0, 15)
+	_sk_r(g, hx + 4, 12 + bob, 3, 12, 4)
+	# hollow cheeks
+	_sk_r(g, hx - 7, 21 + bob, 2, 4, 4)
+	_sk_r(g, hx + 5, 21 + bob, 2, 4, 4)
+	# eyeshade: a green band and a brim
+	_sk_r(g, hx - 10, 10 + bob, 20, 3, 6)
+	_sk_r(g, hx - 12, 12 + bob, 24, 2, 5)
+	_sk_r(g, hx - 10, 10 + bob, 20, 1, 7)
+	_sk_r(g, hx - 12, 14 + bob, 24, 1, 0)
+	# eyes: black sockets with a pinprick of candle yellow, or shut
+	for ex: int in [-4, 3]:
+		if f == 2:
+			_sk_r(g, hx + ex - 1, 19 + bob, 4, 1, 0)
+		else:
+			_sk_r(g, hx + ex - 1, 17 + bob, 4, 4, 0)
+			_sk_p(g, hx + ex, 18 + bob, 11)
+	_sk_r(g, hx - 1, 21 + bob, 2, 3, 4)  # nose
+	# thin stitched smile
+	_sk_r(g, hx - 5, 27 + bob, 10, 1, 0)
+	_sk_p(g, hx - 6, 26 + bob, 0)
+	_sk_p(g, hx + 5, 26 + bob, 0)
+	for sx: int in [-3, 0, 3]:
+		_sk_r(g, hx + sx, 26 + bob, 1, 3, 12)
+	# arms bent forward onto the table; hands with long fingers
+	_sk_thick(g, 17, 46 + bob, 11, 78 + bob, 4)
+	_sk_thick(g, 44, 48 + bob, 51, 78 + bob, 4)
+	_sk_r(g, 8, 76 + bob, 8, 4, 14)
+	_sk_r(g, 48, 76 + bob, 8, 4, 14)
+	for h: int in range(2):
+		var bx: int = 8 if h == 0 else 48
+		for i: int in range(5):
+			var fx: int = bx + i * 2 - (1 if h == 0 else 0)
+			var lift: int = 2 if (f == 1 and i == (1 if h == 0 else 3)) else 0
+			var ln: int = [8, 13, 14, 12, 9][i] - lift
+			var drift: int = (i - 2) * (-1 if h == 0 else 1)
+			_sk_l(g, fx, 80 + bob, fx + drift, 80 + bob + ln, 14)
+			_sk_p(g, fx + drift, 80 + bob + ln, 15)
+			_sk_p(g, fx + drift / 2, 80 + bob + ln / 2, 4)  # knuckle shadow
+	_sk_outline(g)
+	_sk_polish(g, "croupier", f)
+	return g
+
+
+## Bone dice, 12x12, face 1..6 (other values wrap). The one is red.
+static func dice_texture(face: int) -> ImageTexture:
+	var n: int = posmod(face - 1, 6) + 1
+	var g: Image = _sk_new(12, 12)
+	_sk_r(g, 2, 1, 8, 10, 14)
+	_sk_r(g, 1, 2, 10, 8, 14)
+	_sk_r(g, 2, 2, 7, 7, 15)
+	_sk_p(g, 2, 2, 14)
+	var spots: Dictionary = {1: [[5, 5]], 2: [[2, 2], [8, 8]], 3: [[2, 2], [5, 5], [8, 8]], 4: [[2, 2], [8, 2], [2, 8], [8, 8]],
+		5: [[2, 2], [8, 2], [5, 5], [2, 8], [8, 8]], 6: [[2, 2], [8, 2], [2, 5], [8, 5], [2, 8], [8, 8]]}
+	for s: Array in spots[n]:
+		var c: int = 13 if n == 1 else 0
+		_sk_r(g, int(s[0]), int(s[1]), 2, 2, c)
+	_sk_outline(g)
+	_sk_polish(g, "dice%d" % n, 3)
+	return ImageTexture.create_from_image(g)
+
+
+## Macabre playing card, 20x30. Rank 1 is the ace (a skull), 2..10 show pips, 11..13 are J, Q, K. Ranks wrap.
+static func card_face_texture(rank: int) -> ImageTexture:
+	var r: int = posmod(rank - 1, 13) + 1
+	var g: Image = _sk_new(20, 30)
+	_sk_r(g, 1, 1, 18, 28, 15)
+	_sk_r(g, 2, 2, 16, 26, 14)
+	_sk_r(g, 3, 3, 14, 24, 15)
+	_sk_r(g, 0, 2, 20, 26, 15)
+	_sk_r(g, 2, 1, 16, 28, 15)
+	_sk_r(g, 3, 3, 14, 24, 15)
+	var label: String = "A" if r == 1 else ("J" if r == 11 else ("Q" if r == 12 else ("K" if r == 13 else str(r))))
+	var lc: int = 13 if r % 2 == 0 else 0
+	_sk_card_label(g, label, 4, 4, lc)
+	_sk_card_label(g, label, 15 - (label.length() - 1) * 4, 22, lc)
+	if r == 1:
+		_sk_art(g, ["..fff..", ".fffff.", "f0fff0f", "f0fff0f", ".ff0ff.", ".fffff.", "..f0f..", "..fff.."], 6, 10)
+		_sk_art(g, ["4......4", ".4....4."], 5, 19)
+		_sk_p(g, 8, 18, 4)
+	elif r <= 10:
+		for p: Array in SK_PIPS[r]:
+			var px: int = 6 + int(p[0]) * 4
+			var py: int = 9 + int(roundf(float(p[1]) * 5.0))
+			_sk_r(g, px, py + 1, 3, 1, 13)
+			_sk_r(g, px + 1, py, 1, 3, 13)
+			_sk_p(g, px + 1, py + 1, 12)
+	else:
+		# court card: a hooded figure with a crown or hood band and a skull face
+		var cr: int = 11 if r == 13 else (13 if r == 12 else 4)
+		_sk_art(g, ["..2222..", ".222222.", ".2ffff2.", ".f0ff0f.", ".ffffff.", "..f00f..", ".222222.", "22222222", "22222222"], 6, 10)
+		_sk_r(g, 6, 9, 8, 1, cr)
+		if r == 13:
+			_sk_p(g, 6, 8, cr)
+			_sk_p(g, 9, 7, cr)
+			_sk_p(g, 13, 8, cr)
+		_sk_r(g, 7, 20, 6, 1, 12)
+	# stained edge and a burnt corner
+	_sk_p(g, 17, 27, 8)
+	_sk_p(g, 16, 27, 14)
+	_sk_p(g, 17, 26, 9)
+	_sk_outline(g)
+	_sk_polish(g, "card%d" % r, 4)
+	return ImageTexture.create_from_image(g)
+
+
+static func _sk_card_label(g: Image, s: String, x: int, y: int, c: int) -> void:
+	for i: int in range(s.length()):
+		var ch: String = s[i]
+		var rows: String = str(SK_DIGITS.get(ch, ""))
+		if rows == "":
+			rows = str(SK_FONT.get(ch, ""))
+		if rows.length() != 15:
+			continue
+		for k: int in range(15):
+			if rows[k] == "1":
+				_sk_p(g, x + i * 4 + (k % 3), y + (k / 3), c)
+
+
+## The soul wheel, 64x64: eight wedges of cold purple, rust and green behind a bone rim studded with candle yellow,
+## a skull hub and a red pointer at the top.
+static func wheel_texture() -> ImageTexture:
+	var g: Image = _sk_new(64, 64)
+	var cols: Array[int] = [2, 12, 3, 5, 2, 12, 3, 6]
+	var cx: float = 31.5
+	var cy: float = 32.5
+	for y: int in range(64):
+		for x: int in range(64):
+			var dx: float = float(x) - cx
+			var dy: float = float(y) - cy
+			var d: float = sqrt(dx * dx + dy * dy)
+			if d > 30.0:
+				continue
+			var a: float = fposmod(atan2(dy, dx) + PI * 0.5 + PI / 8.0, TAU)
+			var seg: int = int(a / (TAU / 8.0))
+			var c: int = cols[seg]
+			var edge: float = fposmod(a, TAU / 8.0) * d
+			if d > 26.0:
+				c = 14 if d < 29.0 else 4
+				if int(a / (TAU / 16.0)) % 2 == 0 and d > 27.0 and d < 28.6:
+					c = 11
+			elif edge < 1.2 or edge > (TAU / 8.0) * d - 1.2:
+				c = 14
+			elif d < 9.0:
+				c = 8 if d > 6.0 else 9
+			elif (x + y) % 2 == 0 and d > 17.0 and seg % 2 == 0:
+				c = SK_DARK[c]
+			_sk_p(g, x, y, c)
+	# per-wedge sigils (small pale marks) so the wedges read as different fates
+	for s: int in range(8):
+		var ang: float = -PI * 0.5 + float(s) * TAU / 8.0
+		var px: int = int(roundf(cx + cos(ang) * 17.0))
+		var py: int = int(roundf(cy + sin(ang) * 17.0))
+		if s % 3 == 0:
+			_sk_r(g, px - 1, py - 1, 3, 3, 14)
+			_sk_p(g, px, py, 0)
+		elif s % 3 == 1:
+			_sk_r(g, px - 2, py, 5, 1, 14)
+			_sk_r(g, px, py - 2, 1, 5, 14)
+		else:
+			_sk_r(g, px - 1, py - 1, 2, 2, 11)
+	# hub skull
+	_sk_art(g, ["..fff..", ".fffff.", "f0fff0f", ".fffff.", "..f0f.."], 28, 30)
+	_sk_art(g, ["...d...", "..ddd..", ".ddddd."], 28, 0)
+	_sk_outline(g)
+	_sk_polish(g, "wheel", 5)
+	return ImageTexture.create_from_image(g)
+
+
+## A sealed lot, 32x32: brown paper parcel, black wax seal stamped with an eye, twine and a tag.
+static func lot_texture() -> ImageTexture:
+	var g: Image = _sk_new(32, 32)
+	_sk_r(g, 4, 10, 24, 18, 9)  # front
+	_sk_r(g, 6, 6, 22, 4, 10)  # top face
+	_sk_r(g, 24, 6, 4, 22, 8)  # side fold
+	_sk_r(g, 4, 10, 20, 1, 11)
+	for i: int in range(0, 22, 4):
+		_sk_p(g, 5 + i, 12 + (i % 8), 8)  # paper creases
+		_sk_p(g, 6 + i, 20 - (i % 8), 10)
+	# twine: one band down, one across, a knot and loose ends
+	_sk_r(g, 13, 7, 2, 21, 14)
+	_sk_r(g, 4, 18, 20, 2, 14)
+	_sk_r(g, 13, 18, 2, 2, 15)
+	_sk_l(g, 14, 7, 10, 3, 14)
+	_sk_l(g, 14, 7, 18, 3, 14)
+	_sk_p(g, 10, 3, 15)
+	_sk_p(g, 18, 3, 15)
+	# wax seal with an eye
+	_sk_e(g, 14.0, 19.0, 4.5, 4.5, 12)
+	_sk_e(g, 13.0, 18.0, 3.0, 3.0, 13)
+	_sk_r(g, 11, 18, 5, 1, 0)
+	_sk_p(g, 13, 18, 14)
+	# tag on a string
+	_sk_r(g, 21, 21, 6, 7, 15)
+	_sk_p(g, 21, 21, 0)
+	_sk_l(g, 22, 21, 17, 19, 14)
+	_sk_r(g, 22, 23, 4, 1, 12)
+	_sk_r(g, 22, 25, 3, 1, 4)
+	_sk_outline(g)
+	_sk_polish(g, "lot", 6)
+	return ImageTexture.create_from_image(g)
+
+
+## A page torn from a grimoire, 24x32: parchment, ruled runes, a red sigil and a scorched corner.
+static func spell_page_texture() -> ImageTexture:
+	var g: Image = _sk_new(24, 32)
+	_sk_r(g, 1, 1, 22, 30, 14)
+	_sk_r(g, 2, 2, 19, 27, 15)
+	_sk_p(g, 1, 1, 0)
+	_sk_p(g, 22, 1, 0)
+	_sk_p(g, 1, 30, 0)
+	_sk_r(g, 0, 8, 1, 3, 0)  # torn edge nicks
+	_sk_r(g, 23, 17, 1, 3, 0)
+	for ry: int in range(4):
+		for rx: int in range(0, 15, 3):
+			if (rx + ry * 5) % 7 != 0:
+				_sk_r(g, 4 + rx, 4 + ry * 2, 2, 1, 3)
+	_sk_ring(g, 12.0, 17.0, 6.0, 6.0, 1, 13)
+	_sk_l(g, 12, 11, 8, 21, 12)
+	_sk_l(g, 12, 11, 16, 21, 12)
+	_sk_l(g, 8, 21, 17, 15, 12)
+	_sk_l(g, 16, 21, 7, 15, 12)
+	_sk_p(g, 12, 17, 11)
+	for rx2: int in range(0, 15, 3):
+		_sk_r(g, 4 + rx2, 26, 2, 1, 3)
+	# scorched lower right corner
+	_sk_art(g, ["...88.", "..8dd8", ".8d00d", "8d0000"], 18, 26)
+	_sk_art(g, ["0000.", "000..", "00...", "0...."], 19, 28)
+	_sk_outline(g)
+	_sk_polish(g, "page", 7)
+	return ImageTexture.create_from_image(g)
+
+
+## 16x16 spell icons: scry, hex, glamour, banish, summon, seal. An unknown id gets a plain rune.
+static func spell_icon(id: String) -> ImageTexture:
+	var g: Image = _sk_new(16, 16)
+	match id:
+		"scry":
+			_sk_e(g, 8.0, 8.0, 7.0, 4.0, 15)
+			_sk_e(g, 8.0, 8.0, 3.0, 3.0, 4)
+			_sk_e(g, 8.0, 8.0, 1.5, 1.5, 0)
+			_sk_p(g, 6, 6, 15)
+			_sk_r(g, 1, 4, 14, 1, 14)
+			_sk_p(g, 2, 3, 14)
+			_sk_p(g, 13, 3, 14)
+		"hex":
+			_sk_ring(g, 8.0, 8.0, 6.0, 6.0, 2, 3)
+			_sk_l(g, 8, 2, 4, 13, 4)
+			_sk_l(g, 8, 2, 12, 13, 4)
+			_sk_l(g, 3, 6, 13, 6, 4)
+			_sk_l(g, 4, 13, 13, 6, 14)
+			_sk_l(g, 12, 13, 3, 6, 14)
+			_sk_p(g, 8, 8, 15)
+		"glamour":
+			_sk_r(g, 7, 1, 2, 14, 11)
+			_sk_r(g, 1, 7, 14, 2, 11)
+			_sk_r(g, 6, 6, 4, 4, 15)
+			_sk_l(g, 3, 3, 12, 12, 10)
+			_sk_l(g, 12, 3, 3, 12, 10)
+			_sk_r(g, 7, 7, 2, 2, 15)
+			_sk_p(g, 12, 2, 11)
+			_sk_p(g, 2, 13, 11)
+		"banish":
+			_sk_e(g, 5.0, 10.0, 4.0, 3.0, 3)
+			_sk_e(g, 10.0, 9.0, 4.5, 3.5, 4)
+			_sk_e(g, 8.0, 6.0, 3.5, 3.0, 3)
+			_sk_e(g, 7.0, 6.0, 2.0, 1.5, 14)
+			_sk_r(g, 5, 12, 7, 2, 2)
+			_sk_p(g, 6, 9, 0)
+			_sk_p(g, 10, 9, 0)
+			_sk_r(g, 3, 14, 3, 1, 3)
+		"summon":
+			_sk_ring(g, 8.0, 8.0, 7.0, 7.0, 1, 13)
+			_sk_l(g, 8, 2, 3, 12, 13)
+			_sk_l(g, 8, 2, 13, 12, 13)
+			_sk_l(g, 3, 12, 13, 12, 13)
+			_sk_p(g, 8, 8, 11)
+			_sk_p(g, 8, 9, 10)
+		"seal":
+			_sk_ring(g, 8.0, 8.0, 7.0, 7.0, 1, 15)
+			_sk_ring(g, 8.0, 8.0, 4.0, 4.0, 1, 14)
+			_sk_r(g, 7, 1, 2, 3, 14)
+			_sk_r(g, 7, 12, 2, 3, 14)
+			_sk_r(g, 1, 7, 3, 2, 14)
+			_sk_r(g, 12, 7, 3, 2, 14)
+			_sk_r(g, 7, 7, 2, 2, 11)
+		_:
+			_sk_ring(g, 8.0, 8.0, 6.0, 6.0, 2, 4)
+			_sk_r(g, 7, 4, 2, 8, 14)
+	_sk_outline(g)
+	_sk_polish(g, "spell_" + id, 8)
+	return ImageTexture.create_from_image(g)
+
+
+## 24x24 icon for one collectable curio. The id is looked up in game/data/curios.json at call time; a shape is picked
+## from the id and name (skull, key, candle, bell, doll, mirror ...), and an id with no recognisable word gets a shape
+## seeded by the id hash. The accent colour follows the curio's set and rare curios get a glint.
+static func curio_icon(id: String) -> ImageTexture:
+	var row: Dictionary = _sk_curio_row(id)
+	var nm: String = (id + " " + str(row.get("name", ""))).to_lower()
+	var shape: String = ""
+	var best: int = 9999
+	for w: String in SK_CURIO_WORDS:
+		var at: int = nm.find(w)
+		if at >= 0 and at < best:
+			best = at
+			shape = str(SK_CURIO_WORDS[w])
+	var hv: int = absi(hash(id))
+	if shape == "":
+		shape = SK_CURIO_SHAPES[hv % SK_CURIO_SHAPES.size()]
+	var acc: int = int(SK_SET_ACCENT.get(str(row.get("set", "")), 10))
+	var g: Image = _sk_new(24, 24)
+	_sk_curio_shape(g, shape, acc, hv)
+	_sk_outline(g)
+	_sk_polish(g, id, 9)
+	var rarity: String = str(row.get("rarity", "common"))
+	if rarity != "common":
+		var spots: int = 1 if rarity == "rare" else 3
+		for i: int in range(spots):
+			var gx: int = [20, 3, 21][i]
+			var gy: int = [3, 4, 19][i]
+			_sk_p(g, gx, gy, 11)
+			_sk_p(g, gx - 1, gy, 10)
+			_sk_p(g, gx + 1, gy, 10)
+			_sk_p(g, gx, gy - 1, 10)
+			_sk_p(g, gx, gy + 1, 10)
+	return ImageTexture.create_from_image(g)
+
+
+static func _sk_curio_row(id: String) -> Dictionary:
+	var f: FileAccess = FileAccess.open("res://game/data/curios.json", FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	if parsed is Array:
+		for r: Variant in parsed as Array:
+			if r is Dictionary and str((r as Dictionary).get("id", "")) == id:
+				return r as Dictionary
+	return {}
+
+
+static func _sk_curio_shape(g: Image, shape: String, acc: int, hv: int) -> void:
+	match shape:
+		"skull":
+			_sk_e(g, 12.0, 10.0, 8.0, 7.0, 14)
+			_sk_r(g, 8, 14, 9, 7, 14)
+			_sk_r(g, 7, 9, 4, 4, 0)
+			_sk_r(g, 13, 9, 4, 4, 0)
+			_sk_p(g, 8, 10, acc)
+			_sk_p(g, 14, 10, acc)
+			_sk_r(g, 11, 13, 2, 2, 1)
+			for tx: int in [9, 11, 13, 15]:
+				_sk_r(g, tx, 17, 1, 4, 0)
+		"eye":
+			_sk_e(g, 12.0, 12.0, 10.0, 6.0, 15)
+			_sk_e(g, 12.0, 12.0, 4.0, 4.0, acc)
+			_sk_e(g, 12.0, 12.0, 2.0, 2.0, 0)
+			_sk_p(g, 10, 10, 15)
+			_sk_r(g, 2, 12, 3, 1, 12)
+			_sk_r(g, 19, 12, 3, 1, 12)
+		"key":
+			_sk_ring(g, 7.0, 7.0, 6.0, 6.0, 2, acc)
+			_sk_thick(g, 11, 11, 20, 20, 3)
+			_sk_r(g, 17, 19, 3, 3, acc)
+			_sk_r(g, 20, 16, 3, 3, acc)
+		"candle":
+			_sk_r(g, 9, 9, 6, 12, 14)
+			_sk_r(g, 9, 9, 2, 12, 15)
+			_sk_e(g, 12.0, 5.0, 2.0, 3.0, 11)
+			_sk_p(g, 12, 6, 10)
+			_sk_p(g, 12, 8, 0)
+			_sk_r(g, 5, 21, 14, 2, acc)
+			_sk_r(g, 14, 12, 1, 4, 14)
+		"bell":
+			_sk_e(g, 12.0, 11.0, 7.0, 8.0, acc)
+			_sk_r(g, 5, 12, 14, 6, acc)
+			_sk_r(g, 4, 18, 16, 2, 11)
+			_sk_e(g, 12.0, 21.0, 2.0, 2.0, 9)
+			_sk_r(g, 11, 1, 2, 3, 9)
+			_sk_r(g, 8, 6, 2, 8, 15)
+		"doll":
+			_sk_r(g, 5, 2, 14, 5, 8)
+			_sk_e(g, 12.0, 10.0, 7.0, 7.0, 15)
+			_sk_r(g, 8, 9, 2, 2, 0)
+			_sk_r(g, 14, 9, 2, 2, 0)
+			_sk_p(g, 8, 12, 13)
+			_sk_r(g, 10, 14, 4, 1, 12)
+			_sk_l(g, 15, 5, 13, 11, 4)
+			_sk_r(g, 7, 17, 10, 5, acc)
+		"mirror":
+			_sk_e(g, 12.0, 10.0, 8.0, 9.0, 10)
+			_sk_e(g, 12.0, 10.0, 6.0, 7.0, 4)
+			_sk_l(g, 9, 6, 14, 3, 15)
+			_sk_l(g, 8, 9, 13, 6, 14)
+			_sk_r(g, 11, 19, 2, 4, 9)
+			_sk_p(g, 14, 12, acc)
+		"tooth":
+			_sk_r(g, 6, 3, 12, 9, 15)
+			_sk_r(g, 5, 5, 14, 5, 15)
+			_sk_r(g, 7, 12, 4, 9, 14)
+			_sk_r(g, 13, 12, 4, 9, 14)
+			_sk_p(g, 12, 11, 14)
+			_sk_r(g, 8, 5, 1, 2, 4)
+			_sk_p(g, 15, 8, acc)
+		"coin":
+			_sk_e(g, 12.0, 12.0, 9.0, 9.0, 11)
+			_sk_e(g, 12.0, 12.0, 7.0, 7.0, 10)
+			_sk_r(g, 11, 7, 2, 10, 11)
+			_sk_r(g, 8, 10, 8, 2, 11)
+			_sk_p(g, 12, 11, 0)
+			_sk_p(g, 8, 7, 15)
+		"feather":
+			_sk_thick(g, 3, 20, 19, 4, 3)
+			_sk_thick(g, 6, 20, 20, 7, 2)
+			_sk_l(g, 3, 21, 19, 5, 4)
+			_sk_l(g, 8, 15, 13, 17, 2)
+			_sk_l(g, 12, 11, 17, 13, 2)
+			_sk_p(g, 19, 4, acc)
+		"jar":
+			_sk_r(g, 6, 6, 12, 15, 4)
+			_sk_r(g, 7, 10, 10, 10, acc)
+			_sk_r(g, 7, 7, 2, 12, 15)
+			_sk_r(g, 7, 3, 10, 3, 9)
+			_sk_e(g, 12.0, 15.0, 2.0, 2.0, 15)
+			_sk_p(g, 12, 15, 0)
+			_sk_r(g, 6, 21, 12, 1, 8)
+		"book":
+			_sk_r(g, 4, 3, 16, 18, 12)
+			_sk_r(g, 4, 3, 3, 18, 8)
+			_sk_r(g, 20, 5, 1, 14, 14)
+			_sk_ring(g, 13.0, 12.0, 4.0, 4.0, 1, acc)
+			_sk_p(g, 13, 12, acc)
+			_sk_r(g, 9, 6, 8, 1, 13)
+		"hand":
+			_sk_r(g, 7, 13, 10, 8, 14)
+			for fi: int in range(4):
+				_sk_r(g, 7 + fi * 3, [5, 3, 4, 7][fi], 2, 10, 14)
+				_sk_p(g, 7 + fi * 3, [5, 3, 4, 7][fi], 15)
+			_sk_r(g, 3, 13, 4, 2, 14)
+			_sk_p(g, 3, 13, 15)
+			_sk_r(g, 11, 15, 2, 2, acc)
+		"lantern":
+			_sk_r(g, 7, 6, 10, 15, acc)
+			_sk_r(g, 8, 8, 8, 11, 11)
+			_sk_e(g, 12.0, 15.0, 2.0, 3.0, 13)
+			_sk_r(g, 6, 20, 12, 2, 8)
+			_sk_ring(g, 12.0, 4.0, 4.0, 3.0, 1, 14)
+		"dagger":
+			_sk_thick(g, 18, 3, 8, 13, 3)
+			_sk_l(g, 19, 3, 9, 13, 15)
+			_sk_thick(g, 5, 11, 12, 18, 2)
+			_sk_thick(g, 7, 15, 4, 21, 3)
+			_sk_p(g, 8, 13, acc)
+			_sk_p(g, 5, 20, acc)
+		"chalice":
+			_sk_r(g, 5, 4, 14, 7, 11)
+			_sk_e(g, 12.0, 11.0, 7.0, 4.0, 11)
+			_sk_r(g, 5, 4, 14, 2, 12)
+			_sk_r(g, 11, 14, 2, 6, 10)
+			_sk_r(g, 7, 19, 10, 3, 10)
+			_sk_p(g, 7, 7, 15)
+			_sk_p(g, 12, 8, acc)
+		"ring":
+			_sk_ring(g, 12.0, 14.0, 8.0, 8.0, 3, 11)
+			_sk_e(g, 12.0, 5.0, 3.0, 3.0, acc)
+			_sk_p(g, 11, 4, 15)
+		_:  # clock
+			_sk_e(g, 12.0, 13.0, 9.0, 9.0, 11)
+			_sk_e(g, 12.0, 13.0, 7.0, 7.0, 15)
+			_sk_l(g, 12, 13, 12, 8, 0)
+			_sk_l(g, 12, 13, 16, 15, 0)
+			_sk_r(g, 11, 2, 2, 3, 10)
+			_sk_p(g, 12, 13, 13)
+	# a seeded mark so two ids that share a shape still differ: a tiny gem, rune dot or crack in the accent colour
+	var mx: int = 4 + (hv / 7) % 16
+	var my: int = 4 + (hv / 131) % 16
+	if _sk_idx(g, mx, my) >= 0:
+		_sk_p(g, mx, my, acc)

@@ -1,0 +1,16 @@
+{
+	"dice": {"mult": 2.2},
+	"hand": {"target": 13, "house_stand": 10, "card_max": 10, "win_mult": 2.0, "push_mult": 1.0, "deal": 1},
+	"wheel": [
+		{"id": "ash", "name": "Ash", "weight": 20, "mult": 0.0, "dread": 0.0, "prize": "", "text": "Nothing but ash."},
+		{"id": "cinder", "name": "Cinder", "weight": 20, "mult": 0.5, "dread": 0.0, "prize": "", "text": "Half comes back."},
+		{"id": "ember", "name": "Ember", "weight": 20, "mult": 1.0, "dread": 0.0, "prize": "", "text": "Your stake, warm."},
+		{"id": "flame", "name": "Flame", "weight": 14, "mult": 3.0, "dread": 0.0, "prize": "", "text": "Triple."},
+		{"id": "moon", "name": "Moon", "weight": 6, "mult": 0.0, "dread": 0.0, "prize": "page", "text": "A page slides out of the dark."},
+		{"id": "star", "name": "Star", "weight": 5, "mult": 0.0, "dread": 0.0, "prize": "curio", "text": "A curio drops into your hand."},
+		{"id": "skull", "name": "Skull", "weight": 15, "mult": 0.0, "dread": 1.0, "prize": "", "text": "The stake is gone and the shelves shudder."}
+	],
+	"stake_item": {"win_chance": 0.45, "win_mult": 2.0},
+	"pairs": {"void": "death"},
+	"lot": {"curio_weights": {"common": 10, "rare": 3, "legendary": 1}, "min_value_frac": 0.8}
+}

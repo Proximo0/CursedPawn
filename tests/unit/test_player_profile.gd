@@ -84,3 +84,31 @@ func test_finished_run_clears_the_save() -> void:
 	f.close()
 	assert_true(PlayerProfile.load_run(cat, path).is_empty(), "junk is ignored")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func test_grimoire_round_trips_and_bank_finds_grants() -> void:
+	var a := pp_store(5)
+	var run := RunState.new()
+	run.start(1, Catalog.load_default(), Tuning.new())
+	run.found = [{"kind": "page", "id": "seal"}, {"kind": "page", "id": "scry"}, {"kind": "curio", "id": "curio_13"}]
+	var added: PackedStringArray = PlayerProfile.bank_finds(run, a)
+	assert_eq(added, PackedStringArray(["seal"]), "scry was already known")
+	assert_eq(a.grimoire, PackedStringArray(["scry", "hex", "seal"]))
+	assert_eq(a.collection.owned.get("curio_13", 0), 1)
+	assert_eq(a.collection.tradeable.get("curio_13", 0), 1, "found curios are tradeable")
+	assert_eq(PlayerProfile.save(a, PP_PATH), OK)
+	var b := pp_store(6)
+	assert_true(PlayerProfile.load_into(b, PP_PATH))
+	assert_eq(b.grimoire, a.grimoire)
+	assert_eq(b.collection.owned, a.collection.owned)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+
+
+func test_version_1_profile_gets_the_default_grimoire() -> void:
+	var f := FileAccess.open(PP_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"version": 1, "store": pp_store(1).to_dict()}))
+	f.close()
+	var s := pp_store(2)
+	assert_true(PlayerProfile.load_into(s, PP_PATH))
+	assert_eq(s.grimoire, Grimoire.DEFAULT_KNOWN)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))

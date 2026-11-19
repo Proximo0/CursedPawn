@@ -8,6 +8,9 @@ const OBJECTS_PATH: String = "res://game/data/objects.json"
 const CURSES_PATH: String = "res://game/data/curses.json"
 const TAROT_PATH: String = "res://game/data/tarot.json"
 const CUSTOMERS_PATH: String = "res://game/data/customers.json"
+const SPELLS_PATH: String = "res://game/data/spells.json"
+const TABLE_PATH: String = "res://game/data/table.json"
+const CURIOS_PATH: String = "res://game/data/curios.json"
 
 var objects: Array[Dictionary] = []
 var curses: Array[Dictionary] = []
@@ -15,6 +18,9 @@ var tarot: Array[Dictionary] = []  ## {id, name, weight, mult, dread, text}: the
 ## Customer types: {id, name, kind (seller|buyer), weight, line}; sellers add patience and reserve_mult, buyers
 ## pay_mult and optional cursed_mult (applied to cursed items only).
 var customers: Array[Dictionary] = []
+var spells: Array[Dictionary] = []  ## {id, name, dread, text, backfire}
+var table: Dictionary = {}  ## Midnight Table data (game/data/table.json)
+var curios: Array[Dictionary] = []  ## {id, name, rarity, set, text}
 
 
 static func load_default() -> Catalog:
@@ -23,6 +29,11 @@ static func load_default() -> Catalog:
 	c.curses = _catalog_read(CURSES_PATH)
 	c.tarot = _catalog_read(TAROT_PATH)
 	c.customers = _catalog_read(CUSTOMERS_PATH)
+	c.spells = _catalog_read(SPELLS_PATH)
+	c.curios = _catalog_read(CURIOS_PATH)
+	var t: Variant = JSON.parse_string(FileAccess.get_file_as_string(TABLE_PATH))
+	if t is Dictionary:
+		c.table = t
 	return c
 
 
@@ -34,6 +45,20 @@ static func _catalog_read(path: String) -> Array[Dictionary]:
 			if d is Dictionary:
 				out.append(d)
 	return out
+
+
+func spell(id: String) -> Dictionary:
+	for sp: Dictionary in spells:
+		if sp["id"] == id:
+			return sp
+	return {}
+
+
+func curio(id: String) -> Dictionary:
+	for cu: Dictionary in curios:
+		if cu["id"] == id:
+			return cu
+	return {}
 
 
 func curse(id: String) -> Dictionary:
@@ -108,4 +133,28 @@ func problems() -> PackedStringArray:
 		out.append("no tarot deck")
 	elif tarot_return() >= 1.0:
 		out.append("tarot deck pays %.2f per coin staked; it must stay below 1" % tarot_return())
+	out.append_array(_table_problems())
+	return out
+
+
+## Every house game must return less than 1 per coin staked; spells need all their fields. Table checks are
+## skipped when the catalog has no table (a hand-built test catalog).
+func _table_problems() -> PackedStringArray:
+	var out := PackedStringArray()
+	for sp: Dictionary in spells:
+		for key: String in ["id", "name", "dread", "text", "backfire"]:
+			if not sp.has(key):
+				out.append("spell %s missing %s" % [sp.get("id", "?"), key])
+	if table.is_empty():
+		return out
+	var m := MidnightTable.new()
+	m.cfg = table
+	m.tuning = Tuning.new()
+	var returns: Dictionary = {"dice": m.dice_return(), "hand": m.hand_return(), "wheel": m.wheel_return(),
+		"item stake": m.item_return()}
+	if not tarot.is_empty():
+		returns["tarot pairs"] = m.pairs_return(tarot)
+	for game: String in returns:
+		if float(returns[game]) >= 1.0:
+			out.append("%s pays %.2f per coin staked; it must stay below 1" % [game, returns[game]])
 	return out
