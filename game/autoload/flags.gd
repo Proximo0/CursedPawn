@@ -1,6 +1,7 @@
 extends Node
 ## Run-wide flags and the state hash.
 ## User args come after "--" on the command line: godot --path . -- --scripted --dev --seed=7
+## The web build also reads WEB_QUERY_KEYS from the page address: index.html?scripted&bot=greedy&seed=7
 
 var args: Dictionary = {}
 var frame: int = 0
@@ -8,11 +9,28 @@ var commands: int = 0  ## player commands issued; compare state hashes only on f
 var _hash_providers: Array[Callable] = []
 var _web_ready_sent: bool = false
 
+## Page-address keys the web build accepts. Only test switches: --dev stays command-line only, so the public site
+## never opens dev entries or cheats.
+const WEB_QUERY_KEYS: PackedStringArray = ["scripted", "bot", "bot_nights", "bot_steps", "seed"]
+
 
 func _ready() -> void:
 	for a: String in OS.get_cmdline_user_args():
 		var kv: PackedStringArray = a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
+	if OS.has_feature("web"):
+		args.merge(query_args(str(JavaScriptBridge.eval("location.search", true))), true)
+
+
+## "?a=1&b" -> {"a": "1", "b": "1"}, keeping only WEB_QUERY_KEYS.
+static func query_args(query: String) -> Dictionary:
+	var out: Dictionary = {}
+	for part: String in query.trim_prefix("?").split("&", false):
+		var kv: PackedStringArray = part.split("=", true, 1)
+		var key: String = kv[0].uri_decode()
+		if WEB_QUERY_KEYS.has(key):
+			out[key] = kv[1].uri_decode() if kv.size() > 1 else "1"
+	return out
 
 
 func _physics_process(_delta: float) -> void:

@@ -173,6 +173,8 @@ func _ready() -> void:
 	pause.quit_to_title.connect(_show_title)
 	# Scripted runs (tests, captures) skip the title and play straight away.
 	new_run(Flags.seed_value(), {})
+	if Flags.get_arg("bot") != "":
+		add_child(BotPilot.new(self, Flags.get_arg("bot")))  # the play-bot drives this screen (game/debug/bot_pilot.gd)
 	if not Flags.is_scripted_run():
 		gift_text = _link_in_page()
 		_saved = PlayerProfile.load_run(catalog)

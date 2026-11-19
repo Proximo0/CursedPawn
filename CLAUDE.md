@@ -17,7 +17,10 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
 - `tools/check_all.sh`: everything at once (unit, sims, lint, plus the bot and lab if their scenes exist).
 - `tools/export_web.sh`: web build in `build/web/` plus its size check. Release uses the 2D-only engine, fetched on
   first use by `tools/fetch_web_template.sh` (7.3 MB download vs 9.9 MB); `--debug` uses the stock debug template.
-  `node tools/web_smoke.mjs`: boots `build/web` in headless Chromium (no errors, a full screen within 30 s).
+  `node tools/web_smoke.mjs`: boots `build/web` in headless Chromium (no errors, a full screen within 30 s); with
+  `SMOKE_BOT=greedy` a second page plays a whole run with the play-bot (`SMOKE_BOT_HASH` = the native run's hash).
+- Bot play through the real screen: `godot --headless --path . -- --scripted --bot=greedy --seed=7` prints one `BOT`
+  line (exit 1 if stuck or the recording does not replay). The web build takes the same switches as `?scripted&bot=greedy`.
 - `tools/export_windows.sh`: Windows build zip in `build/`. `tools/export_android.sh`: debug APK in `build/`. Stock
   templates come from `tools/fetch_templates.py`, which range-reads only the ones needed out of the 1.28 GB file.
 - `.claude/hooks/lint-on-edit.sh`: after every Edit/Write of a `.gd` file, parse-checks that script and lints it (~0.3 s;
