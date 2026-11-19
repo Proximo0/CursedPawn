@@ -28,7 +28,7 @@ const browser = await chromium.launch({
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
 phase.launch = Date.now() - tStart;
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
 const t0 = Date.now();
 let banner = -1;
 const problems = [];
@@ -41,8 +41,8 @@ page.on('console', (m) => {
 page.on('pageerror', (e) => problems.push(`page error: ${String(e).slice(0, 200)}`));
 await page.goto(`http://localhost:${port}/index.html`);
 // Ready = the game set window.cursedPawnReady after its first shop frame (Flags._process, whatever the main scene). Then the
-// screenshot must not be blank: a drawn shop is about 245 KB as PNG, an empty canvas a few KB.
-const MIN_SHOT_BYTES = 20000;
+// screenshot must not be blank: at the game's native 640x360 a drawn shop is 40-90 KB as PNG, an empty canvas 1-2 KB.
+const MIN_SHOT_BYTES = 8000;
 let first = -1;
 try {
   await page.waitForFunction(() => window.cursedPawnReady === true, null, { timeout: BOOT_LIMIT_MS, polling: 100 });
