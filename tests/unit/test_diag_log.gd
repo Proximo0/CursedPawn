@@ -73,3 +73,11 @@ func test_install_is_idempotent_and_scripted_runs_write_no_file() -> void:
 	assert_true(DiagLog._logger == null, "hook removed when the count reaches zero")
 	if Flags.is_scripted_run():
 		assert_false(FileAccess.file_exists(DiagLog.FILE_PATH) and FileAccess.get_modified_time(DiagLog.FILE_PATH) > Time.get_unix_time_from_system() - 5, "no file written")
+
+
+func test_game_screen_takes_its_context_back() -> void:
+	var g: ShopGame = (load("res://game/ui/shop_game.tscn") as PackedScene).instantiate() as ShopGame
+	(Engine.get_main_loop() as SceneTree).root.add_child(g)
+	assert_true(DiagLog.context.is_valid(), "the game screen adds its run summary")
+	g.free()
+	assert_true(DiagLog.context.is_null(), "a static lambda bound to a freed screen corrupts the heap at exit")

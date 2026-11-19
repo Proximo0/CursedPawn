@@ -90,6 +90,7 @@ var _daily_done: Dictionary = {}  ## {key, line}: today's daily played in this s
 var _last_invalid: bool = false
 var _toasted: PackedStringArray = PackedStringArray()  ## deeds already toasted this run
 var _deeds_gd: GDScript
+var _diag_context: Callable = Callable()  ## the run summary this screen gave DiagLog; taken back when the screen leaves
 
 
 # ---------------------------------------------------------------- pure helpers (unit-tested)
@@ -194,8 +195,9 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sfx = SfxPlayer.new()
 	add_child(sfx)
-	DiagLog.context = func() -> String:
+	_diag_context = func() -> String:
 		return "night %d cash %d dread %.1f seed %d" % [run.night, run.cash, run.dread, run.seed_used] if run != null else "no run"
+	DiagLog.context = _diag_context
 	sfx.start_ambient()
 	add_child(TuningPanel.new())
 	_overlay = DebugOverlay.new()
@@ -229,6 +231,14 @@ func _ready() -> void:
 		gift_text = _link_in_page()
 		_saved = PlayerProfile.load_run(catalog)
 		_show_title()
+
+
+## DiagLog.context is static, so it would outlive this screen: a lambda bound to a freed node corrupts the heap when the
+## script statics are torn down at exit.
+func _exit_tree() -> void:
+	if DiagLog.context == _diag_context:
+		DiagLog.context = Callable()
+	_diag_context = Callable()
 
 
 ## Shows the title over a dimmed shop. New run starts fresh (with a friend's gift if the page carries one);
