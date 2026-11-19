@@ -198,6 +198,23 @@ func _gift_from_text(text: String) -> Dictionary:
 	return {} if code == "" else PassLink.decode(code, catalog, Tuning.shared())
 
 
+## F12: re-reads game/data/*.json and restarts the run on the same seed, so a content edit shows without a relaunch.
+## Tuning presets reload from the tuning panel (F1). Problems in the new data are logged and the old data is kept.
+func reload_data() -> PackedStringArray:
+	var fresh: Catalog = Catalog.load_default()
+	var problems: PackedStringArray = fresh.problems()
+	if not problems.is_empty():
+		_log("Data NOT reloaded: %s" % "; ".join(problems))
+		_refresh()
+		return problems
+	catalog = fresh
+	new_run(seed_now)
+	_log("Data reloaded: %d objects, %d curses, %d customer types. New run, seed %d." % [catalog.objects.size(),
+		catalog.curses.size(), catalog.customers.size(), seed_now])
+	_refresh()
+	return problems
+
+
 func new_run(seed_in: int, gift: Dictionary = {}) -> void:
 	if catalog == null:
 		catalog = Catalog.load_default()
@@ -597,6 +614,10 @@ func _on_key(key: InputEventKey) -> void:
 	if k == KEY_F11 and not key.echo:
 		if room != null:
 			room.dither_enabled = not room.dither_enabled
+		get_viewport().set_input_as_handled()
+		return
+	if k == KEY_F12 and not key.echo:
+		reload_data()
 		get_viewport().set_input_as_handled()
 		return
 	if k == KEY_F5 and not key.echo:

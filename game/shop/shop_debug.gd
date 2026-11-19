@@ -184,12 +184,33 @@ func _unhandled_input(event: InputEvent) -> void:
 		_room.dither_enabled = not _room.dither_enabled
 		get_viewport().set_input_as_handled()
 		return
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_F12:
+		reload_data()
+		get_viewport().set_input_as_handled()
+		return
 	if key != null and key.pressed and not key.echo and key.keycode == KEY_F5:
 		if not Flags.is_scripted_run():
 			rec.save_json(RECORDING_PATH)
 			_log("Recording saved to %s" % RECORDING_PATH)
 			_refresh()
 		get_viewport().set_input_as_handled()
+
+
+## F12: re-reads game/data/*.json and restarts the run on the same seed, so a content edit shows without a relaunch.
+## Tuning presets reload from the tuning panel (F1). Problems in the new data are logged and the old data is kept.
+func reload_data() -> PackedStringArray:
+	var fresh: Catalog = Catalog.load_default()
+	var problems: PackedStringArray = fresh.problems()
+	if not problems.is_empty():
+		_log("Data NOT reloaded: %s" % "; ".join(problems))
+		_refresh()
+		return problems
+	catalog = fresh
+	new_run(seed_now)
+	_log("Data reloaded: %d objects, %d curses, %d customer types. New run, seed %d." % [catalog.objects.size(),
+		catalog.curses.size(), catalog.customers.size(), seed_now])
+	_refresh()
+	return problems
 
 
 func new_run(seed_in: int, gift: Dictionary = {}) -> void:

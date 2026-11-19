@@ -14,9 +14,16 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
 - `tools/lint.sh`: parse and static checks for every script. Ends with `LINT problems=<n>`.
 - `tools/run_sims.sh`: regression sims (`tests/sim/sim_*.gd`, listed in `tests/sim/sim_suite.gd`).
 - `tools/check_all.sh`: everything at once (unit, sims, lint, plus the bot and lab if their scenes exist).
-- `tools/export_windows.sh`: Windows build zip in `build/`. `tools/export_android.sh`: debug APK in `build/`.
-- `tools/fetch_web_template.sh`: fetch the 2D-only web engine (needed before a Web export; 7.3 MB download vs 9.9 MB).
-- Run the game: `godot --path .` (add `-- --dev` for dev entries, `-- --stamp` to show the frame stamp).
+- `tools/export_web.sh`: web build in `build/web/` plus its size check. Release uses the 2D-only engine, fetched on
+  first use by `tools/fetch_web_template.sh` (7.3 MB download vs 9.9 MB); `--debug` uses the stock debug template.
+  `node tools/web_smoke.mjs`: boots `build/web` in headless Chromium (no errors, a full screen within 30 s).
+- `tools/export_windows.sh`: Windows build zip in `build/`. `tools/export_android.sh`: debug APK in `build/`. Stock
+  templates come from `tools/fetch_templates.py`, which range-reads only the ones needed out of the 1.28 GB file.
+- `tools/import.sh`: the shared import step; skipped when no file changed (`FORCE_IMPORT=1` to force). Every tool calls it.
+- CI: `checks` (unit, lint, sims, lab) and `web` (playable build; main deploys to GitHub Pages). Doc-only pushes skip both.
+- Run the game: `godot --path .` (add `-- --dev` for dev entries, `-- --stamp` to show the frame stamp). In the game
+  screen and the debug shop, F12 reloads `game/data/*.json` and restarts the run on the same seed; F1 loads a tuning
+  preset.
 
 ## Layout
 - `game/autoload/`: `Flags` (run flags, frame counter, state hash), `Controls` (input actions).
@@ -25,11 +32,13 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
 - `tests/unit/`: one `test_<module>.gd` per module, `extends TestCase`. `tests/sim/`: regression sims.
 - `tools/`: shell and Python tools. Python uses the standard library only.
 - `docs/`: `playbook.md` (kickoff, fan-out, measure-fix loop), `agent_brief.md` (contracts and subagent rules),
-  `lessons_learned.md`, `new_project_checklist.md`, `production_pipeline.md`, `performance.md`, `online.md`,
-  `android.md`, `agent_dashboard.md`, `character_creation_lessons.md`.
+  `lessons_learned.md` (rows for this game; `lessons/kit_archive.md` has the full starter-kit list),
+  `new_project_checklist.md`, `production_pipeline.md`, `performance.md`, `online.md`, `android.md`,
+  `agent_dashboard.md`, `character_creation_lessons.md`.
 
 ## Rules
 - Static typing everywhere: typed vars, params and returns. Tabs for indentation.
+- Headless scenes that step physics run with `--fixed-fps 60`, or they wait on the wall clock.
 - Gameplay logic is pure `RefCounted` classes with `class_name`, no Node, no wall clock, no `randf()`: take `delta`
   and a seeded `RandomNumberGenerator`. Nodes are thin wrappers that feed them input. Put pure logic in
   `game/logic/` (or edit `PURE_PREFIXES` in `tools/lint.py`).
