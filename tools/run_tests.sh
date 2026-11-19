@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Engine-free unit tests, headless. Usage: tools/run_tests.sh [test_name]
-# All files: split across JOBS Godot processes (default: CPU count, at most one per file). Quiet: on a pass it prints
+# All files: JOBS Godot processes (default: CPU count) share one queue of test methods. Quiet: on a pass it prints
 # only the summary line; on a failure it prints every failing shard's full output (FAIL lines, engine errors).
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -16,8 +16,9 @@ files=$(ls tests/unit/test_*.gd | wc -l)
 JOBS="${JOBS:-$(nproc)}"
 (( JOBS > files )) && JOBS=$files
 OUT=$(mktemp -d "/tmp/tests.$(basename "$PWD").XXXXXX")
+mkdir "$OUT/claims"  # one dir per test method taken; the processes share this queue (see rn_mine in tests/runner.gd)
 for ((i = 0; i < JOBS; i++)); do
-  ( "$GODOT" --headless --path . -s res://tests/runner.gd -- "--shard=$i" "--nshards=$JOBS" >"$OUT/$i.log" 2>&1
+  ( "$GODOT" --headless --path . -s res://tests/runner.gd -- "--claims=$OUT/claims" >"$OUT/$i.log" 2>&1
     echo $? >"$OUT/$i.rc" ) &
 done
 wait

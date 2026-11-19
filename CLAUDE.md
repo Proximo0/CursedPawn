@@ -10,8 +10,8 @@ pipeline" doc, section "Design: the cursed pawnshop" (https://claude.ai/artifact
 Web export uses the Compatibility renderer, single-threaded, GDScript only.
 
 ## Commands
-- `tools/run_tests.sh [test_name]`: headless unit tests (`tests/unit/test_*.gd`), split across the CPUs (~4 s for all).
-  A pass prints one `TESTS` line; a failure prints that shard's full output.
+- `tools/run_tests.sh [test_name]`: headless unit tests (`tests/unit/test_*.gd`); one process per CPU, sharing one queue
+  of test methods (~20 s for all). A pass prints one `TESTS` line; a failure prints that process's full output.
 - `tools/lint.sh`: parse and static checks for every script. Ends with `LINT problems=<n>`.
 - `tools/run_sims.sh`: regression sims (`tests/sim/sim_*.gd`, listed in `tests/sim/sim_suite.gd`).
 - `tools/check_all.sh`: everything at once (unit, sims, lint, plus the bot and lab if their scenes exist).

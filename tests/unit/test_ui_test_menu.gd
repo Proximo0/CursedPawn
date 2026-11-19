@@ -38,18 +38,26 @@ func test_title_offers_the_menu_only_when_asked() -> void:
 	assert_eq(on.size(), off.size() + 1)
 
 
+## Split by the scares setting into two tests (about 7 s each), so parallel runs can put them on different CPUs.
 func test_every_tile_opens_without_touching_the_profile() -> void:
+	tm_every_tile_opens(0)
+
+
+func test_every_tile_opens_with_scares_on() -> void:
+	tm_every_tile_opens(1)
+
+
+func tm_every_tile_opens(scares: int) -> void:
 	var g: ShopGame = tm_game()
 	g.open_test_menu()
 	assert_true(g._relics.no_save, "throwaway profile")
 	var failed: PackedStringArray = PackedStringArray()
 	for t: Dictionary in TestScenes.tiles():
-		for scares: int in range(2):
-			g.test_menu.scares = scares
-			g.run_test_tile(str(t["id"]))
-			if not g.test_active:
-				failed.append(str(t["id"]))
-			g.exit_test_tile()
+		g.test_menu.scares = scares
+		g.run_test_tile(str(t["id"]))
+		if not g.test_active:
+			failed.append("%s scares=%d" % [t["id"], scares])
+		g.exit_test_tile()
 	assert_eq(failed, PackedStringArray(), "tiles that did not open")
 	g.leave_test_menu()
 	assert_false(g._relics.no_save, "profile back")
