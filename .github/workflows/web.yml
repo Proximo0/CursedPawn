@@ -44,7 +44,7 @@ jobs:
       - name: Boot in headless Chrome
         run: |
           # Same Playwright and bundled Chromium as the cloud sessions (the runner's own Chrome hung after engine start).
-          # The install took ~20 s of this step; the cache above skips it after the first run.
+          # The cache above skips the npm and browser install after the first run.
           if [ "${{ steps.pw-cache.outputs.cache-hit }}" != "true" ]; then
             npm install --no-save --no-audit --no-fund playwright@1.63.0 >/dev/null
             npx playwright install --only-shell chromium >/dev/null

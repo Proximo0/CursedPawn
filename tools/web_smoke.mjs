@@ -11,6 +11,8 @@ const { chromium } = require('playwright');
 
 const dir = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith('--')) ?? 'build/web');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.pck': 'application/octet-stream', '.png': 'image/png' };
+const tStart = Date.now();
+const phase = {};  // ms since start at each step, printed so CI time can be traced
 const BOOT_LIMIT_MS = Number(process.env.SMOKE_TIMEOUT_MS ?? 30000);
 const server = createServer(async (req, res) => {
   try {
@@ -25,6 +27,7 @@ const browser = await chromium.launch({
   channel: process.argv.includes('--chrome') ? 'chrome' : undefined,
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
+phase.launch = Date.now() - tStart;
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const t0 = Date.now();
 let banner = -1;
@@ -45,14 +48,17 @@ try {
   await page.waitForFunction(() => window.cursedPawnReady === true, null, { timeout: BOOT_LIMIT_MS, polling: 100 });
   first = Date.now() - t0;
 } catch { /* reported below */ }
+phase.ready = Date.now() - tStart;
 await page.waitForTimeout(2000);  // errors that follow the first frame
 const jpeg = process.env.SMOKE_SHOT_B64 ? await page.screenshot({ type: 'jpeg', quality: 40 }) : null;
 const pageText = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 300)).catch(() => 'n/a');
 const webgl2 = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2')).catch(() => 'n/a');
 const shot = await page.screenshot({ path: join(dir, '..', 'web_smoke.png') });
 if (first >= 0 && shot.length < MIN_SHOT_BYTES) problems.push(`screen looks blank (${shot.length} bytes)`);
+phase.shots = Date.now() - tStart;
 await browser.close();
 server.close();
+phase.closed = Date.now() - tStart;
 if (banner < 0) problems.push('no engine banner');
 if (first < 0) problems.push(`game not ready within ${BOOT_LIMIT_MS / 1000} s`);
 for (const p of problems) console.log(p);
@@ -65,5 +71,5 @@ if (problems.length) {
   console.log('last console lines:');
   for (const l of log.slice(-15)) console.log(`  ${l}`);
 }
-console.log(`WEB smoke ${problems.length ? 'FAIL' : 'PASS'} banner_ms=${banner} ready_ms=${first} shot_kb=${Math.round(shot.length / 1024)} problems=${problems.length}`);
+console.log(`WEB smoke ${problems.length ? 'FAIL' : 'PASS'} banner_ms=${banner} ready_ms=${first} shot_kb=${Math.round(shot.length / 1024)} problems=${problems.length} phases_ms=${Object.entries(phase).map(([k, v]) => `${k}:${v}`).join(",")}`);
 process.exit(problems.length ? 1 : 0);
