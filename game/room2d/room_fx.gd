@@ -11,9 +11,10 @@ const KINDS: Dictionary = {
 	"trail": {"life": [0.25, 0.45], "speed": [6.0, 26.0], "gravity": 30.0, "size": 1, "cols": [4, 15, 11]},
 	"dust": {"life": [0.3, 0.55], "speed": [14.0, 50.0], "gravity": 40.0, "size": 2, "cols": [14, 4, 14]},
 	"ash": {"life": [0.6, 1.1], "speed": [6.0, 18.0], "gravity": -16.0, "size": 1, "cols": [14, 4, 1, 14]},
-	"gold": {"life": [0.7, 1.2], "speed": [4.0, 16.0], "gravity": -6.0, "size": 2, "cols": [11, 10, 15, 11]},
+	"gold": {"life": [0.9, 1.5], "speed": [6.0, 24.0], "gravity": -8.0, "size": 3, "cols": [11, 10, 15, 11, 15]},
 	"inksmoke": {"life": [1.1, 1.8], "speed": [8.0, 22.0], "gravity": -10.0, "size": 5, "cols": [0, 0, 1, 0]},
-	"glimmer": {"life": [0.6, 1.0], "speed": [1.0, 5.0], "gravity": -3.0, "size": 1, "cols": [15, 11, 15]},
+	"glimmer": {"life": [0.9, 1.4], "speed": [2.0, 8.0], "gravity": -4.0, "size": 2, "cols": [15, 15, 11, 15]},
+	"draft": {"life": [1.3, 2.3], "speed": [50.0, 130.0], "gravity": 0.0, "size": 2, "cols": [4, 14, 15, 4, 14]},
 }
 
 var _rng := RandomNumberGenerator.new()
@@ -52,10 +53,12 @@ func emit(kind: String, pos: Vector2, n: int) -> void:
 		var v := Vector2(cos(a), sin(a)) * sp
 		if kind == "smoke" or kind == "inksmoke":
 			v = Vector2(_rng.randf_range(-8.0, 8.0), -sp)
+		elif kind == "draft":  # a cold wind along the floor, always blowing in from the left
+			v = Vector2(sp, _rng.randf_range(-9.0, 9.0))
 		elif kind == "dust":
 			v = Vector2(cos(a) * sp, -absf(sin(a)) * sp * 0.6)
 		_p.append({"x": pos.x + jitter.x, "y": pos.y + jitter.y, "vx": v.x, "vy": v.y, "g": float(k["gravity"]),
-			"life": lf, "max": lf, "s": int(k["size"]) if kind != "sparkle" and kind != "gold" else _rng.randi_range(1, 2),
+			"life": lf, "max": lf, "s": int(k["size"]) if kind != "sparkle" and kind != "gold" else _rng.randi_range(1, 2 if kind == "sparkle" else 3),
 			"c": int(cols[_rng.randi_range(0, cols.size() - 1)]), "kind": kind})
 
 
@@ -68,6 +71,9 @@ func update(delta: float) -> void:
 			continue
 		q["vy"] = float(q["vy"]) + float(q["g"]) * delta
 		q["x"] = float(q["x"]) + float(q["vx"]) * delta
+		if str(q["kind"]) == "draft":  # the wind wavers and slows
+			q["vy"] = sin(float(q["x"]) * 0.07 + float(q["max"]) * 9.0) * 14.0
+			q["vx"] = float(q["vx"]) * (1.0 - 0.35 * delta)
 		q["y"] = float(q["y"]) + float(q["vy"]) * delta
 
 
@@ -89,11 +95,29 @@ func draw(ci: CanvasItem, pal: PackedColorArray) -> void:
 				ci.draw_rect(Rect2(x - sz * 0.5, y - sz * 0.5, sz, sz), col)
 			"sparkle", "gold":
 				col.a = clampf(f * 3.0, 0.0, 1.0)
-				if sz >= 2.0 and f < 0.45:  # twinkle: a tiny plus
+				if sz >= 3.0 and str(q["kind"]) == "gold":  # a four-point star with a pale heart
+					ci.draw_rect(Rect2(x - 2.0, y, 5.0, 1.0), col)
+					ci.draw_rect(Rect2(x, y - 2.0, 1.0, 5.0), col)
+					var hc: Color = pal[15]
+					hc.a = col.a
+					ci.draw_rect(Rect2(x - 1.0, y - 1.0, 3.0, 3.0), hc)
+				elif sz >= 2.0 and f < 0.45:  # twinkle: a tiny plus
 					ci.draw_rect(Rect2(x - 1.0, y, 3.0, 1.0), col)
 					ci.draw_rect(Rect2(x, y - 1.0, 1.0, 3.0), col)
 				else:
 					ci.draw_rect(Rect2(x, y, sz, sz), col)
+			"draft":  # a pale horizontal streak of cold air
+				col.a = clampf(f * 2.0, 0.0, 0.9)
+				ci.draw_rect(Rect2(x - 3.0, y, 7.0, 1.0), col)
+				ci.draw_rect(Rect2(x, y + 1.0, 3.0, 1.0), col)
+			"glimmer":
+				col.a = clampf(f * 2.5, 0.0, 1.0)
+				ci.draw_rect(Rect2(x - 1.0, y, 3.0, 1.0), col)
+				ci.draw_rect(Rect2(x, y - 1.0, 1.0, 3.0), col)
+				if f > 0.5:
+					var gc: Color = pal[15]
+					gc.a = col.a
+					ci.draw_rect(Rect2(x, y, 1.0, 1.0), gc)
 			_:
 				col.a = clampf(f * 2.5, 0.0, 1.0)
 				if str(q["kind"]) == "dust" and f < 0.5:

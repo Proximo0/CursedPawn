@@ -160,3 +160,16 @@ func test_estimate_and_clock_text() -> void:
 	assert_eq(ShopGame.ui_estimate_text({"mid": 27, "spread": 0.5}), "~27 +-50%")
 	assert_eq(ShopGame.ui_estimate_text({}), "?")
 	assert_eq(ShopGame.ui_clock_text(12.2), "13M LEFT")
+
+
+func test_collector_events_get_ledger_lines_and_cards() -> void:
+	assert_true(ShopGame.ui_event_line({"e": "request_new", "who": "Mrs Pell", "want_text": "cursed doll"}).contains("Pell"))
+	assert_false(ShopGame.ui_event_line({"e": "request_done", "pay": 9}).begins_with("Unknown"))
+	assert_eq(ShopGame.ui_event_line({"e": "run_opts"}), "", "silent")
+	assert_true(ShopGame.ui_event_line({"e": "collector_omen", "text": "a locket", "night": 3}).contains("LOCKET") or ShopGame.ui_event_line({"e": "collector_omen", "text": "a locket"}).to_upper().contains("LOCKET"))
+	var g: ShopGame = _game(5)
+	g.cards.clear()
+	g._on_events([{"e": "collector_arrives", "want_text": "a cursed doll", "line": "I collect."}] as Array[Dictionary])
+	assert_eq(str(g.cards[0]["style"]), "collector")
+	assert_true(float(g.cards[0]["secs"]) > ShopGame.CARD_SECS)
+	g.free()

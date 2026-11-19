@@ -202,3 +202,39 @@ func test_backfire_shake_is_smaller_when_gentle() -> void:
 	assert_true(gentle.shake_amount() > 0.0)
 	full.free()
 	gentle.free()
+
+
+func test_collector_arrival_dresses_him_and_gutters_the_lights() -> void:
+	var room := ShopRoom2D.new()
+	room.setup(_run_with(1))
+	room.apply_events([{"e": "customer", "kind": "buyer", "category": "toy", "tid": "collector", "boss": true}] as Array[Dictionary])
+	assert_true(room.collector_here())
+	assert_eq(room.customer_height(), 110)
+	room.apply_events([{"e": "collector_arrives", "want_text": "x", "line": "y"}] as Array[Dictionary])
+	assert_true(room.collector_gutter() > 0.9, "lights gutter at once")
+	room.apply_events([{"e": "passed", "kind": "buyer"}] as Array[Dictionary])
+	room.settle_visuals()
+	room.apply_events([{"e": "customer", "kind": "buyer", "category": "toy", "tid": "priest"}] as Array[Dictionary])
+	assert_false(room.collector_here(), "the next customer is an ordinary one")
+	room.free()
+
+
+func test_collector_arrives_before_his_customer_event() -> void:
+	var room := ShopRoom2D.new()
+	room.setup(_run_with(1))
+	room.apply_events([{"e": "passed", "kind": "seller"}] as Array[Dictionary])
+	room.settle_visuals()
+	room.apply_events([{"e": "collector_arrives", "want_text": "x", "line": "y"}] as Array[Dictionary])
+	assert_false(room.collector_here(), "nobody at the door yet")
+	room.apply_events([{"e": "customer", "kind": "buyer", "category": "toy", "tid": "collector"}] as Array[Dictionary])
+	assert_true(room.collector_here())
+	room.free()
+
+
+func test_pendulum_inspection_is_accepted() -> void:
+	var room := ShopRoom2D.new()
+	room.setup(_run_with(1))
+	room.apply_events([{"e": "customer", "kind": "seller", "name": "Hand mirror", "ask": 40, "tid": "widow"}] as Array[Dictionary])
+	for verdict: String in ["cursed", "clean"]:
+		room.apply_events([{"e": "inspected", "tool": "pendulum", "tell": verdict, "estimate": {}}] as Array[Dictionary])
+	room.free()

@@ -51,6 +51,10 @@ var _gift_edit: LineEdit
 
 
 ## One event Dictionary as a readable log line.
+const SD_KNOWN_EVENTS: PackedStringArray = ["night_start", "customer", "inspected", "counter", "left", "bought", "sold", "passed", "wake",
+	"night_end", "run_lost", "run_won", "wager", "invalid"]
+
+
 static func sd_event_text(e: Dictionary) -> String:
 	match str(e.get("e", "")):
 		"night_start":
@@ -96,7 +100,7 @@ static func sd_event_text(e: Dictionary) -> String:
 				int(e["payout"]), " (dread +%.1f)" % float(e["dread"]) if float(e.get("dread", 0.0)) > 0.0 else ""]
 		"invalid":
 			return "Can't do that: %s." % str(e.get("why", "?"))
-	return "Unknown event %s" % str(e.get("e", "?"))
+	return ShopGame.ui_event_line(e)
 
 
 static func sd_tool_name(tool: String) -> String:

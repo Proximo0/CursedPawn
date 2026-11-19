@@ -15,6 +15,10 @@ const STAMP_SECS: float = 0.25
 const STAMP_HOLD: float = 0.9
 const TEAR_SECS: float = 0.9
 const DUE_GLOW: float = 0.5
+const TAIL_RESERVE: float = 24.0  ## width kept free at the end of the last line for "N3" / "NOW"
+const COLLECTOR_ID: String = "collector"
+const LINE_H: float = 10.0
+const NOTE_GAP: float = 2.0
 
 var notes: Array[Dictionary] = []  ## {id, who, line, due, age, fate: "" | "done" | "failed", fate_age, due_now}
 
@@ -34,6 +38,18 @@ func feed(events: Array[Dictionary]) -> void:
 				_fate(id, "done")
 			"request_failed":
 				_fate(id, "failed")
+			"collector_omen":
+				_pin_collector(str(e.get("text", "")), int(e.get("arrive_night", 5)))
+			"collector_arrives":
+				var cn: Dictionary = _find(COLLECTOR_ID)
+				if cn.is_empty():
+					_pin_collector(str(e.get("want_text", "")), 0)
+					cn = _find(COLLECTOR_ID)
+				cn["due_now"] = true
+			"collector_pleased":
+				_fate(COLLECTOR_ID, "done")
+			"collector_refused":
+				_fate(COLLECTOR_ID, "failed")
 
 
 ## Pins any open request (run.requests) that is not on the board yet: a resumed run, or logic that sends no events.
@@ -58,7 +74,15 @@ func _pin(req: Dictionary) -> void:
 	if id == "" or not _find(id).is_empty():
 		return
 	notes.append({"id": id, "who": str(req.get("who", "")), "line": UiEngage.request_line(req),
-		"due": int(req.get("due", 0)), "age": 0.0, "fate": "", "fate_age": 0.0, "due_now": false})
+		"due": int(req.get("due", 0)), "age": 0.0, "fate": "", "fate_age": 0.0, "due_now": false, "boss": false})
+
+
+## The Collector's want, pinned from the night he is announced until he comes (a note with a violet pin).
+func _pin_collector(text: String, arrive_night: int) -> void:
+	if not _find(COLLECTOR_ID).is_empty():
+		return
+	notes.append({"id": COLLECTOR_ID, "who": "THE COLLECTOR", "line": UiEngage.collector_line(text), "due": arrive_night, "age": 0.0,
+		"fate": "", "fate_age": 0.0, "due_now": false, "boss": true})
 
 
 func _fate(id: String, fate: String) -> void:
@@ -100,13 +124,29 @@ static func drop_amount(fate: String, fate_age: float) -> float:
 	return 0.0
 
 
+## The lines a note's text wraps to (one when it fits, else two; the second is cut with dots).
+static func note_lines(line: String, reserve: float) -> PackedStringArray:
+	var wrap_w: int = int(NOTE_W - 14.0 - reserve)
+	var lines: PackedStringArray = UiPixelFont.ui_wrap(line, wrap_w)
+	if lines.size() > 2:
+		lines = lines.slice(0, 2)
+		lines[1] = lines[1].substr(0, maxi(lines[1].length() - 2, 1)) + ".."
+	return lines
+
+
+static func note_height(n: Dictionary) -> float:
+	return NOTE_H + LINE_H * float(note_lines(str(n["line"]), TAIL_RESERVE).size() - 1)
+
+
 func draw(ci: CanvasItem, t: float) -> void:
 	var list: Array[Dictionary] = visible_notes()
 	if list.is_empty():
 		return
 	var pal: PackedColorArray = RoomPalette.colors()
+	var y: float = 0.0
 	for i: int in range(list.size()):
-		_draw_note(ci, pal, list[i], BOARD.position + Vector2(0.0, NOTE_STEP * float(i)), t, i)
+		_draw_note(ci, pal, list[i], BOARD.position + Vector2(0.0, y), t, i)
+		y += note_height(list[i]) + NOTE_GAP
 
 
 func _draw_note(ci: CanvasItem, pal: PackedColorArray, n: Dictionary, at: Vector2, t: float, slot: int) -> void:
@@ -121,41 +161,46 @@ func _draw_note(ci: CanvasItem, pal: PackedColorArray, n: Dictionary, at: Vector
 	o.y += floorf(drop * 40.0)
 	if age < 0.0 or pin_u <= 0.02:
 		return
-	var rect := Rect2((at + o).floor(), Vector2(NOTE_W, NOTE_H))
+	var nh: float = note_height(n)
+	var rect := Rect2((at + o).floor(), Vector2(NOTE_W, nh))
 	var due_now: bool = bool(n["due_now"]) and fate == ""
 	var wave: float = 0.0
 	if fate == "failed":
 		wave = floorf(minf(fa / 0.35, 1.0) * 2.0)
 	if fate == "failed" and fa > 0.35:
 		# torn in two: the halves fall apart, the left one slower and turning away
-		var left := Rect2(rect.position + Vector2(-wave, 0.0), Vector2(floorf(NOTE_W * 0.55), NOTE_H))
+		var left := Rect2(rect.position + Vector2(-wave, 0.0), Vector2(floorf(NOTE_W * 0.55), nh))
 		var right := Rect2(rect.position + Vector2(floorf(NOTE_W * 0.55) + wave * 2.0, floorf(drop * 14.0)),
-			Vector2(NOTE_W - floorf(NOTE_W * 0.55), NOTE_H))
+			Vector2(NOTE_W - floorf(NOTE_W * 0.55), nh))
 		UiFrames.ui_draw(ci, left, "note")
 		UiFrames.ui_draw(ci, right, "note")
-		_text_line(ci, pal, left, str(n["line"]), 12, 0.0)
+		_text_line(ci, pal, left, str(n["line"]), 12, TAIL_RESERVE, 1)
 		ci.draw_rect(Rect2(left.end.x - 1.0, left.position.y + 2.0, 1.0, 3.0), pal[12])
 		return
 	UiFrames.ui_draw(ci, rect, "note")
 	if due_now and fmod(t, 1.0) < DUE_GLOW:
 		ci.draw_rect(Rect2(rect.position.x, rect.position.y, 2.0, rect.size.y), pal[11])
 	# the pin: a red head with a bright speck, and a tiny shadow
-	ci.draw_rect(Rect2(rect.position.x + 5.0, rect.position.y + 1.0, 3.0, 3.0), pal[13])
+	var boss: bool = bool(n.get("boss", false))
+	if boss:
+		ci.draw_rect(Rect2(rect.position.x, rect.position.y, 2.0, rect.size.y), pal[3])  # a violet edge: not a customer's note
+	ci.draw_rect(Rect2(rect.position.x + 5.0, rect.position.y + 1.0, 3.0, 3.0), pal[2 if boss else 13])
 	ci.draw_rect(Rect2(rect.position.x + 5.0, rect.position.y + 1.0, 1.0, 1.0), pal[15])
 	ci.draw_rect(Rect2(rect.position.x + 6.0, rect.position.y + 4.0, 2.0, 1.0), pal[0])
 	var line: String = str(n["line"])
 	var due: int = int(n["due"])
 	var tail: String = "NOW" if due_now else ("N%d" % due if due > 0 else "")
-	_text_line(ci, pal, rect, line, 0, UiPixelFont.ui_width(tail) + 4 if tail != "" else 0)
+	_text_line(ci, pal, rect, line, 0, TAIL_RESERVE)
 	if tail != "":
-		UiPixelFont.ui_draw(ci, Vector2(rect.end.x - float(UiPixelFont.ui_width(tail)) - 4.0, rect.position.y + 5.0), tail,
+		var last: int = note_lines(line, TAIL_RESERVE).size() - 1
+		UiPixelFont.ui_draw(ci, Vector2(rect.end.x - float(UiPixelFont.ui_width(tail)) - 4.0, rect.position.y + 5.0 + LINE_H * float(last)), tail,
 			pal[12 if due_now else 8], 1, false, pal[0])
 	if fate == "done":
 		var su: float = clampf(fa / STAMP_SECS, 0.0, 1.0)
 		var sc: float = 1.0 + (1.0 - UiMotion.ui_out(su)) * 1.0  # slams down from big
 		var w: float = float(UiPixelFont.ui_width("DONE", 1)) + 8.0
 		var sr := Rect2(rect.position.x + rect.size.x * 0.5 - w * 0.5 * sc, rect.position.y + 1.0 - (sc - 1.0) * 3.0,
-			w * sc, (NOTE_H - 2.0) * sc)
+			w * sc, (nh - 2.0) * sc)
 		if su > 0.0:
 			ci.draw_rect(sr, pal[5])
 			ci.draw_rect(sr.grow(-1.0), pal[7])
@@ -165,11 +210,7 @@ func _draw_note(ci: CanvasItem, pal: PackedColorArray, n: Dictionary, at: Vector
 				ci.draw_rect(Rect2(sr.position.x - 2.0, sr.end.y, sr.size.x + 4.0, 1.0), pal[15])  # the thud
 
 
-static func _text_line(ci: CanvasItem, pal: PackedColorArray, rect: Rect2, line: String, col: int, reserve: float) -> void:
-	var room_w: int = int(rect.size.x - 14.0 - reserve)
-	var s: String = line
-	while UiPixelFont.ui_width(s) > room_w and s.length() > 3:
-		s = s.substr(0, s.length() - 1)
-	if s != line:
-		s = s.substr(0, maxi(s.length() - 1, 0)) + "."
-	UiPixelFont.ui_draw(ci, Vector2(rect.position.x + 12.0, rect.position.y + 5.0), s, pal[col], 1, false, pal[0])
+static func _text_line(ci: CanvasItem, pal: PackedColorArray, rect: Rect2, line: String, col: int, reserve: float, max_lines: int = 2) -> void:
+	var lines: PackedStringArray = note_lines(line, reserve)
+	for i: int in range(mini(lines.size(), max_lines)):
+		UiPixelFont.ui_draw(ci, Vector2(rect.position.x + 12.0, rect.position.y + 5.0 + LINE_H * float(i)), lines[i], pal[col], 1, false, pal[0])

@@ -3,12 +3,13 @@ extends TestCase
 
 const LEN_RANGE: Dictionary = {  ## name -> [min secs, max secs]
 	"wake": [2.0, 3.2], "run_won": [1.8, 2.2], "run_lost": [1.8, 2.2], "ambient": [8.0, 10.0], "dread": [3.0, 5.0],
-	"ui_click": [0.02, 0.2], "ui_hover": [0.02, 0.2],
+	"ui_click": [0.02, 0.2], "ui_hover": [0.02, 0.2], "card_deal": [0.02, 0.3], "card_flip": [0.02, 0.3],
+	"wheel_tick": [0.02, 0.2], "request_pinned": [0.02, 0.4], "collector_arrive": [1.0, 1.6],
 }
 const FULL_SCALE: float = 32767.0
 
 
-## Builds and decoded samples are cached per (name, seed): building all 23 sounds takes ~0.8 s and decoding the
+## Builds and decoded samples are cached per (name, seed): building all 53 sounds takes ~1.2 s and decoding the
 ## ambient loop sample by sample ~1.7 s, and several tests read the same sounds. The determinism test builds fresh.
 static var _au_built: Dictionary = {}  ## "name:seed" -> AudioStreamWAV
 static var _au_decoded: Dictionary = {}  ## "name:seed" -> PackedInt32Array
@@ -117,6 +118,29 @@ func test_every_event_kind_maps_in_player() -> void:
 		{"e": "run_lost", "night": 2, "cash": 1, "rent": 40},
 		{"e": "run_won", "cash": 500},
 		{"e": "invalid", "why": "no"},
+		{"e": "cast", "spell": "hex", "ok": true, "backfire": false, "text": "", "dread": 0.5},
+		{"e": "backfire", "spell": "hex", "kind": "x", "text": ""},
+		{"e": "found", "kind": "page", "id": "hex", "name": "x"},
+		{"e": "found", "kind": "curio", "id": "c", "name": "x"},
+		{"e": "found_hint", "kind": "page"},
+		{"e": "dice", "stake": 5, "payout": 10},
+		{"e": "hand_card", "who": "you", "card": 4, "total": 4},
+		{"e": "hand_end", "you": 5, "house": 7, "win": false, "stake": 5, "payout": 0},
+		{"e": "wheel", "stake": 5, "payout": 0, "prize": "", "dread": 0.0},
+		{"e": "pairs_deal", "count": 8, "tries": 4},
+		{"e": "pairs_flip", "i": 1, "card": "a", "name": "a"},
+		{"e": "pairs_match", "card": "a", "name": "a", "mult": 2.0, "dread": 0.0},
+		{"e": "pairs_miss", "a": 1, "b": 2},
+		{"e": "pairs_end", "matches": 1, "stake": 5, "payout": 8, "dread": 0.0},
+		{"e": "item_staked", "uid": 1, "name": "x", "win": true, "value": 9},
+		{"e": "lot", "name": "x", "price": 10, "item_uid": 1, "hidden": false},
+		{"e": "table_open", "night": 1, "games_left": 2, "lots_left": 1},
+		{"e": "request_done", "id": "r", "pay": 5, "reward": ""},
+		{"e": "request_failed", "id": "r"},
+		{"e": "collector_omen", "text": "t", "night": 3},
+		{"e": "collector_arrives", "want_text": "t", "line": ""},
+		{"e": "collector_pleased"},
+		{"e": "collector_refused"},
 	]
 	var seen: Dictionary = {}
 	for ev: Dictionary in samples:
@@ -129,6 +153,14 @@ func test_every_event_kind_maps_in_player() -> void:
 	p.on_events([{"e": "unknown_kind"}] as Array[Dictionary])  ## tolerated
 	p.ui("click")
 	p.ui("hover")
+	for kind: String in ["omen_flip", "altar_buy", "haunt_unlock", "request_pinned"]:
+		var n: int = p.played.size()
+		p.ui(kind)
+		assert_true(p.played.size() > n, "ui kind " + kind)
+	for name: String in SfxPlayer.UI_SOUNDS.values():
+		assert_true(SfxSynth.NAMES.has(name), name)
+	for spell: String in ["scry", "hex", "glamour", "banish", "summon", "seal"]:
+		assert_true(SfxSynth.NAMES.has("cast_" + spell), spell)
 	p.set_dread(0.8)
 	p.set_muted(true)
 	p.set_master_volume(0.5)

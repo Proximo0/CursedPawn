@@ -200,3 +200,72 @@ func test_title_lists_the_daily_after_new_run() -> void:
 	assert_eq(ids, ["continue", "new", "daily", "settings", "quit"] as Array[String])
 	assert_eq(str(TitleScreen.ts_entries(false, true, true, 12)[1]["label"]), "DAILY SEANCE #12")
 	ue_teardown()
+
+
+func test_omen_split_fills_both_sides_for_every_omen() -> void:
+	for o: Dictionary in UiEngage._list(UiEngage.force_omens, UiEngage.OMENS_PATH):
+		var sp: Dictionary = UiEngage.omen_split(str(o["id"]))
+		assert_true(str(sp["up"]) != "", "%s has an upside" % str(o["id"]))
+		assert_true(str(sp["down"]) != "", "%s has a downside" % str(o["id"]))
+
+
+func test_omen_split_known_cases() -> void:
+	var sp: Dictionary = UiEngage.omen_split("blind_lamp")
+	assert_true(str(sp["down"]).contains("FAILS") and str(sp["up"]).contains("CASH"))
+	sp = UiEngage.omen_split("hollow_coin")
+	assert_true(str(sp["up"]).contains("PAY") and str(sp["down"]).contains("LESS CASH"))
+	sp = UiEngage.omen_split("thin_veil")
+	assert_true(str(sp["down"]).contains("SOONER"))
+
+
+func test_omen_icon_is_48_by_40() -> void:
+	assert_eq(UiEngage.omen_icon("gravedigger").get_size(), Vector2(48, 40))
+	assert_true(UiEngage.omen_glyph("a").get_image().get_data() != UiEngage.omen_glyph("b").get_image().get_data())
+
+
+func test_collector_line_wording() -> void:
+	assert_eq(UiEngage.collector_line("a cursed doll"), "THE COLLECTOR WANTS A CURSED DOLL")
+	assert_eq(UiEngage.collector_line("The Collector wants a locket"), "THE COLLECTOR WANTS A LOCKET")
+
+
+func test_altar_entry_in_the_title_menu() -> void:
+	var ids: Array[String] = []
+	for e: Dictionary in TitleScreen.ts_entries(false, true, false, 0, true):
+		ids.append(str(e["id"]))
+	assert_eq(ids, ["new", "altar", "settings"] as Array[String])
+	assert_eq(TitleScreen.ts_entries(false, true).size(), 2, "no altar unless offered")
+
+
+func test_enter_flips_a_card_before_it_picks() -> void:
+	var s := UiRunSetup.new()
+	s.omen_ids = ["gravedigger", "blind_lamp", "deaf_ear"] as Array[String]
+	s.stage = UiRunSetup.STAGE_OMEN
+	s.focus_id = "card1"
+	assert_true(s.ts_key(KEY_ENTER))
+	assert_eq(s.picked, -2, "first Enter only turns the card")
+	assert_true(s._seen[1])
+	s.flips[1] = 1.0
+	s.ts_key(KEY_ENTER)
+	assert_eq(s.picked, 1, "the next Enter takes it")
+	s.free()
+
+
+func test_collector_note_on_the_board() -> void:
+	var b := UiRequests.new()
+	b.feed([{"e": "collector_omen", "text": "a cursed doll", "night": 3}] as Array[Dictionary])
+	assert_eq(b.notes.size(), 1)
+	assert_true(bool(b.notes[0]["boss"]))
+	assert_true(str(b.notes[0]["line"]).begins_with("THE COLLECTOR WANTS"))
+	b.feed([{"e": "collector_arrives", "want_text": "a cursed doll"}] as Array[Dictionary])
+	assert_true(bool(b.notes[0]["due_now"]))
+	assert_eq(b.notes.size(), 1, "no second note")
+	b.feed([{"e": "collector_pleased"}] as Array[Dictionary])
+	assert_eq(str(b.notes[0]["fate"]), "done")
+
+
+func test_long_request_notes_wrap_to_two_lines_not_cut() -> void:
+	var one: PackedStringArray = UiRequests.note_lines("MRS PELL WANTS CURSED DOLL", 0.0)
+	assert_eq(one.size(), 2)
+	assert_false(one[0].ends_with("."), "the first line is whole")
+	assert_eq(UiRequests.note_lines("HI", 0.0).size(), 1)
+	assert_true(UiRequests.note_height({"line": "MRS PELL WANTS CURSED DOLL"}) > UiRequests.NOTE_H)

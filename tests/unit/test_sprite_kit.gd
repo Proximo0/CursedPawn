@@ -151,7 +151,7 @@ func test_cursed_overlays_stay_inside_the_object() -> void:
 
 
 func test_horror_props_have_documented_sizes() -> void:
-	var sizes: Dictionary = {"eyes": Vector2i(16, 6), "portrait": Vector2i(24, 32), "silhouette": Vector2i(40, 96),
+	var sizes: Dictionary = {"eyes": Vector2i(24, 10), "portrait": Vector2i(24, 32), "silhouette": Vector2i(64, 144),
 		"hand": Vector2i(16, 12), "moth": Vector2i(8, 7), "clock": Vector2i(24, 48)}
 	for k: String in sizes:
 		var img: Image = SpriteKit.horror_texture(k).get_image()
@@ -283,3 +283,70 @@ func test_every_curio_has_a_24px_icon_and_a_repeatable_one() -> void:
 		seen[hash(img.get_data())] = true
 	assert_eq(seen.size(), rows.size())
 	assert_true(_opaque_count(SpriteKit.curio_icon("not_in_the_file").get_image()) > 60)
+
+
+func test_collector_has_four_distinct_palette_frames_at_72x110() -> void:
+	var frames: Array[ImageTexture] = SpriteKit.collector_frames()
+	assert_eq(frames.size(), 4)
+	var seen: Dictionary = {}
+	for f: ImageTexture in frames:
+		var img: Image = f.get_image()
+		assert_eq(img.get_size(), Vector2i(72, 110))
+		assert_true(_palette_ok(img))
+		assert_true(_opaque_count(img) > 2000, "a big figure")
+		seen[hash(img.get_data())] = true
+	assert_eq(seen.size(), 4, "rest, breath, blink and the open drawer differ")
+
+
+func test_omen_art_is_48x40_distinct_and_palette_only() -> void:
+	var seen: Dictionary = {}
+	var rows: Array = _rows("res://game/data/omens.json")
+	assert_eq(rows.size(), 12)
+	for row: Dictionary in rows:
+		var id: String = str(row["id"])
+		var img: Image = SpriteKit.omen_art(id).get_image()
+		assert_eq(img.get_size(), Vector2i(48, 40), id)
+		assert_true(_palette_ok(img), id)
+		assert_true(_opaque_count(img) > 1800, id)
+		assert_true(img.get_data() == SpriteKit.omen_art(id).get_image().get_data(), id + " repeat")
+		seen[hash(img.get_data())] = true
+	assert_eq(seen.size(), 12)
+	assert_eq(SpriteKit.omen_art("nope").get_image().get_size(), Vector2i(48, 40))
+
+
+func test_altar_pendulum_and_upgrade_icons() -> void:
+	var altar: Image = SpriteKit.altar_texture().get_image()
+	assert_eq(altar.get_size(), Vector2i(96, 64))
+	assert_true(_palette_ok(altar))
+	assert_true(_opaque_count(altar) > 2500)
+	var pend: Image = SpriteKit.pendulum_texture().get_image()
+	assert_eq(pend.get_size(), Vector2i(24, 24))
+	assert_true(_palette_ok(pend))
+	assert_true(pend.get_data() == SpriteKit.tool_texture("pendulum").get_image().get_data())
+	var seen: Dictionary = {}
+	for id: String in ["shelf", "spell_slot", "extra_cast", "tell_chance", "cheaper_rent", "pendulum", "altar_candle", "keep_cash", "x1", "x2", "x3"]:
+		var img: Image = SpriteKit.upgrade_icon(id).get_image()
+		assert_eq(img.get_size(), Vector2i(16, 16), id)
+		assert_true(_palette_ok(img), id)
+		assert_true(_opaque_count(img) > 30, id)
+		assert_true(img.get_data() == SpriteKit.upgrade_icon(id).get_image().get_data(), id + " repeat")
+		seen[hash(img.get_data())] = true
+	assert_true(seen.size() >= 8, "upgrade icons should differ")
+
+
+func test_customer_hands_differ_per_body_plan() -> void:
+	var seen: Dictionary = {}
+	for plan: String in ["normal", "hunched", "tall", "broad", "child"]:
+		var look: Dictionary = {"id": "x_" + plan, "cloak": "#4b2a78", "eyes": "#ffd27a", "height": 1.0, "plan": plan}
+		var img: Image = SpriteKit.customer_texture(look).get_image()
+		var hand: Image = img.get_region(Rect2i(8, 74, 20, 22))
+		seen[hash(hand.get_data())] = true
+	assert_eq(seen.size(), 5, "each body plan has its own hands")
+
+
+func test_curio_icons_follow_the_real_names() -> void:
+	# letter opener is a blade, not a hand; the planchette, cradle and rosary have their own shapes
+	var dag: Image = SpriteKit.curio_icon("curio_01").get_image()
+	var hand: Image = SpriteKit.curio_icon("curio_13").get_image()
+	assert_true(dag.get_data() != hand.get_data())
+	assert_eq(SpriteKit.SK_CURIO_BY_ID.size(), 24)

@@ -12,7 +12,7 @@ signal changed(field: String, value: float)
 const FIELDS: Array = [
 	["nights", 5.0, 1.0, 10.0, 1.0, "Run", "Nights in one run; survive them all to win."],
 	["start_cash", 190.0, 0.0, 1000.0, 5.0, "Run", "Cash at the start of a run."],
-	["rent_base", 38.0, 0.0, 500.0, 1.0, "Run", "Rent due at the end of night 1."],
+	["rent_base", 36.0, 0.0, 500.0, 1.0, "Run", "Rent due at the end of night 1."],
 	["rent_growth", 1.45, 1.0, 3.0, 0.05, "Run", "Rent multiplier per night (night n pays base * growth^(n-1))."],
 	["day_minutes", 280.0, 60.0, 720.0, 10.0, "Clock", "Shop minutes per day on the day clock."],
 	["customer_minutes", 25.0, 5.0, 120.0, 5.0, "Clock", "Day-clock minutes each customer takes before any tool or haggle."],
@@ -74,6 +74,13 @@ const FIELDS: Array = [
 	["requests_max", 2, 0, 5, 1, "Requests", "Customer requests open at once."],
 	["request_chance", 0.15, 0.0, 1.0, 0.01, "Requests", "Chance a customer slot also brings a new request (when fewer than requests_max are open)."],
 	["request_pay_mult", 2.2, 1.0, 5.0, 0.1, "Requests", "A request pays this multiple of the item's true value."],
+	["collector_pay_mult", 3.0, 1.0, 6.0, 0.1, "Collector", "The Collector pays this multiple of the item's true value for what he wants."],
+	["collector_curse_dread", 0.2, 0.0, 10.0, 0.1, "Collector", "Dread added by his parting curse when he leaves refused."],
+	["collector_toll_frac", 0.2, 0.0, 1.0, 0.05, "Collector", "Share of your cash he takes when he leaves refused."],
+	["collector_legendary_odds", 0.3, 0.0, 1.0, 0.05, "Collector", "Chance his gift is a legendary curio (else a rare one)."],
+	["ecto_per_night", 2.0, 0.0, 20.0, 0.5, "Altar", "Ectoplasm earned for each night survived in a run."],
+	["ecto_win_bonus", 5.0, 0.0, 50.0, 1.0, "Altar", "Extra ectoplasm for winning a run."],
+	["night_dread_relief", 0.0, 0.0, 5.0, 0.1, "Altar", "Dread the altar candle removes at every dawn (an upgrade; 0 without it)."],
 	["secs_per_customer", 25.0, 1.0, 120.0, 1.0, "Pacing", "Estimated real seconds a player spends per customer (lab run length)."],
 	["secs_per_inspect", 5.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per tool use."],
 	["secs_per_haggle", 4.0, 0.0, 30.0, 0.5, "Pacing", "Estimated real seconds per offer."],
@@ -146,6 +153,13 @@ var cursed_buyer_mult: float
 var requests_max: float
 var request_chance: float
 var request_pay_mult: float
+var collector_pay_mult: float
+var collector_curse_dread: float
+var collector_toll_frac: float
+var collector_legendary_odds: float
+var ecto_per_night: float
+var ecto_win_bonus: float
+var night_dread_relief: float
 var secs_per_customer: float
 var secs_per_inspect: float
 var secs_per_haggle: float

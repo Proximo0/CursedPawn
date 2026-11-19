@@ -1,0 +1,21 @@
+{
+	"name": "The Collector",
+	"lines": {
+		"arrive": "I have come for what is mine to collect.",
+		"want": "The Collector wants {want} by night {night}.",
+		"pleased": "Exquisite. The drawers will keep it well.",
+		"refused": "You waste an old man's patience.",
+		"curse": "Then take something of mine in its place."
+	},
+	"wants": [
+		{"category": "book", "text": "a book"},
+		{"category": "instrument", "text": "an instrument"},
+		{"category": "jewelry", "text": "a piece of jewelry"},
+		{"category": "relic", "text": "a relic"},
+		{"category": "toy", "text": "a toy"},
+		{"curse": "lucky_paw", "text": "something touched by the Lucky Paw"},
+		{"curse": "heavy_heart", "text": "something with a Heavy Heart"},
+		{"curse": "thirsty_mirror", "text": "something the Thirsty Mirror has drunk from"},
+		{"curse": "sleepwalker", "text": "something that walks in its sleep"}
+	]
+}

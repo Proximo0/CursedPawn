@@ -93,3 +93,27 @@ Washington gambling = paying + chance + a thing of value; each way to get a curi
 - `PlayerProfile.record_result(run, store) -> {unlocked, new_best, daily_counted}`; `RelicStore` fields
   `haunting_unlocked, best_cash, daily_last, daily_best`; profile VERSION 3 (older files load with defaults).
 - Lab INFO: survival at haunting 5 and 10, request counts. Haunting 10 lands near 13% (cautious).
+
+## Round 5: the Collector and the altar (logic)
+- **Collector** (`game/data/collector.json`, `Collector`): on the final night (`tuning.nights`, night 5) the first customer is
+  him (`customer` event with `boss: true`, `tid: "collector_boss"`, `who`, `want_text`, `line`, then `collector_arrives
+  {want_text, line}`). At night `nights - 2` start the want is rolled from the seed (own RNG) and `collector_omen {text,
+  night, arrive_night, want_text}` follows `night_start`. `run.collector` = `{want: {category, curse, text}, rolled,
+  arrived, done, result: ""|"pleased"|"refused"}` (snapshot/restore). `sell` of a matching item pays `value *
+  collector_pay_mult * pay_mult` (glamour works) and gives a rare/legendary curio `found`, then `collector_pleased {price,
+  line, reward}`. Passing, fleeing or holding nothing: `collector_refused {toll, dread, line, curse_line}` (cash -
+  `collector_toll_frac`, Dread + `collector_curse_dread`). Tuning: `collector_pay_mult` 3.0, `collector_curse_dread` 0.2,
+  `collector_toll_frac` 0.2, `collector_legendary_odds` 0.3.
+- **Ectoplasm and the altar** (`upgrades.json`, `Upgrades`): `run_opts.upgrades = {id: rank}` is recorded in `run.opts` and
+  `RunRecording.opts`. `Upgrades.apply(tun, ranks) -> {overrides, flags}` (per rank: `add`, `mul` compounds, `set`),
+  `buy(id, store) -> {ok, why, rank, cost}` (next rank costs `cost * (rank + 1)`), `cost_of`, `ecto_for(run)`
+  (`ecto_per_night` * nights survived + `ecto_win_bonus` on a win, times 1 + 0.1 * haunting), `clean`, `flags_for`.
+  Upgrades: extra_cast, start_spell (opts `start_spell` id, else the first unknown spell), keen_eye, thrifty_rent, pendulum,
+  loss_purse, altar_candle (`night_dread_relief`; `night_start` carries `dread_relief` when > 0), deep_pockets.
+- **Pendulum**: `inspect` with tool `pendulum` when `run.tool_ok("pendulum")`; `inspected` has `tell` "cursed" or "clean"
+  (certain, no curse id), adds "pendulum" to the seller's `tells` only when cursed, costs `inspect_minutes`, does not
+  sharpen the estimate. `Catalog.TOOLS` is unchanged (four tools).
+- **Profile** version 4: `RelicStore.ecto, upgrades, carry_cash`; `record_result` also returns `{ecto, carried}` and banks
+  ectoplasm; `PlayerProfile.altar_opts(store)` gives `{upgrades, carry_cash}` to merge into the next run's opts.
+- Bots keep a want-matching item for the Collector on the evening before; cautious uses the Pendulum first. Lab adds the
+  `*_collector` and `upgrades_info` lines (maxed upgrades: cautious 0.97, greedy 0.53).

@@ -46,6 +46,10 @@ func _ready() -> void:
 	for style: String in ShopBot.STYLES:
 		var s: Dictionary = stats[style]
 		print("LAB %s_requests INFO done=%.2f failed=%.2f per run" % [style, _lab_rate(s["req_done"], runs), _lab_rate(s["req_failed"], runs)])
+	for style: String in ShopBot.STYLES:
+		var s: Dictionary = stats[style]
+		print("LAB %s_collector INFO pleased=%.2f refused=%.2f per run (the rest died before night 5)" % [
+			style, _lab_rate(s["col_pleased"], runs), _lab_rate(s["col_refused"], runs)])
 	for level: int in [5, 10]:
 		var hc: Dictionary = _lab_play(ShopBot.CAUTIOUS, runs, cat, {"haunting": level})
 		var hg: Dictionary = _lab_play(ShopBot.GREEDY, runs, cat, {"haunting": level})
@@ -53,6 +57,16 @@ func _ready() -> void:
 			"stuck/diverged with opts")
 		print("LAB haunting%d_info INFO cautious_survival=%.2f greedy_survival=%.2f (target for 10: about 0.05-0.15)" % [
 			level, _lab_rate(hc["won"], runs), _lab_rate(hg["won"], runs)])
+	var maxed: Dictionary = {}
+	for u: Dictionary in Upgrades.all():
+		maxed[str(u["id"])] = int(u["max_rank"])
+	var uc: Dictionary = _lab_play(ShopBot.CAUTIOUS, runs, cat, {"upgrades": maxed})
+	var ug: Dictionary = _lab_play(ShopBot.GREEDY, runs, cat, {"upgrades": maxed})
+	_lab_line("upgrades_checks", uc["stuck"] + ug["stuck"] + uc["diverged"] + ug["diverged"] == 0, true, "stuck/diverged with every upgrade")
+	print("LAB upgrades_info INFO every upgrade maxed: cautious_survival=%.2f greedy_survival=%.2f (targets above are with upgrades off)" % [
+		_lab_rate(uc["won"], runs), _lab_rate(ug["won"], runs)])
+	var cprob: PackedStringArray = Collector.problems(cat)
+	_lab_line("collector_data", cprob.is_empty(), true, "problems=%d %s" % [cprob.size(), "; ".join(cprob)])
 	print("LAB done runs=%d warn=%d fail=%d" % [runs, warns, fails])
 	var json_path: String = _lab_arg("json", "")
 	if json_path != "":
@@ -71,7 +85,7 @@ func _lab_arg(key: String, default: String) -> String:
 
 func _lab_play(style: String, runs: int, cat: Catalog, opts: Dictionary = {}) -> Dictionary:
 	var s: Dictionary = {"won": 0, "won_cash": [], "minutes": [], "woke3": 0, "wakes": [], "stuck": 0,
-		"diverged": 0, "checked": 0, "lost_night": {}, "req_done": 0, "req_failed": 0}
+		"diverged": 0, "checked": 0, "lost_night": {}, "req_done": 0, "req_failed": 0, "col_pleased": 0, "col_refused": 0}
 	var bot := ShopBot.new(style)
 	for i: int in range(runs):
 		var tun := Tuning.new()
@@ -88,6 +102,8 @@ func _lab_play(style: String, runs: int, cat: Catalog, opts: Dictionary = {}) ->
 			s["checked"] += 1
 			if rec.first_divergence(cat) != -1:
 				s["diverged"] += 1
+		s["col_pleased"] += 1 if str(run.collector.get("result", "")) == "pleased" else 0
+		s["col_refused"] += 1 if str(run.collector.get("result", "")) == "refused" else 0
 		s["req_done"] += run.requests_done
 		s["req_failed"] += run.requests_failed
 		(s["minutes"] as Array).append(run.play_secs / 60.0)

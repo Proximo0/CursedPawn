@@ -11,14 +11,15 @@ signal cancelled
 
 const STAGE_HAUNT: String = "haunt"
 const STAGE_OMEN: String = "omen"
-const CARD_SIZE := Vector2(96.0, 160.0)
-const CARD_Y: float = 92.0
+const CARD_SIZE := Vector2(100.0, 196.0)
+const CARD_Y: float = 80.0
 const CARD_CX: Array[float] = [140.0, 320.0, 500.0]
 const DEAL_STEP: float = 0.2
 const DEAL_SECS: float = 0.45
 const FLIP_RATE: float = 7.0
 const PICK_SECS: float = 0.7
-const NONE_RECT := Rect2(260.0, 318.0, 120.0, 20.0)
+const NONE_RECT := Rect2(260.0, 322.0, 120.0, 20.0)
+const FACE_UP: float = 0.9  ## a card this far over counts as turned up
 const LEVEL_RULE_LINES: int = 11
 
 var unlocked: int = 0  ## the highest Haunting the profile allows
@@ -31,6 +32,7 @@ var picked: int = -2  ## -2 nothing, -1 no omen, 0..2 a card
 var _stage_t: float = 0.0  ## canvas.t when the stage began
 var _pick_t: float = 0.0
 var _seen: Array[bool] = [false, false, false]
+var _flip_snd: Array[bool] = [false, false, false]  ## the omen_flip sound played for this card
 var _back: ImageTexture
 var _emitted: bool = false
 
@@ -109,7 +111,22 @@ func ts_key(k: int) -> bool:
 		elif picked == -2:
 			ts_move_focus(1 if k == KEY_RIGHT else -1)
 		return true
+	if (k == KEY_ENTER or k == KEY_KP_ENTER or k == KEY_SPACE) and stage == STAGE_OMEN and picked == -2:
+		var i: int = card_index(focus_id)
+		if i >= 0 and i < flips.size() and not turned_up(i):
+			_seen[i] = true  # the first press turns the card over; only the next one takes it
+			return true
 	return super.ts_key(k)
+
+
+## The card index of a widget id ("card1" is 1), -1 for anything else.
+static func card_index(id: String) -> int:
+	return int(id.trim_prefix("card")) if id.begins_with("card") and id.length() > 4 else -1
+
+
+## True once card i has turned face up (or is far enough over that the player has read it).
+func turned_up(i: int) -> bool:
+	return i >= 0 and i < flips.size() and flips[i] >= FACE_UP
 
 
 func _process(delta: float) -> void:
@@ -124,6 +141,10 @@ func _process(delta: float) -> void:
 		if canvas.t - _stage_t < DEAL_STEP * float(i) + DEAL_SECS:
 			want = 0.0
 		flips[i] = UiMotion.ui_approach(flips[i], want, delta, FLIP_RATE)
+		if flips[i] > 0.5 and not _flip_snd[i]:
+			_flip_snd[i] = true
+			if sfx != null:
+				sfx.ui("omen_flip")
 	if picked != -2 and not _emitted:
 		_pick_t += delta
 		if _pick_t >= PICK_SECS:
@@ -219,8 +240,8 @@ func _draw_omen(c: TsCanvas) -> void:
 			c.text_c(cx, 68.0, "HAUNTING %d: %s" % [level, UiEngage.haunting_name(level)], 13)
 	for i: int in range(omen_ids.size()):
 		_draw_card(c, i, t)
-	c.button("none", NONE_RECT, "NO OMEN", t > 1.0 and picked == -2, false)
-	if focus_id == "none" and t > 1.0:
+	c.button("none", NONE_RECT, "NO OMEN", picked == -2, false)
+	if focus_id == "none":
 		c.cursor_flame(Vector2(NONE_RECT.position.x - 14.0, NONE_RECT.position.y + 6.0))
 	if UiEngage.picker_max(unlocked) > 0:
 		c.button("back", Rect2(20.0, 322.0, 70.0, 16.0), "BACK", picked == -2)
@@ -271,15 +292,35 @@ func _draw_face(c: TsCanvas, r: Rect2, oid: String, full: bool, is_pick: bool) -
 		return
 	var cx: float = r.position.x + r.size.x * 0.5
 	c.fill(Rect2(r.position.x + 4.0, r.position.y + 4.0, r.size.x - 8.0, 1.0), 12)
-	var nm: String = UiEngage.omen_name(oid)
-	var lines: PackedStringArray = UiPixelFont.ui_wrap(nm, int(r.size.x) - 12)
-	var y: float = r.position.y + 10.0
+	var lines: PackedStringArray = UiPixelFont.ui_wrap(UiEngage.omen_name(oid), int(r.size.x) - 12)
+	var y: float = r.position.y + 9.0
 	for j: int in range(mini(lines.size(), 2)):
 		c.text_c(cx, y, lines[j], 12 if not is_pick else 13, 1, false)
 		y += float(UiPixelFont.LINE_H)
-	y += 2.0
+	y = r.position.y + 31.0
 	c.fill(Rect2(r.position.x + 12.0, y, r.size.x - 24.0, 1.0), 10)
-	y += 6.0
-	var body: PackedStringArray = UiPixelFont.ui_wrap(UiEngage.omen_text(oid), int(r.size.x) - 14)
-	for j: int in range(mini(body.size(), 11)):
-		c.text(Vector2(r.position.x + 7.0, y + float(j * UiPixelFont.LINE_H)), body[j], 0, 1, false)
+	# the art slot: a small inset window with the omen's picture
+	var slot := Rect2(cx - 26.0, y + 5.0, 52.0, 44.0)
+	c.fill(slot, 1)
+	c.fill(Rect2(slot.position.x, slot.position.y, slot.size.x, 1.0), 8)
+	c.fill(Rect2(slot.position.x, slot.end.y - 1.0, slot.size.x, 1.0), 9)
+	c.draw_texture(UiEngage.omen_icon(oid), slot.position + Vector2(2.0, 2.0))
+	y = slot.end.y + 7.0
+	var split: Dictionary = UiEngage.omen_split(oid)
+	y = _draw_clause(c, r, y, "+", str(split["up"]), 7, 5, 4)
+	y += 4.0
+	_draw_clause(c, r, y, "-", str(split["down"]), 13, 12, 4)
+
+
+## One coloured clause with its +/- mark; returns the y below it.
+func _draw_clause(c: TsCanvas, r: Rect2, y: float, mark: String, text: String, col: int, mark_col: int, max_lines: int) -> float:
+	if text == "":
+		return y
+	var lines: PackedStringArray = UiPixelFont.ui_wrap(text, int(r.size.x) - 28)
+	c.text(Vector2(r.position.x + 7.0, y), mark, col, 1, false)
+	for j: int in range(mini(lines.size(), max_lines)):
+		var ln: String = lines[j]
+		if j == max_lines - 1 and lines.size() > max_lines:
+			ln = ln.substr(0, maxi(ln.length() - 2, 1)) + ".."
+		c.text(Vector2(r.position.x + 16.0, y + float(j * UiPixelFont.LINE_H)), ln, col if j == 0 else mark_col + 2, 1, false)
+	return y + float(mini(lines.size(), max_lines) * UiPixelFont.LINE_H)

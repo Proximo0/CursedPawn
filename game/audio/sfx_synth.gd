@@ -21,6 +21,9 @@ const NAMES: PackedStringArray = [
 	"door_bell", "footsteps", "coin_clink", "cash_register", "uv_lamp", "scale_clank", "listen", "touch",
 	"tell_found", "haggle_counter", "customer_left", "tarot_flip", "tarot_win", "tarot_lose", "wake", "night_end",
 	"run_won", "run_lost", "ui_click", "ui_hover", "wrong_note", "ambient", "dread",
+	"cast_scry", "cast_hex", "cast_glamour", "cast_banish", "cast_summon", "cast_seal",
+	"backfire", "found_page", "found_curio", "found_hint", "dice_roll", "card_deal", "card_flip", "wheel_tick", "wheel_settle", "pairs_match",
+	"pairs_miss", "stake_win", "stake_lose", "lot_unwrap", "table_open", "request_pinned", "request_done", "request_failed", "omen_flip", "collector_arrive", "collector_pleased", "collector_refused", "altar_buy", "haunt_unlock",
 ]
 ## Sounds that loop (ambient bed and dread layer); the rest are one-shots.
 const LOOPS: PackedStringArray = ["ambient", "dread"]
@@ -63,10 +66,16 @@ static func au_voice(buf: PackedFloat32Array, wave: int, t0: float, dur: float, 
 	var y: float = 0.0
 	var inv_n: float = 1.0 / maxf(float(n), 1.0)
 	var inv_sr: float = 1.0 / SR
+	var df: float = f1 - f0
+	var ea: float = maxf(env.x, 0.0001)
+	var es: float = env.z
+	var dec: float = 1.0  ## exp(-5 (t - a) / d), advanced by one multiply per sample once past the attack
+	var dec_k: float = exp(-5.0 * inv_sr / maxf(env.y, 0.0001))
+	var rel_start: float = dur - env.w
+	var inv_r: float = 1.0 / maxf(env.w, 0.0001)
 	for i: int in range(n):
 		var t: float = float(i) * inv_sr
-		var f: float = f0 + (f1 - f0) * float(i) * inv_n
-		phase += f * inv_sr
+		phase += (f0 + df * float(i) * inv_n) * inv_sr
 		phase -= floorf(phase)
 		var x: float
 		if wave == SINE:
@@ -78,7 +87,15 @@ static func au_voice(buf: PackedFloat32Array, wave: int, t0: float, dur: float, 
 		else:
 			y += lp * (rng.randf() * 2.0 - 1.0 - y)
 			x = y
-		buf[i0 + i] += x * amp * au_env(t, dur, env.x, env.y, env.z, env.w)
+		var e: float
+		if t < ea:
+			e = t / ea
+		else:
+			e = es + (1.0 - es) * dec
+			dec *= dec_k
+		if t > rel_start:
+			e *= maxf(0.0, (dur - t) * inv_r)
+		buf[i0 + i] += x * amp * e
 
 
 ## A struck-bell voice: inharmonic sine partials with shorter lives for the higher ones.
@@ -216,6 +233,36 @@ static func build(name: String, seed_value: int = 1) -> AudioStreamWAV:
 		"wrong_note": return wrong_note(r)
 		"ambient": return ambient(r)
 		"dread": return dread(r)
+		"cast_scry": return cast_scry(r)
+		"cast_hex": return cast_hex(r)
+		"cast_glamour": return cast_glamour(r)
+		"cast_banish": return cast_banish(r)
+		"cast_summon": return cast_summon(r)
+		"cast_seal": return cast_seal(r)
+		"backfire": return backfire(r)
+		"found_page": return found_page(r)
+		"found_curio": return found_curio(r)
+		"found_hint": return found_hint(r)
+		"dice_roll": return dice_roll(r)
+		"card_deal": return card_deal(r)
+		"card_flip": return card_flip(r)
+		"wheel_tick": return wheel_tick(r)
+		"wheel_settle": return wheel_settle(r)
+		"pairs_match": return pairs_match(r)
+		"pairs_miss": return pairs_miss(r)
+		"stake_win": return stake_win(r)
+		"stake_lose": return stake_lose(r)
+		"lot_unwrap": return lot_unwrap(r)
+		"table_open": return table_open(r)
+		"request_pinned": return request_pinned(r)
+		"request_done": return request_done(r)
+		"request_failed": return request_failed(r)
+		"omen_flip": return omen_flip(r)
+		"collector_arrive": return collector_arrive(r)
+		"collector_pleased": return collector_pleased(r)
+		"collector_refused": return collector_refused(r)
+		"altar_buy": return altar_buy(r)
+		"haunt_unlock": return haunt_unlock(r)
 	return null
 
 
@@ -509,3 +556,307 @@ static func dread(_r: RandomNumberGenerator) -> AudioStreamWAV:
 	for i: int in range(n):
 		b[i] *= g
 	return au_to_wav(b, true)
+
+
+# ---------------------------------------------------------------- round 5: spells, finds, the table, the Collector
+
+## The shared spell voice: a low-passed breath swelling in, a glided organ tone and a wax-soft thud. The six casts
+## differ in pitch, direction and one colour (bell, shimmer, rattle).
+static func _cast(r: RandomNumberGenerator, f0: float, f1: float, colour: int) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.7)
+	var breath: PackedFloat32Array = au_buf(0.5)
+	au_voice(breath, NOISE, 0.0, 0.5, 0.0, 0.0, 1.0, Vector4(0.2, 0.15, 0.4, 0.2), r, 0.12)
+	au_mix(b, breath, 0.0, 0.8)
+	au_organ(b, r, 0.02, 0.6, f0, 0.3, f1)
+	au_voice(b, SINE, 0.0, 0.12, 110.0, 60.0, 0.5, Vector4(0.003, 0.04, 0.0, 0.06), r)
+	if colour == 0:  ## scry: a glass bell far off
+		au_bell(b, r, 0.2, f1 * 3.0, 0.45, 0.18)
+	elif colour == 1:  ## hex: a dry rattle of knuckle bones
+		for k: int in range(4):
+			au_voice(b, NOISE, 0.1 + 0.07 * float(k), 0.02, 0.0, 0.0, 0.4, Vector4(0.001, 0.008, 0.0, 0.01), r, 0.3)
+	elif colour == 2:  ## glamour: a slow shimmer
+		var sh: PackedFloat32Array = au_buf(0.7)
+		au_voice(sh, SINE, 0.05, 0.6, f1 * 2.0, f1 * 2.02, 0.4, Vector4(0.1, 0.2, 0.3, 0.2), r)
+		au_tremolo(sh, 14.0, 0.8)
+		au_mix(b, sh, 0.0, 0.5)
+	elif colour == 3:  ## banish: a hollow thud as it goes
+		au_voice(b, SINE, 0.3, 0.3, 90.0, 38.0, 0.7, Vector4(0.004, 0.1, 0.0, 0.12), r)
+	elif colour == 4:  ## summon: two knocks on the wood
+		for k: int in range(2):
+			au_voice(b, SINE, 0.3 + 0.12 * float(k), 0.08, 190.0, 120.0, 0.6, Vector4(0.002, 0.03, 0.0, 0.04), r)
+			au_voice(b, NOISE, 0.3 + 0.12 * float(k), 0.02, 0.0, 0.0, 0.4, Vector4(0.001, 0.008, 0.0, 0.01), r, 0.25)
+	else:  ## seal: a wax press, then silence
+		au_voice(b, NOISE, 0.3, 0.1, 0.0, 0.0, 0.5, Vector4(0.01, 0.04, 0.0, 0.05), r, 0.1)
+		au_voice(b, SINE, 0.3, 0.2, 70.0, 45.0, 0.7, Vector4(0.005, 0.08, 0.0, 0.1), r)
+	au_lowpass(b, 0.45)
+	return au_finish(b, SFX_PEAK)
+
+
+static func cast_scry(r: RandomNumberGenerator) -> AudioStreamWAV:
+	return _cast(r, 392.0, 523.0, 0)
+
+
+static func cast_hex(r: RandomNumberGenerator) -> AudioStreamWAV:
+	return _cast(r, 196.0, 147.0, 1)
+
+
+static func cast_glamour(r: RandomNumberGenerator) -> AudioStreamWAV:
+	return _cast(r, 330.0, 440.0, 2)
+
+
+static func cast_banish(r: RandomNumberGenerator) -> AudioStreamWAV:
+	return _cast(r, 262.0, 131.0, 3)
+
+
+static func cast_summon(r: RandomNumberGenerator) -> AudioStreamWAV:
+	return _cast(r, 220.0, 294.0, 4)
+
+
+static func cast_seal(r: RandomNumberGenerator) -> AudioStreamWAV:
+	return _cast(r, 175.0, 165.0, 5)
+
+
+## A spell turning on you: a flat, dissonant low cluster and a crack.
+static func backfire(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.8)
+	var cl: PackedFloat32Array = au_buf(0.8)
+	var notes: PackedFloat32Array = [50.0, 51.0, 56.0]
+	for n: float in notes:
+		au_voice(cl, SAW, 0.0, 0.75, au_hz(n), au_hz(n) * 0.95, 0.4, Vector4(0.01, 0.4, 0.4, 0.3), r)
+	au_lowpass(cl, 0.15)
+	au_mix(b, cl, 0.0, 2.0)
+	au_voice(b, NOISE, 0.0, 0.12, 0.0, 0.0, 0.7, Vector4(0.001, 0.04, 0.0, 0.05), r, 0.4)
+	au_voice(b, SINE, 0.0, 0.25, 100.0, 40.0, 0.7, Vector4(0.002, 0.08, 0.0, 0.1), r)
+	return au_finish(b, SFX_PEAK)
+
+
+## A page found: a dry paper rustle and one soft bell.
+static func found_page(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.7)
+	for k: int in range(5):
+		au_voice(b, NOISE, 0.06 * float(k), 0.05, 0.0, 0.0, 0.3 + 0.2 * r.randf(), Vector4(0.005, 0.02, 0.0, 0.02), r, 0.35)
+	au_bell(b, r, 0.3, au_hz(79.0), 0.4, 0.25)
+	au_lowpass(b, 0.6)
+	return au_finish(b, SFX_PEAK)
+
+
+## A curio found: brass clink and a warm two-note bell.
+static func found_curio(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.9)
+	au_voice(b, NOISE, 0.0, 0.01, 0.0, 0.0, 0.5, Vector4(0.001, 0.004, 0.0, 0.005), r, 0.7)
+	au_bell(b, r, 0.02, au_hz(76.0), 0.8, 0.35)
+	au_bell(b, r, 0.14, au_hz(83.0), 0.7, 0.3)
+	au_lowpass(b, 0.7)
+	return au_finish(b, SFX_PEAK)
+
+
+## A hint whispered: three breathy syllables, quiet.
+static func found_hint(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.9)
+	var w: PackedFloat32Array = au_buf(0.9)
+	var starts: PackedFloat32Array = [0.0, 0.25, 0.5]
+	for k: int in range(3):
+		au_voice(w, NOISE, starts[k], 0.22, 0.0, 0.0, 0.8, Vector4(0.06, 0.1, 0.4, 0.1), r, 0.3)
+	au_tremolo(w, 7.0, 0.5)
+	au_mix(b, w, 0.0, 1.0)
+	au_voice(b, SINE, 0.0, 0.8, 520.0, 470.0, 0.05, Vector4(0.2, 0.3, 0.3, 0.3), r)
+	au_lowpass(b, 0.5)
+	return au_finish(b, 0.3)
+
+
+## Knucklebone dice tumbling on wood.
+static func dice_roll(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.7)
+	var t: float = 0.0
+	for k: int in range(7):
+		var amp: float = 0.8 - 0.08 * float(k)
+		au_voice(b, SINE, t, 0.05, 260.0 + 80.0 * r.randf(), 140.0, 0.6 * amp, Vector4(0.001, 0.015, 0.0, 0.02), r)
+		au_voice(b, NOISE, t, 0.015, 0.0, 0.0, 0.5 * amp, Vector4(0.001, 0.005, 0.0, 0.006), r, 0.3)
+		t += 0.04 + 0.012 * float(k) + 0.02 * r.randf()
+	return au_finish(b, SFX_PEAK)
+
+
+static func card_deal(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.16)
+	au_voice(b, NOISE, 0.0, 0.14, 0.0, 0.0, 0.6, Vector4(0.01, 0.05, 0.0, 0.07), r, 0.35)
+	return au_finish(b, 0.4)
+
+
+static func card_flip(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.2)
+	au_voice(b, NOISE, 0.0, 0.07, 0.0, 0.0, 0.4, Vector4(0.03, 0.03, 0.0, 0.03), r, 0.4)
+	au_voice(b, NOISE, 0.09, 0.02, 0.0, 0.0, 0.7, Vector4(0.001, 0.008, 0.0, 0.01), r, 0.3)
+	au_voice(b, SINE, 0.09, 0.08, 420.0, 280.0, 0.2, Vector4(0.002, 0.03, 0.0, 0.04), r)
+	return au_finish(b, 0.4)
+
+
+static func wheel_tick(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.05)
+	au_voice(b, NOISE, 0.0, 0.012, 0.0, 0.0, 0.6, Vector4(0.0005, 0.004, 0.0, 0.005), r, 0.35)
+	au_voice(b, SINE, 0.0, 0.04, 700.0, 500.0, 0.4, Vector4(0.001, 0.01, 0.0, 0.02), r)
+	return au_finish(b, 0.35)
+
+
+static func wheel_settle(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.6)
+	au_voice(b, NOISE, 0.0, 0.02, 0.0, 0.0, 0.6, Vector4(0.0005, 0.006, 0.0, 0.008), r, 0.35)
+	au_voice(b, SINE, 0.0, 0.2, 320.0, 180.0, 0.6, Vector4(0.001, 0.05, 0.0, 0.08), r)
+	au_bell(b, r, 0.03, au_hz(67.0), 0.5, 0.2)
+	au_voice(b, SINE, 0.0, 0.2, 90.0, 55.0, 0.5, Vector4(0.003, 0.06, 0.0, 0.08), r)
+	return au_finish(b, SFX_PEAK)
+
+
+## A pair found: two warm bell notes a third apart.
+static func pairs_match(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.7)
+	au_bell(b, r, 0.0, au_hz(72.0), 0.6, 0.4)
+	au_bell(b, r, 0.12, au_hz(76.0), 0.55, 0.4)
+	au_lowpass(b, 0.7)
+	return au_finish(b, SFX_PEAK)
+
+
+static func pairs_miss(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.4)
+	au_voice(b, SINE, 0.0, 0.3, 170.0, 120.0, 0.7, Vector4(0.003, 0.1, 0.0, 0.12), r)
+	au_voice(b, NOISE, 0.0, 0.05, 0.0, 0.0, 0.4, Vector4(0.002, 0.02, 0.0, 0.02), r, 0.2)
+	return au_finish(b, SFX_PEAK)
+
+
+static func stake_win(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.8)
+	au_voice(b, NOISE, 0.0, 0.01, 0.0, 0.0, 0.5, Vector4(0.001, 0.004, 0.0, 0.005), r, 0.7)
+	au_bell(b, r, 0.0, au_hz(74.0), 0.7, 0.35)
+	au_bell(b, r, 0.1, au_hz(79.0), 0.65, 0.3)
+	au_bell(b, r, 0.2, au_hz(86.0), 0.6, 0.2)
+	au_lowpass(b, 0.7)
+	return au_finish(b, SFX_PEAK)
+
+
+static func stake_lose(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.8)
+	au_organ(b, r, 0.0, 0.7, au_hz(52.0), 0.5, au_hz(49.0))
+	au_voice(b, NOISE, 0.0, 0.08, 0.0, 0.0, 0.4, Vector4(0.002, 0.03, 0.0, 0.03), r, 0.25)
+	au_lowpass(b, 0.25)
+	return au_finish(b, SFX_PEAK)
+
+
+## A lot unwrapped: paper and twine, then a wooden knock.
+static func lot_unwrap(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.7)
+	for k: int in range(7):
+		au_voice(b, NOISE, 0.05 * float(k) + 0.02 * r.randf(), 0.04, 0.0, 0.0, 0.3 + 0.3 * r.randf(),
+				Vector4(0.003, 0.015, 0.0, 0.015), r, 0.3)
+	au_voice(b, NOISE, 0.4, 0.015, 0.0, 0.0, 0.6, Vector4(0.001, 0.005, 0.0, 0.006), r, 0.4)  ## twine snaps
+	au_voice(b, SINE, 0.5, 0.15, 200.0, 110.0, 0.5, Vector4(0.002, 0.05, 0.0, 0.06), r)
+	return au_finish(b, SFX_PEAK)
+
+
+## The Midnight Table opens: a low organ chord (A minor, wide) swelling in.
+static func table_open(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(1.3)
+	var notes: PackedFloat32Array = [33.0, 40.0, 48.0, 52.0]
+	for n: float in notes:
+		au_organ(b, r, 0.0, 1.25, au_hz(n), 0.4, au_hz(n) * 1.003)
+	au_lowpass(b, 0.2)
+	return au_finish(b, STINGER_PEAK)
+
+
+static func request_pinned(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.25)
+	au_voice(b, SINE, 0.0, 0.1, 240.0, 130.0, 0.7, Vector4(0.001, 0.03, 0.0, 0.05), r)
+	au_voice(b, NOISE, 0.0, 0.012, 0.0, 0.0, 0.5, Vector4(0.0005, 0.004, 0.0, 0.005), r, 0.4)
+	au_voice(b, SINE, 0.08, 0.14, 1400.0, 1400.0, 0.08, Vector4(0.001, 0.05, 0.0, 0.07), r)  ## the pin rings
+	return au_finish(b, SFX_PEAK)
+
+
+## A rubber stamp: a heavy thud, a paper slap, a small bell.
+static func request_done(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.6)
+	au_voice(b, SINE, 0.0, 0.18, 130.0, 55.0, 0.9, Vector4(0.002, 0.05, 0.0, 0.08), r)
+	au_voice(b, NOISE, 0.0, 0.06, 0.0, 0.0, 0.6, Vector4(0.001, 0.02, 0.0, 0.03), r, 0.25)
+	au_bell(b, r, 0.12, au_hz(79.0), 0.45, 0.25)
+	return au_finish(b, SFX_PEAK)
+
+
+## A paper tear: a ripping noise sweep with a ragged crackle, then a low sigh.
+static func request_failed(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.6)
+	var t: PackedFloat32Array = au_buf(0.35)
+	au_voice(t, NOISE, 0.0, 0.33, 0.0, 0.0, 0.8, Vector4(0.02, 0.15, 0.3, 0.1), r, 0.5)
+	au_tremolo(t, 38.0, 0.8)
+	au_mix(b, t, 0.0, 1.0)
+	au_voice(b, SINE, 0.25, 0.3, 150.0, 85.0, 0.4, Vector4(0.01, 0.1, 0.0, 0.15), r)
+	au_lowpass(b, 0.55)
+	return au_finish(b, SFX_PEAK)
+
+
+## An omen card turned: a flip and a faint far bell.
+static func omen_flip(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.6)
+	au_voice(b, NOISE, 0.0, 0.1, 0.0, 0.0, 0.4, Vector4(0.04, 0.04, 0.0, 0.04), r, 0.35)
+	au_voice(b, NOISE, 0.11, 0.02, 0.0, 0.0, 0.6, Vector4(0.001, 0.008, 0.0, 0.01), r, 0.3)
+	au_bell(b, r, 0.12, au_hz(69.0), 0.45, 0.2)
+	au_lowpass(b, 0.6)
+	return au_finish(b, SFX_PEAK)
+
+
+## The Collector arrives: a slow low bell toll over a minor-second organ drone that never resolves.
+static func collector_arrive(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(1.5)
+	var drone: PackedFloat32Array = au_buf(1.5)
+	au_organ(drone, r, 0.0, 1.45, au_hz(38.0), 0.4, au_hz(38.0))
+	au_organ(drone, r, 0.3, 1.15, au_hz(39.0), 0.3, au_hz(39.0))
+	au_lowpass(drone, 0.2)
+	au_mix(b, drone, 0.0, 2.0)
+	au_bell(b, r, 0.05, au_hz(50.0), 1.4, 0.5)
+	au_bell(b, r, 0.7, au_hz(45.0), 0.75, 0.4)
+	au_voice(b, NOISE, 0.0, 1.2, 0.0, 0.0, 0.1, Vector4(0.6, 0.3, 0.5, 0.4), r, 0.05)
+	return au_finish(b, STINGER_PEAK)
+
+
+## He is pleased: the motif lifts a third and rests, a glimmer of brass.
+static func collector_pleased(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(1.2)
+	au_organ(b, r, 0.0, 1.1, au_hz(38.0), 0.4, au_hz(38.0))
+	au_organ(b, r, 0.2, 0.95, au_hz(42.0), 0.3, au_hz(42.0))
+	au_lowpass(b, 0.2)
+	au_bell(b, r, 0.0, au_hz(50.0), 1.0, 0.3)
+	au_bell(b, r, 0.35, au_hz(66.0), 0.8, 0.3)
+	return au_finish(b, STINGER_PEAK)
+
+
+## He is not: a tritone sinking, two knocks and a cold hiss.
+static func collector_refused(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(1.3)
+	var d: PackedFloat32Array = au_buf(1.3)
+	au_voice(d, SAW, 0.0, 1.2, au_hz(45.0), au_hz(39.0), 0.4, Vector4(0.02, 0.6, 0.4, 0.4), r)
+	au_voice(d, SAW, 0.0, 1.2, au_hz(51.0), au_hz(44.0), 0.3, Vector4(0.02, 0.6, 0.4, 0.4), r)
+	au_lowpass(d, 0.12)
+	au_mix(b, d, 0.0, 2.5)
+	for k: int in range(2):
+		au_voice(b, SINE, 0.5 + 0.25 * float(k), 0.12, 150.0, 70.0, 0.7, Vector4(0.002, 0.04, 0.0, 0.06), r)
+		au_voice(b, NOISE, 0.5 + 0.25 * float(k), 0.02, 0.0, 0.0, 0.4, Vector4(0.001, 0.008, 0.0, 0.01), r, 0.25)
+	au_voice(b, NOISE, 0.1, 0.9, 0.0, 0.0, 0.08, Vector4(0.2, 0.3, 0.3, 0.4), r, 0.3)
+	return au_finish(b, STINGER_PEAK)
+
+
+## An altar purchase: a candle catching, then a warm bell.
+static func altar_buy(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.9)
+	au_voice(b, NOISE, 0.0, 0.2, 0.0, 0.0, 0.5, Vector4(0.08, 0.06, 0.2, 0.08), r, 0.25)
+	au_bell(b, r, 0.1, au_hz(67.0), 0.8, 0.4)
+	au_bell(b, r, 0.25, au_hz(74.0), 0.65, 0.3)
+	au_lowpass(b, 0.6)
+	return au_finish(b, SFX_PEAK)
+
+
+## A haunting unlocked: a deep bell, its shimmer, and a breath.
+static func haunt_unlock(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(1.4)
+	au_bell(b, r, 0.0, au_hz(48.0), 1.3, 0.6)
+	au_bell(b, r, 0.0, au_hz(60.0), 1.1, 0.25)
+	var sh: PackedFloat32Array = au_buf(1.4)
+	au_voice(sh, NOISE, 0.1, 1.2, 0.0, 0.0, 0.6, Vector4(0.3, 0.4, 0.2, 0.5), r, 0.2)
+	au_tremolo(sh, 5.0, 0.6)
+	au_mix(b, sh, 0.0, 0.3)
+	return au_finish(b, STINGER_PEAK)

@@ -136,6 +136,7 @@ func problems() -> PackedStringArray:
 	out.append_array(_table_problems())
 	out.append_array(Hauntings.problems())
 	out.append_array(Omens.problems())
+	out.append_array(Upgrades.problems())
 	return out
 
 

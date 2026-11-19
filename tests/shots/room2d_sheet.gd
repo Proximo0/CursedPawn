@@ -77,6 +77,10 @@ func _go() -> void:
 		if picks.size() < 10 and not picks.has(n):
 			picks.append(n)
 	await _frames(20)
+	if OS.get_cmdline_user_args().has("--r5"):  # only the round 5 cells (Collector, eyes, wake, FX, pendulum)
+		await _round5_cells(cat, picks)
+		_save_sheet()
+		return
 	_room.setup(_run_with(cat, PackedStringArray()))
 	await _snap("calm empty")
 	_room.setup(_run_with(cat, picks))
@@ -147,6 +151,57 @@ func _go() -> void:
 		await _snap("wake %.1f s" % (float(target) / 60.0))
 	await _measure(cat, picks)
 	_save_sheet()
+
+
+## Round 5: the Collector's arrival, Dread 0.5 eyes, the wake silhouette, banish / glamour / glimmer and the Pendulum.
+func _round5_cells(cat: Catalog, picks: PackedStringArray) -> void:
+	_room.scare_level = 1
+	_room.setup(_run_with(cat, picks))
+	_room.apply_events([{"e": "customer", "kind": "buyer", "category": "toy", "tid": "collector", "boss": true}] as Array[Dictionary])
+	_room.apply_events([{"e": "collector_arrives", "want_text": "Something with a name.", "line": "I am completing a set."}] as Array[Dictionary])
+	await _frames(40)
+	await _snap("collector arrives: gutter + draft")
+	_room.settle_visuals()
+	_room._bubble.hide_now()
+	await _frames(240)
+	await _snap("collector at the counter")
+	_room.setup(_run_with(cat, picks))
+	_room.set_dread(0.5 * Tuning.shared().wake_threshold)
+	_customer("buyer", "", "widow")
+	_room._bubble.hide_now()
+	await _frames(60)
+	await _snap("dread 0.5: eyes")
+	var cases: Array = [
+		["banish ring", {"e": "banished", "uid": 100, "name": picks[0]}, 14],
+		["glamour shimmer", {"e": "glamoured", "mult": 1.3}, 14],
+		["found_hint glimmer", {"e": "found_hint", "kind": "curio"}, 16],
+	]
+	for c: Array in cases:
+		_room.setup(_run_with(cat, picks))
+		_room.set_dread(0.0)
+		_customer("seller", picks[1], "widow")
+		_room._bubble.hide_now()
+		await _frames(10)
+		_room.apply_events([c[1] as Dictionary] as Array[Dictionary])
+		await _frames(int(c[2]))
+		await _snap(str(c[0]))
+	_room.setup(_run_with(cat, picks))
+	_customer("seller", picks[1], "widow")
+	_room._bubble.hide_now()
+	_room.apply_events([{"e": "inspected", "tool": "pendulum", "tell": "cursed", "estimate": {}}] as Array[Dictionary])
+	await _frames(2)
+	_room._fx_t = 0.55
+	await _snap("pendulum: cursed")
+	for mode: int in [1, 0]:
+		_room.setup(_run_with(cat, picks))
+		_room.scare_level = mode
+		_room.wake(7)
+		while _room._wake_tick < (38 if mode == 1 else 40):
+			await physics_frame
+		_room.process_mode = Node.PROCESS_MODE_DISABLED
+		_room._fx.queue_redraw()
+		await _snap("wake beat: silhouette, " + ("FULL" if mode == 1 else "GENTLE"))
+		_room.process_mode = Node.PROCESS_MODE_INHERIT
 
 
 ## The occult round: one cell per spell effect, the backfire flash and the Midnight Table lighting.

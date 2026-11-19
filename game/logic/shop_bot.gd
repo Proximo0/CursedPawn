@@ -65,13 +65,26 @@ func _bot_cast(run: RunState) -> Dictionary:
 
 func _bot_sell(run: RunState) -> Dictionary:
 	var best: Dictionary = {}
+	var keep: int = _bot_collector_keep(run)
 	for item: Dictionary in run.sellable():
+		if int(item["uid"]) == keep:
+			continue
 		var score: float = float(item.get("est", 0)) + (1000.0 if int(item.get("tells", 0)) > 0 else 0.0)
 		if best.is_empty() or score > float(best["score"]):
 			best = {"uid": item["uid"], "score": score}
 	if best.is_empty():
 		return {"t": "pass"}
 	return {"t": "sell", "uid": best["uid"]}
+
+
+## The uid of the one held item kept back for the Collector while he is still to come (-1 for none).
+func _bot_collector_keep(run: RunState) -> int:
+	if run.collector.is_empty() or bool(run.collector["arrived"]) or run.night < int(run.tuning.nights) - 1:
+		return -1  # only the last evening: earlier, cash from a sale is worth more than waiting
+	for held: Dictionary in run.inventory:
+		if Collector.matches(run.collector["want"], held):
+			return int(held["uid"])
+	return -1
 
 
 func _bot_greedy_buy(run: RunState) -> Dictionary:
@@ -91,6 +104,8 @@ func _bot_cautious_buy(run: RunState) -> Dictionary:
 	var c: Dictionary = run.customer
 	if not (c["tells"] as Array).is_empty():
 		return {"t": "pass"}
+	if run.tool_ok("pendulum") and not (c["tools"] as Array).has("pendulum") and run.clock >= run.tuning.inspect_minutes:
+		return {"t": "inspect", "tool": "pendulum"}  # the altar's sixth tool: a certain yes or no on a curse
 	var picked: int = 0
 	for tool: String in ["uv", "listen", "touch", "scale"]:  # the first two it can use (an omen can break one)
 		if not run.tool_ok(tool):

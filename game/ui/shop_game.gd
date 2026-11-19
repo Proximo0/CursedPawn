@@ -10,6 +10,8 @@ const VIEW := Vector2(640.0, 360.0)
 const WHOLE_SCALE_MIN: float = 0.8  ## use a whole-number scale when it keeps at least this share of the fitted size
 const RECORDING_PATH: String = "user://last_run.json"
 const CARD_SECS: float = 2.0
+const PENDULUM_KEY: int = KEY_Q  ## the Altar tool: is it cursed, yes or no
+const COLLECTOR_CARD_SECS: float = 4.6
 const CARD_SKIP_AFTER: float = 0.35
 const REPLAY_BEFORE: int = 4
 const REPLAY_STEP_SECS: float = 0.9
@@ -37,6 +39,7 @@ var handle: String = ""
 var hover_id: String = ""
 var down_id: String = ""
 var room: ShopRoom2D
+var altar: UiAltar
 var hud: UiHud
 var sfx: SfxPlayer  ## procedural sound (game/audio)
 var settings: TsSettings = TsSettings.shared()
@@ -46,6 +49,8 @@ var title: TitleScreen
 var setup: UiRunSetup  ## the haunting picker and omen draw while open
 var daily_run: bool = false  ## the run in progress is today's Daily Seance
 var daily_no: int = 0
+var ecto_earned: int = 0  ## ectoplasm the finished run earned (shown at the run end)
+var carried_cash: int = 0  ## cash a lost run carries to the next one
 var unlocked_text: String = ""  ## "HAUNTING 3 UNLOCKED" once a won run earned it
 var _saved: Dictionary = {}  ## a run saved by an earlier launch, offered as Continue on the title
 
@@ -107,6 +112,8 @@ static func ui_key_command(key: int, state: RunState, offer: int, picked: int) -
 		var slot: int = key - KEY_1
 		if slot >= 0 and slot < Catalog.TOOLS.size():
 			return {} if tools.has(Catalog.TOOLS[slot]) else {"t": "inspect", "tool": Catalog.TOOLS[slot]}
+		if key == PENDULUM_KEY and state.tool_ok("pendulum"):
+			return {} if tools.has("pendulum") else {"t": "inspect", "tool": "pendulum"}
 		match key:
 			KEY_ENTER, KEY_KP_ENTER:
 				return {"t": "offer", "amount": offer}
@@ -182,6 +189,8 @@ func _show_title() -> void:
 	title.room = room
 	title.has_save = not _saved.is_empty() or (rec != null and not rec.commands.is_empty() and not run.is_over())
 	title.parcel = TitleScreen.ts_parcel_in_page()
+	title.altar_on = UiAltar.available()
+	title.altar_ecto = UiAltar.store_ecto(_relics.store if _relics != null else null)
 	title.daily_on = UiEngage.daily_available()
 	if title.daily_on:
 		title.daily_number = UiEngage.daily_number(UiEngage.today())
@@ -190,6 +199,7 @@ func _show_title() -> void:
 	title.start_new.connect(func() -> void:
 		title.hide()
 		_begin_setup(true))
+	title.open_altar.connect(_open_altar)
 	title.start_daily.connect(func() -> void:
 		title.hide()
 		_saved = {}
@@ -203,6 +213,26 @@ func _show_title() -> void:
 	title.quit.connect(get_tree().quit)
 	title.visibility_changed.connect(func() -> void: _hud_view.visible = not title.visible and setup == null)
 	_hud_view.visible = false  # the title owns the screen; the shop shows dimly behind it
+
+
+## The Altar over the title: spend ectoplasm on upgrades. Closing returns to the title with the new count.
+func _open_altar() -> void:
+	if altar != null:
+		altar.queue_free()
+	title.hide()
+	altar = UiAltar.new()
+	altar.sfx = sfx
+	altar.room = room
+	altar.store = _relics.store if _relics != null else null
+	add_child(altar)
+	altar.bought.connect(func(_id: String) -> void:
+		if _relics != null:
+			_relics.save_profile())
+	altar.closed.connect(func() -> void:
+		altar.queue_free()
+		altar = null
+		title.altar_ecto = UiAltar.store_ecto(_relics.store if _relics != null else null)
+		title.show())
 
 
 func _build_hud() -> void:
@@ -269,9 +299,13 @@ func new_run(seed_in: int, gift: Dictionary = {}, opts: Dictionary = {}) -> void
 		run.spells_known = _relics.store.grimoire.duplicate()  # pages found in earlier runs carry into this one
 	if _overlay != null:
 		_overlay.run = run
-	rec = UiEngage.begin(run, seed_in, catalog, Tuning.shared(), gift, opts)
+	var all_opts: Dictionary = opts.duplicate()
+	all_opts.merge(altar_run_opts(), false)  # the Altar's upgrades and carried cash ride along on every new run
+	rec = UiEngage.begin(run, seed_in, catalog, Tuning.shared(), gift, all_opts)
 	daily_run = bool(opts.get("daily", false))
 	unlocked_text = ""
+	ecto_earned = 0
+	carried_cash = 0
 	_recorded = false
 	if room != null:
 		room.setup(run)
@@ -290,6 +324,13 @@ func new_run(seed_in: int, gift: Dictionary = {}, opts: Dictionary = {}) -> void
 		hud.requests.clear()
 	_on_events(run.last_events)
 	_refresh()
+
+
+## The options the profile's Altar adds to a new run (none in scripted runs, which never read player data).
+func altar_run_opts() -> Dictionary:
+	if Flags.is_scripted_run() or _relics == null or _relics.store == null:
+		return {}
+	return PlayerProfile.altar_opts(_relics.store)
 
 
 func _resume(saved_run: RunState, saved_rec: RunRecording) -> void:
@@ -337,8 +378,35 @@ func act(cmd: Dictionary) -> void:
 	_refresh()
 
 
-func push_card(title: String, sub: String, tone: int) -> void:
-	cards.append({"title": title, "sub": sub, "tone": tone, "age": 0.0})
+func push_card(title: String, sub: String, tone: int, extra: Dictionary = {}) -> void:
+	var c: Dictionary = {"title": title, "sub": sub, "tone": tone, "age": 0.0}
+	c.merge(extra, true)
+	cards.append(c)
+
+
+## The ledger line for the engagement and Collector events that carry no animation text of their own ("" for none).
+static func ui_event_line(e: Dictionary) -> String:
+	match str(e.get("e", "")):
+		"request_new":
+			var line: String = str(e.get("line", ""))
+			return line if line != "" else "%s wants %s." % [str(e.get("who", "Someone")), str(e.get("want_text", "something"))]
+		"request_due":
+			return "%s is here about their order." % str(e.get("who", "Someone"))
+		"request_done":
+			return "Request filled. They paid %d." % int(e.get("pay", 0))
+		"request_failed":
+			return "A request slipped away unfilled."
+		"run_opts":
+			return ""
+		"collector_omen":
+			return "A card under the door: %s." % UiEngage.collector_line(str(e.get("text", ""))).capitalize()
+		"collector_arrives":
+			return str(e.get("line", "The Collector is here."))
+		"collector_pleased":
+			return "The Collector is pleased. Something is left behind."
+		"collector_refused":
+			return "The Collector leaves you a parting curse, and takes his toll."
+	return "Unknown event %s" % str(e.get("e", "?"))
 
 
 func _on_events(events: Array[Dictionary]) -> void:
@@ -350,6 +418,8 @@ func _on_events(events: Array[Dictionary]) -> void:
 	if hud != null:
 		hud.feed(events)
 	for e: Dictionary in events:
+		if (str(e["e"]) == "request_new" or str(e["e"]) == "collector_omen") and sfx != null:
+			sfx.ui("request_pinned")
 		match str(e["e"]):
 			"invalid":
 				_last_invalid = true
@@ -365,12 +435,20 @@ func _on_events(events: Array[Dictionary]) -> void:
 				if str(e["tell"]) != "":
 					tell_texts[str(e["tool"])] = str(e["tell"])
 			"night_start":
-				push_card("NIGHT %d" % int(e["night"]), "RENT DUE: %d" % int(e["rent"]), 11)
+				var relief: float = float(e.get("dread_relief", 0.0))
+				push_card("NIGHT %d" % int(e["night"]), "RENT DUE: %d" % int(e["rent"]) + ("   THE CANDLE EASES DREAD BY %.1f" % relief if relief > 0.0 else ""), 11)
 			"night_end":
 				push_card("NIGHT %d DONE" % int(e["night"]), "RENT %d PAID. CASH %d" % [int(e["rent"]), int(e["cash"])], 14)
 			"wake":
 				var broke: String = str(e.get("broke", ""))
 				push_card("SOMETHING WOKE", ("THE %s SHATTERED" % broke.to_upper()) if broke != "" else "NOTHING LEFT TO BREAK", 13)
+			"collector_arrives":
+				push_card("THE COLLECTOR", UiEngage.ascii_up(str(e.get("line", ""))), 14, {"style": "collector", "secs": COLLECTOR_CARD_SECS,
+					"sub2": "HE WANTS: " + UiEngage.ascii_up(str(e.get("want_text", "")))})
+			"collector_pleased":
+				push_card("HE IS PLEASED", "SOMETHING IS LEFT BEHIND", 11)
+			"collector_refused":
+				push_card("HE IS NOT PLEASED", "A CURSE, AND HIS TOLL", 13)
 			"run_won":
 				push_card("YOU SURVIVED", "%d COINS IN HAND" % int(e["cash"]), 7)
 			"run_lost":
@@ -379,8 +457,12 @@ func _on_events(events: Array[Dictionary]) -> void:
 			var line: String = UiOccult.event_text(e)
 			if line != "":
 				_log(line)
-		else:
+		elif ShopDebug.SD_KNOWN_EVENTS.has(str(e["e"])):
 			_log(ShopDebug.sd_event_text(e))
+		else:
+			var extra_line: String = ui_event_line(e)
+			if extra_line != "":
+				_log(extra_line)
 
 
 func _log(line: String) -> void:
@@ -420,13 +502,16 @@ func _refresh() -> void:
 		_log("A free reliquary appears on the counter.")
 
 
-## Hands the finished run to the profile (best cash, Haunting unlocks, daily record) and notes a new Haunting.
-## Guarded: no logic for it yet, or a scripted run, does nothing.
+## Hands the finished run to the profile (best cash, Haunting unlocks, daily record, ectoplasm) and notes a new Haunting.
+## A scripted run saves nothing.
 func _record_result() -> void:
-	if Flags.is_scripted_run() or not UiOccult.static_has(PlayerProfile as GDScript, "record_result"):
+	if Flags.is_scripted_run():
+		ecto_earned = Upgrades.ecto_for(run)  # shown, never saved
 		return
 	var before: int = _profile_int("haunting_unlocked")
-	(PlayerProfile as GDScript).call("record_result", run, _relics.store)
+	var res: Dictionary = PlayerProfile.record_result(run, _relics.store)
+	ecto_earned = int(res.get("ecto", 0))
+	carried_cash = int(res.get("carried", 0))
 	var after: int = _profile_int("haunting_unlocked")
 	if after > before:
 		unlocked_text = "HAUNTING %d UNLOCKED" % after
@@ -779,7 +864,7 @@ func _process(delta: float) -> void:
 		_replay_tick(delta)
 	if not cards.is_empty():
 		cards[0]["age"] = float(cards[0]["age"]) + delta
-		if float(cards[0]["age"]) >= CARD_SECS:
+		if float(cards[0]["age"]) >= float(cards[0].get("secs", CARD_SECS)):
 			cards.pop_front()
 	if down_id != "" and REPEAT_IDS.has(down_id):
 		_hold_t -= delta

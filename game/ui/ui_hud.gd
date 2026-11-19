@@ -30,6 +30,7 @@ const CANDLE_MIN_H: int = 3
 const POP_SECS: float = 0.95
 const COIN_FLIP_SECS: float = 0.45
 const NOTE_LINES: int = 3
+const COLLECTOR_BLEED_SECS: float = 2.4
 
 var game: ShopGame
 var widgets: Array[Dictionary] = []  ## {id, rect, enabled} in draw order; the last containing a point wins
@@ -89,6 +90,14 @@ func ui_pop(amount: int) -> void:
 	_coin_t = 0.0
 
 
+## The cash the top bar shows. At the Midnight Table it is the table's own readout, which waits for the animation to land,
+## so the bar, the table and the floating +N all change on the same beat.
+func shown_cash(r: RunState) -> int:
+	if UiOccult.in_table(r) and table.shown_cash >= 0:
+		return table.shown_cash
+	return r.cash
+
+
 ## 0..1 how close the Dread is to waking the shop.
 func ui_dread_frac(r: RunState) -> float:
 	return clampf(r.dread / maxf(r.tuning.wake_threshold, 0.1), 0.0, 1.0)
@@ -115,14 +124,18 @@ func _process(delta: float) -> void:
 	_down_age = 0.0 if game.down_id != _down_prev else _down_age + delta
 	_down_prev = game.down_id
 	var r: RunState = game.view_run()
+	var cash_now: int = shown_cash(r)
 	if r.get_instance_id() != _run_id:
 		_run_id = r.get_instance_id()
-		_cash_prev = r.cash
+		_cash_prev = cash_now
 		_pops.clear()
-	elif r.cash != _cash_prev:
-		ui_pop(r.cash - _cash_prev)
-		_cash_prev = r.cash
+	elif cash_now != _cash_prev:
+		ui_pop(cash_now - _cash_prev)
+		_cash_prev = cash_now
+	var end_prev: float = _end_t
 	_end_t = _end_t + delta if game.end_panel_visible() else 0.0
+	if end_prev < 0.5 and _end_t >= 0.5 and game.unlocked_text != "" and game.sfx != null:
+		game.sfx.ui("haunt_unlock")  # the "Haunting N unlocked" line starts to write
 	_coin_t += delta
 	for p: Dictionary in _pops:
 		p["age"] = float(p["age"]) + delta
@@ -233,7 +246,7 @@ func _draw_inner() -> void:
 		return
 	_draw_dread(r)
 	requests.draw(self, _t)
-	if game != null and game.hints != null:
+	if game != null and game.hints != null and found.whisper.is_empty():  # a whisper takes the hint's place
 		TsHintFrame.ts_draw(self, game.hints.text(), game.hints.age)
 	if game.end_panel_visible():
 		_draw_log()
@@ -274,8 +287,9 @@ func _draw_top(r: RunState) -> void:
 	_text(Vector2(10.0, 5.0), "NIGHT %d/%d" % [r.night, int(r.tuning.nights)], 15)
 	_text(Vector2(112.0, 5.0), ShopGame.ui_clock_text(r.clock), 14)
 	_coin(Vector2(212.0, 9.0), _coin_t / COIN_FLIP_SECS)
-	_text(Vector2(221.0, 5.0), "%d" % r.cash, 11)
-	_text(Vector2(278.0, 5.0), "RENT %d" % r.rent_for(r.night), 15 if r.cash >= r.rent_for(r.night) else 13)
+	var cash: int = shown_cash(r)
+	_text(Vector2(221.0, 5.0), "%d" % cash, 11)
+	_text(Vector2(278.0, 5.0), "RENT %d" % r.rent_for(r.night), 15 if cash >= r.rent_for(r.night) else 13)
 	_draw_badge(r)
 
 
@@ -392,8 +406,9 @@ func _draw_seller(r: RunState) -> void:
 	var est: Dictionary = r.estimate()
 	_frame(Rect2(78.0, 196.0, 112.0, 22.0), "note")
 	_text_c(134.0, 203.0, ShopGame.ui_estimate_text(est), 0, 1, false)
-	for i: int in range(Catalog.TOOLS.size()):
-		var tool: String = Catalog.TOOLS[i]
+	var tool_list: Array[String] = seller_tools(r)
+	for i: int in range(tool_list.size()):
+		var tool: String = tool_list[i]
 		var rc := Rect2(TOOL_X0 + TOOL_STEP * float(i), TOOL_Y, TOOL_SIZE, TOOL_SIZE)
 		var used: bool = tools.has(tool)
 		var id: String = "tool:" + tool
@@ -404,7 +419,7 @@ func _draw_seller(r: RunState) -> void:
 		var tex: ImageTexture = _tool_icon(tool)
 		var ip: Vector2 = rc.position + ((rc.size - tex.get_size()) * 0.5).floor() + (Vector2(0.0, 1.0) if sunk else Vector2.ZERO)
 		draw_texture(tex, ip, _c(3) if used else Color.WHITE)
-		_text(rc.position + Vector2(3.0, 20.0), "%d" % (i + 1), 15 if not used else 4)
+		_text(rc.position + Vector2(3.0, 20.0), "%d" % (i + 1) if tool != "pendulum" else "Q", 15 if not used else 4)
 	var cap: int = r.max_wager()
 	var card_up: bool = game.room != null and game.room.has_card()
 	if live and not card_up:
@@ -425,9 +440,19 @@ func _draw_seller(r: RunState) -> void:
 	_draw_offer_row(r, live)
 
 
+## The tools shown for a seller: the four, plus the Pendulum when the Altar gave it to this run.
+static func seller_tools(r: RunState) -> Array[String]:
+	var out: Array[String] = []
+	for t: String in Catalog.TOOLS:
+		out.append(t)
+	if r.tool_ok("pendulum"):
+		out.append("pendulum")
+	return out
+
+
 func _draw_tells(r: RunState) -> void:
 	var x: float = 64.0
-	for tool: String in Catalog.TOOLS:
+	for tool: String in seller_tools(r):
 		if not game.tell_texts.has(tool):
 			continue
 		var body: String = "%s: %s" % [ShopDebug.sd_tool_name(tool).to_upper(), str(game.tell_texts[tool])]
@@ -473,8 +498,11 @@ func _draw_buyer(r: RunState) -> void:
 	var items: Array[Dictionary] = r.sellable()
 	var live: bool = not game.is_replaying()
 	var want: String = str(r.customer["category"]).to_upper()
+	if bool(r.customer.get("collector", false)):
+		want = UiEngage.ascii_up(str((r.customer.get("want", {}) as Dictionary).get("text", want)))  # his own words
 	_frame(Rect2(64.0, COUNTER_FRONT_Y, 230.0, 34.0), "note")
-	_text(Vector2(72.0, COUNTER_FRONT_Y + 6.0), "WANTS: %s" % want, 0, 1, false)
+	var want_lines: PackedStringArray = UiPixelFont.ui_wrap("WANTS: %s" % want, 214)
+	_text(Vector2(72.0, COUNTER_FRONT_Y + 6.0), want_lines[0] if not want_lines.is_empty() else "", 0, 1, false)
 	_text(Vector2(72.0, COUNTER_FRONT_Y + 17.0), "CLICK A GLOWING ITEM." if not items.is_empty() else "YOU HOLD NOTHING LIKE THAT.", 8, 1, false)
 	var rects: Dictionary = game.shelf_rects()
 	var pulse: float = 0.5 + 0.5 * sin(_t * 5.0)
@@ -552,7 +580,7 @@ func _card_cols(tone: int) -> PackedInt32Array:
 func _draw_card(card: Dictionary) -> void:
 	var age: float = float(card["age"])
 	var open: float = UiMotion.ui_out(age / 0.2)
-	var band_h: float = floorf(100.0 * open)
+	var band_h: float = floorf((124.0 if str(card.get("style", "")) == "collector" else 100.0) * open)
 	var band := Rect2(0.0, 180.0 - floorf(band_h * 0.5), ShopGame.VIEW.x, band_h)
 	_rect(band, 0)
 	if band_h > 6.0:
@@ -564,6 +592,9 @@ func _draw_card(card: Dictionary) -> void:
 		return
 	var tone: int = int(card["tone"])
 	var title: String = str(card["title"])
+	if str(card.get("style", "")) == "collector":
+		_draw_collector_card(card, band, age - 0.2)
+		return
 	var y: float = band.position.y + 24.0
 	var tw: int = UiPixelFont.ui_head_width(title, 3)
 	var x: float = floorf(320.0 - float(tw) * 0.5)
@@ -587,6 +618,40 @@ func _draw_card(card: Dictionary) -> void:
 		_text_c(320.0, band.end.y - 17.0, "CLICK TO SKIP", 3, 1, false)
 
 
+## The Collector's arrival: a tall dark band, his name in the DISPLAY face bleeding in slowly like ink through paper
+## (a violet bleed that dries to bone), his line under it and, last, what he wants.
+func _draw_collector_card(card: Dictionary, band: Rect2, t0: float) -> void:
+	var title: String = str(card["title"])
+	var scale: int = 4
+	var y: float = band.position.y + 16.0
+	var tw: int = UiPixelFont.ui_head_width(title, scale)
+	var x: float = floorf(320.0 - float(tw) * 0.5)
+	_rect(Rect2(band.position.x, band.position.y + 6.0, band.size.x, band.size.y - 12.0), 1 if UiMotion.ui_hash(int(_t * 5.0), 21) < 0.9 else 0)
+	for k: int in range(3):  # a drawer-case of tiny squares along the top rule: his velvet case
+		_rect(Rect2(x - 14.0 + float(k) * 4.0, y + 4.0, 3.0, 3.0), 3)
+	var p: float = clampf(t0 / COLLECTOR_BLEED_SECS, 0.0, 1.0)
+	if p < 1.0:
+		UiPixelFont.ui_draw_reveal(self, Vector2(x + 2.0, y + 2.0), title, _c(0), _c(0), UiPixelFont.HEAD, scale, p, 7)
+		UiPixelFont.ui_draw_reveal(self, Vector2(x, y), title, _c(14), _c(3), UiPixelFont.HEAD, scale, p, 7)
+	else:
+		var cols := PackedInt32Array([14, 15, 3, 0])
+		if UiMotion.ui_hash(int(_t * 9.0), 22) < 0.07:
+			cols = PackedInt32Array([3, 14, 2, 0])  # the colour drains for a beat
+		UiPixelFont.ui_display_draw(self, Vector2(x, y), title, scale, cols, _t, 0.0, 0.25, false)
+	var sub: String = str(card["sub"])
+	var fade: float = clampf((t0 - COLLECTOR_BLEED_SECS * 0.6) / 0.8, 0.0, 0.999)
+	var ramp: Array[int] = [2, 3, 4, 14]
+	var lines: PackedStringArray = UiPixelFont.ui_wrap(sub, 380)
+	for i: int in range(mini(lines.size(), 2)):
+		_text_c(320.0, band.position.y + 62.0 + float(i * UiPixelFont.LINE_H), lines[i], ramp[int(fade * 4.0)], 1)
+	var want: String = str(card.get("sub2", ""))
+	var wf: float = clampf((t0 - COLLECTOR_BLEED_SECS - 0.2) / 0.6, 0.0, 0.999)
+	if want != "" and t0 > COLLECTOR_BLEED_SECS * 0.9:
+		_text_c(320.0, band.position.y + 62.0 + float(maxi(lines.size(), 1) * UiPixelFont.LINE_H) + 8.0, want, [4, 10, 11, 11][int(wf * 4.0)], 1)
+	if float(card["age"]) > ShopGame.CARD_SKIP_AFTER + 0.5 and fmod(_t, 1.2) < 0.8:
+		_text_c(320.0, band.end.y - 17.0, "CLICK TO SKIP", 3, 1, false)
+
+
 func _draw_end(r: RunState) -> void:
 	var won: bool = game.run.won
 	_rect(Rect2(Vector2.ZERO, ShopGame.VIEW), 0)
@@ -602,6 +667,7 @@ func _draw_end(r: RunState) -> void:
 	if won:
 		y += 14.0
 		_text_c(cx, y, "A FREE RELIQUARY WAITS ON THE COUNTER.", 11)
+	_draw_end_chips(cx)
 	var extra: bool = game.unlocked_text != ""
 	if extra:
 		y += 14.0
@@ -642,6 +708,24 @@ func _draw_end(r: RunState) -> void:
 	for i: int in range(mini(2, st_lines.size())):
 		_text(Vector2(field.position.x, y + float(UiPixelFont.LINE_H * i)), st_lines[i], 14)
 	_button("newrun", Rect2(cx - 80.0, END_RECT.end.y - 36.0, 160.0, 24.0), "NEW RUN [ENTER]", true, true)
+
+
+## Ectoplasm earned (top right of the panel, counting up) and cash carried to the next run (top left).
+func _draw_end_chips(_cx: float) -> void:
+	if game.ecto_earned > 0:
+		var n: int = mini(game.ecto_earned, int(maxf(_end_t - 0.4, 0.0) * 12.0))
+		var rc := Rect2(END_RECT.end.x - 84.0, END_RECT.position.y + 8.0, 76.0, 26.0)
+		_frame(rc, "note")
+		_rect(Rect2(rc.position.x + 6.0, rc.position.y + 7.0, 5.0, 8.0), 6)  # a wisp
+		_rect(Rect2(rc.position.x + 7.0, rc.position.y + 9.0, 1.0, 3.0), 15)
+		_text(Vector2(rc.position.x + 16.0, rc.position.y + 4.0), "+%d" % n, 5)
+		_text(Vector2(rc.position.x + 6.0, rc.position.y + 16.0), "ECTOPLASM", 5, 1, false)
+	if game.carried_cash > 0:
+		var lc := Rect2(END_RECT.position.x + 8.0, END_RECT.position.y + 8.0, 76.0, 26.0)
+		_frame(lc, "note")
+		_coin(Vector2(lc.position.x + 11.0, lc.position.y + 9.0))
+		_text(Vector2(lc.position.x + 20.0, lc.position.y + 4.0), "%d" % game.carried_cash, 8)
+		_text(Vector2(lc.position.x + 6.0, lc.position.y + 16.0), "CARRIED ON", 8, 1, false)
 
 
 ## The run-end "FOUND THIS RUN" strip: a header, then each find as a coloured name (pages gold, curios by rarity),
