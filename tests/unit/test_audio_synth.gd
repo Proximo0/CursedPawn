@@ -8,16 +8,38 @@ const LEN_RANGE: Dictionary = {  ## name -> [min secs, max secs]
 const FULL_SCALE: float = 32767.0
 
 
+## Builds and decoded samples are cached per (name, seed): building all 23 sounds takes ~0.8 s and decoding the
+## ambient loop sample by sample ~1.7 s, and several tests read the same sounds. The determinism test builds fresh.
+static var _au_built: Dictionary = {}  ## "name:seed" -> AudioStreamWAV
+static var _au_decoded: Dictionary = {}  ## "name:seed" -> PackedInt32Array
+
+
+static func au_built(name: String, seed: int) -> AudioStreamWAV:
+	var key: String = "%s:%d" % [name, seed]
+	if not _au_built.has(key):
+		_au_built[key] = SfxSynth.build(name, seed)
+	return _au_built[key]
+
+
+static func au_samples_of(name: String, seed: int) -> PackedInt32Array:
+	var key: String = "%s:%d" % [name, seed]
+	if not _au_decoded.has(key):
+		_au_decoded[key] = au_samples(au_built(name, seed))
+	return _au_decoded[key]
+
+
 static func au_samples(w: AudioStreamWAV) -> PackedInt32Array:
+	var data: PackedByteArray = w.data
 	var out: PackedInt32Array = PackedInt32Array()
-	for i: int in range(w.data.size() / 2):
-		out.append(w.data.decode_s16(i * 2))
+	out.resize(data.size() / 2)
+	for i: int in range(out.size()):
+		out[i] = data.decode_s16(i * 2)
 	return out
 
 
 func test_every_recipe_has_expected_shape() -> void:
 	for name: String in SfxSynth.NAMES:
-		var w: AudioStreamWAV = SfxSynth.build(name, 1)
+		var w: AudioStreamWAV = au_built(name, 1)
 		assert_true(w != null, name)
 		if w == null:
 			continue
@@ -41,7 +63,7 @@ func test_same_seed_same_bytes_and_noise_differs_by_seed() -> void:
 func test_no_clipping_and_not_silent() -> void:
 	for name: String in SfxSynth.NAMES:
 		var peak: int = 0
-		for v: int in au_samples(SfxSynth.build(name, 1)):
+		for v: int in au_samples_of(name, 1):
 			peak = maxi(peak, absi(v))
 		assert_true(peak < int(0.95 * FULL_SCALE), "%s peak %d" % [name, peak])
 		assert_true(peak > 500, "%s too quiet, peak %d" % [name, peak])
@@ -49,8 +71,8 @@ func test_no_clipping_and_not_silent() -> void:
 
 func test_ambient_loops_seamlessly() -> void:
 	for name: String in SfxSynth.LOOPS:
-		var w: AudioStreamWAV = SfxSynth.build(name, 3)
-		var s: PackedInt32Array = au_samples(w)
+		var w: AudioStreamWAV = au_built(name, 3)
+		var s: PackedInt32Array = au_samples_of(name, 3)
 		assert_eq(w.loop_begin, 0)
 		assert_eq(w.loop_end, s.size())
 		var step: int = 0  ## biggest sample-to-sample jump inside the loop, as the yardstick for the seam
@@ -62,8 +84,7 @@ func test_ambient_loops_seamlessly() -> void:
 
 
 func test_levels() -> void:
-	var amb: AudioStreamWAV = SfxSynth.build("ambient", 1)
-	var s: PackedInt32Array = au_samples(amb)
+	var s: PackedInt32Array = au_samples_of("ambient", 1)
 	var acc: float = 0.0
 	for v: int in s:
 		acc += float(v) * float(v)
