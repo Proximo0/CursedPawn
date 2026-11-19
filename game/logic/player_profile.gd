@@ -5,7 +5,7 @@ extends RefCounted
 ## runs (`Flags.is_scripted_run()`), so tests and captures never touch player data.
 
 const PATH: String = "user://profile.json"
-const VERSION: int = 4  ## 2 adds the grimoire, 3 the progress record (hauntings, best cash, daily), 4 the altar (ecto, upgrades, carry cash); older files load with defaults
+const VERSION: int = 5  ## 5 adds the regulars, deeds and the tutorial flag (older files count the tutorial as done), 2 adds the grimoire, 3 the progress record (hauntings, best cash, daily), 4 the altar (ecto, upgrades, carry cash); older files load with defaults
 const DAILY_KEEP: int = 30
 
 
@@ -17,7 +17,8 @@ static func save(store: RelicStore, path: String = PATH) -> Error:
 	f.store_string(JSON.stringify({"version": VERSION, "store": store.to_dict(), "grimoire": Array(store.grimoire),
 		"progress": {"haunting_unlocked": store.haunting_unlocked, "best_cash": store.best_cash, "daily_last": store.daily_last,
 			"daily_best": store.daily_best},
-		"altar": {"ecto": store.ecto, "upgrades": store.upgrades, "carry_cash": store.carry_cash}}))
+		"altar": {"ecto": store.ecto, "upgrades": store.upgrades, "carry_cash": store.carry_cash},
+		"journal": {"regulars": store.regulars, "deeds": Array(store.deeds), "tutorial_done": store.tutorial_done}}))
 	f.close()
 	return DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path))
 
@@ -41,6 +42,13 @@ static func load_into(store: RelicStore, path: String = PATH) -> bool:
 	store.ecto = maxi(0, int(al.get("ecto", 0)))
 	store.upgrades = Upgrades.clean(al.get("upgrades", {}) if al.get("upgrades") is Dictionary else {})
 	store.carry_cash = maxi(0, int(al.get("carry_cash", 0)))
+	var jr: Dictionary = parsed.get("journal", {}) if parsed.get("journal") is Dictionary else {}
+	store.regulars = Regulars.clean(jr.get("regulars", {}) if jr.get("regulars") is Dictionary else {})
+	store.deeds = PackedStringArray()
+	for id: Variant in (jr.get("deeds", []) as Array if jr.get("deeds") is Array else []):
+		if not Deeds.get_deed(str(id)).is_empty() and not store.deeds.has(str(id)):
+			store.deeds.append(str(id))
+	store.tutorial_done = bool(jr.get("tutorial_done", int(parsed.get("version", 0)) < 5))
 	return true
 
 
@@ -66,14 +74,24 @@ static func altar_opts(store: RelicStore) -> Dictionary:
 		out["upgrades"] = store.upgrades.duplicate()
 	if store.carry_cash > 0:
 		out["carry_cash"] = store.carry_cash
+	out["regulars"] = store.regulars.duplicate()  # the key switches the regulars' visits on
 	return out
+
+
+## Whether the next run is the guided first night (the profile's tutorial is not done). Merge `Tutorial.opts()` and
+## use `Tutorial.SEED` for it.
+static func needs_tutorial(store: RelicStore) -> bool:
+	return not store.tutorial_done
 
 
 ## Records a finished run: unlocks the next haunting on a win at the highest unlocked one, keeps the best winning
 ## cash, and, for a daily run, the first attempt of the date (`opts.date`, else the system date). Returns
-## {unlocked: new haunting level or 0, new_best: bool, daily_counted: bool, ecto: earned, carried: cash kept on a loss}. Callers skip it on scripted runs and save after.
+## {unlocked: new haunting level or 0, new_best: bool, daily_counted: bool, ecto: earned, carried: cash kept on a loss,
+## deeds_new: ids newly inked in the Ledger}. It also advances `store.regulars` from `run.regular_progress`, marks a
+## tutorial run done and appends the new deeds to `store.deeds`. Call after bank_finds so found curios count for the
+## deeds. Callers skip it on scripted runs and save after.
 static func record_result(run: RunState, store: RelicStore) -> Dictionary:
-	var out: Dictionary = {"unlocked": 0, "new_best": false, "daily_counted": false, "ecto": 0, "carried": 0}
+	var out: Dictionary = {"unlocked": 0, "new_best": false, "daily_counted": false, "ecto": 0, "carried": 0, "deeds_new": PackedStringArray()}
 	var level: int = int(run.opts.get("haunting", 0))
 	if run.won:
 		if level >= store.haunting_unlocked and store.haunting_unlocked < Hauntings.MAX_LEVEL:
@@ -100,6 +118,13 @@ static func record_result(run: RunState, store: RelicStore) -> Dictionary:
 			while dates.size() > DAILY_KEEP:
 				store.daily_best.erase(dates.pop_front())
 			out["daily_counted"] = true
+	for id: Variant in run.regular_progress:
+		store.regulars[str(id)] = maxi(int(store.regulars.get(str(id), 0)), int(run.regular_progress[id]))
+	if bool(run.opts.get("tutorial", false)):
+		store.tutorial_done = true
+	var earned: PackedStringArray = Deeds.check(run, store)
+	store.deeds.append_array(earned)
+	out["deeds_new"] = earned
 	return out
 
 

@@ -350,3 +350,66 @@ func test_curio_icons_follow_the_real_names() -> void:
 	var hand: Image = SpriteKit.curio_icon("curio_13").get_image()
 	assert_true(dag.get_data() != hand.get_data())
 	assert_eq(SpriteKit.SK_CURIO_BY_ID.size(), 24)
+
+
+func test_regular_portraits_are_32x40_palette_locked_and_distinct() -> void:
+	var seen: Dictionary = {}
+	for id: String in ["widow_march", "boy_radio", "father_ash", "magician_vale", "monk_quill", "granny_pip", "not_in_the_file"]:
+		var img: Image = SpriteKit.regular_portrait(id).get_image()
+		assert_eq(img.get_size(), Vector2i(32, 40), id)
+		assert_true(_palette_ok(img), id + " palette")
+		assert_true(_opaque_count(img) > 1100, id + " is a full framed bust")
+		assert_true(img.get_data() == SpriteKit.regular_portrait(id).get_image().get_data(), id + " repeats")
+		seen[hash(img.get_data())] = true
+	assert_eq(seen.size(), 7, "each regular has their own face")
+
+
+func test_regular_portrait_reads_regulars_json_when_it_exists() -> void:
+	# whatever the file holds, every id in it must produce a valid portrait
+	if not FileAccess.file_exists("res://game/data/regulars.json"):
+		return
+	var parsed: Variant = JSON.parse_string(FileAccess.open("res://game/data/regulars.json", FileAccess.READ).get_as_text())
+	var rows: Array = parsed as Array if parsed is Array else ((parsed as Dictionary).get("regulars", []) as Array)
+	for r: Variant in rows:
+		var id: String = str((r as Dictionary).get("id", ""))
+		assert_eq(SpriteKit.regular_portrait(id).get_image().get_size(), Vector2i(32, 40), id)
+
+
+func test_deed_seals_are_20x20_palette_locked_and_vary_by_id() -> void:
+	var seen: Dictionary = {}
+	for i: int in range(12):
+		var img: Image = SpriteKit.deed_seal("deed_%d" % i).get_image()
+		assert_eq(img.get_size(), Vector2i(20, 20))
+		assert_true(_palette_ok(img))
+		assert_true(_opaque_count(img) > 150 and _opaque_count(img) < 380, "a disc of wax")
+		seen[hash(img.get_data())] = true
+	assert_true(seen.size() >= 9, "colour and emblem follow the id")
+	assert_true(SpriteKit.deed_seal("won").get_image().get_data() == SpriteKit.deed_seal("won").get_image().get_data())
+
+
+func test_omen_art_for_blind_lamp_and_deaf_ear_has_contrast() -> void:
+	for id: String in ["blind_lamp", "deaf_ear"]:
+		var img: Image = SpriteKit.omen_art(id).get_image()
+		var bright: int = 0
+		for y: int in range(img.get_height()):
+			for x: int in range(img.get_width()):
+				var c: Color = img.get_pixel(x, y)
+				if (c.r + c.g + c.b) / 3.0 > 0.6:
+					bright += 1
+		assert_true(bright > 90, id + " has bright shapes against the dark")
+
+
+func test_collector_face_is_lit_and_spectacled() -> void:
+	var img: Image = SpriteKit.collector_frames()[0].get_image()
+	# brass rims (palette 10 = d98a2b) around the eyes and a living lip colour
+	var brass: int = 0
+	var lips: int = 0
+	for y: int in range(10, 36):
+		for x: int in range(26, 46):
+			var c: Color = img.get_pixel(x, y)
+			if absf(c.r - 0.851) < 0.01 and absf(c.g - 0.541) < 0.01:
+				brass += 1
+			if absf(c.r - 0.784) < 0.01 and absf(c.g - 0.212) < 0.01:
+				lips += 1
+	assert_true(brass >= 10, "spectacle rims")
+	assert_true(lips >= 2, "a living mouth")

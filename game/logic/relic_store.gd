@@ -28,6 +28,11 @@ var daily_best: Dictionary = {}  ## date -> {number, night, cash, won, wakes}; o
 var ecto: int = 0
 var upgrades: Dictionary = {}
 var carry_cash: int = 0
+## Round 6 (profile version 5): the regulars' story progress {id: next chapter index}, the Ledger of Deeds earned, and
+## whether the guided first run is over (a file from before version 5 counts as done).
+var regulars: Dictionary = {}
+var deeds: PackedStringArray = PackedStringArray()
+var tutorial_done: bool = false
 var log: Array[Dictionary] = []  ## {n, id, price_cents, payment_ref, delivered, refunded}
 
 

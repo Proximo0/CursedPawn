@@ -38,17 +38,17 @@ func test_each_upgrade_applies() -> void:
 			"start_spell":
 				assert_eq(run.spells_known.size(), Grimoire.DEFAULT_KNOWN.size() + 1)
 			"keen_eye":
-				assert_near(t.tell_chance, base.tell_chance + 0.3)
+				assert_near(t.tell_chance, base.tell_chance + 0.15)
 			"thrifty_rent":
-				assert_near(t.rent_base, base.rent_base * pow(0.94, 3.0))
+				assert_near(t.rent_base, base.rent_base * pow(0.97, 3.0))
 			"pendulum":
 				assert_true(run.tool_ok("pendulum"))
 			"loss_purse":
 				assert_near(float(Upgrades.flags_for({id: 1})["loss_cash_frac"]), 0.1)
 			"altar_candle":
-				assert_near(t.night_dread_relief, 1.0)
+				assert_near(t.night_dread_relief, 0.6)
 			"deep_pockets":
-				assert_eq(run.cash, int(base.start_cash) + 45)
+				assert_eq(run.cash, int(base.start_cash) + 24)
 			_:
 				assert_true(false, "no test for upgrade %s" % id)
 	assert_false(up_run({}).tool_ok("pendulum"), "off without the upgrade")
@@ -61,9 +61,9 @@ func test_candle_relieves_dread_at_dawn() -> void:
 	run.phase = RunState.PHASE_TABLE
 	run.table = {"hand": {}, "pairs": {}}
 	var ev: Array[Dictionary] = run.apply({"t": "table_leave"})
-	assert_near(run.dread, 2.0)
+	assert_near(run.dread, 2.4)
 	assert_eq(ev[0]["e"], "table_leave")
-	assert_near(float(ev[1]["dread_relief"]), 1.0)
+	assert_near(float(ev[1]["dread_relief"]), 0.6)
 
 
 func test_buy_validation() -> void:

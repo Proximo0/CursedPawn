@@ -214,7 +214,7 @@ func test_pause_menu_choices() -> void:
 	var p := PauseMenu.new()
 	p.settings = TsSettings.new()
 	p.pauses_tree = false
-	assert_eq(p.ts_menu_ids(), ["resume", "grimoire", "settings", "quit_title"] as Array[String])
+	assert_eq(p.ts_menu_ids(), ["resume", "grimoire", "ledger", "settings", "quit_title"] as Array[String])
 	var got: Array[String] = []
 	p.resumed.connect(func() -> void: got.append("resumed"))
 	p.quit_to_title.connect(func() -> void: got.append("quit_to_title"))

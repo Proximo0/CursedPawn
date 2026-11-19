@@ -238,3 +238,36 @@ func test_pendulum_inspection_is_accepted() -> void:
 	for verdict: String in ["cursed", "clean"]:
 		room.apply_events([{"e": "inspected", "tool": "pendulum", "tell": verdict, "estimate": {}}] as Array[Dictionary])
 	room.free()
+
+
+func test_set_displayed_caps_at_twelve_and_the_cabinet_clears_the_hud() -> void:
+	var room := ShopRoom2D.new()
+	room.setup(_run_with(1))
+	var ids := PackedStringArray()
+	for i: int in range(15):
+		ids.append("curio_%02d" % (i + 1))
+	room.set_displayed(ids)
+	assert_eq(room.displayed_ids().size(), 12)
+	room.set_displayed(PackedStringArray())
+	assert_eq(room.displayed_ids().size(), 0)
+	var cab: Rect2 = ShopRoom2D.CABINET_RECT
+	assert_true(cab.end.y < ShopRoom2D.DOOR_RECT.position.y, "above the door")
+	assert_true(cab.end.x < ShopRoom2D.COUNTER_X0, "left of the counter and the shelves")
+	assert_true(cab.end.y < 227.0, "above the HUD counter front")
+	assert_true(ShopRoom2D.EYES_POS.y > 190.0, "the Dread 0.5 eyes sit low")
+	room.free()
+
+
+func test_a_regular_customer_gets_the_warm_rim_and_loses_it_on_leaving() -> void:
+	var room := ShopRoom2D.new()
+	room.setup(_run_with(1))
+	var ev: Array[Dictionary] = [{"e": "customer", "kind": "buyer", "category": "toy", "tid": "widow", "regular": "widow_march"}]
+	room.apply_events(ev)
+	assert_true(room.regular_here())
+	var plain: Array[Dictionary] = [{"e": "customer", "kind": "buyer", "category": "toy", "tid": "widow"}]
+	room.apply_events(plain)
+	assert_false(room.regular_here())
+	var late: Array[Dictionary] = [{"e": "regular", "id": "widow_march", "name": "X", "chapter": 0, "line": "hi"}]
+	room.apply_events(late)
+	assert_true(room.regular_here(), "a regular event after the customer event also counts")
+	room.free()

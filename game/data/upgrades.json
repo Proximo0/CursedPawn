@@ -1,10 +1,10 @@
 [
 	{"id": "extra_cast", "name": "Second Breath", "text": "One more spell cast each night.", "cost": 8, "max_rank": 2, "add": {"spell_casts_per_night": 1}, "flags": {}},
 	{"id": "start_spell", "name": "Borrowed Page", "text": "Begin each run knowing one more spell.", "cost": 10, "max_rank": 1, "flags": {"start_spell": true}},
-	{"id": "keen_eye", "name": "Keen Eye", "text": "Tells show more often, 10% per rank.", "cost": 8, "max_rank": 3, "add": {"tell_chance": 0.1}, "flags": {}},
-	{"id": "thrifty_rent", "name": "Patient Landlord", "text": "Rent is 6% lower per rank.", "cost": 8, "max_rank": 3, "mul": {"rent_base": 0.94}, "flags": {}},
-	{"id": "pendulum", "name": "The Pendulum", "text": "A sixth tool: it swings for cursed, or stays still.", "cost": 14, "max_rank": 1, "flags": {"pendulum": true}},
+	{"id": "keen_eye", "name": "Keen Eye", "text": "Tells show 5% more often per rank.", "cost": 8, "max_rank": 3, "add": {"tell_chance": 0.05}, "flags": {}},
+	{"id": "thrifty_rent", "name": "Patient Landlord", "text": "Rent is 3% lower per rank.", "cost": 8, "max_rank": 3, "mul": {"rent_base": 0.97}, "flags": {}},
+	{"id": "pendulum", "name": "The Pendulum", "text": "A sixth tool, slow but true: it swings for a curse.", "cost": 14, "max_rank": 1, "flags": {"pendulum": true}},
 	{"id": "loss_purse", "name": "Mourning Purse", "text": "After a lost run, keep 10% of your cash.", "cost": 10, "max_rank": 1, "flags": {"loss_cash_frac": 0.1}},
-	{"id": "altar_candle", "name": "Altar Candle", "text": "Each dawn the flame draws off 0.5 Dread per rank.", "cost": 10, "max_rank": 2, "add": {"night_dread_relief": 0.5}, "flags": {}},
-	{"id": "deep_pockets", "name": "Deep Pockets", "text": "Start each run with 15 more cash per rank.", "cost": 6, "max_rank": 3, "add": {"start_cash": 15}, "flags": {}}
+	{"id": "altar_candle", "name": "Altar Candle", "text": "Each dawn the flame draws off 0.3 Dread per rank.", "cost": 10, "max_rank": 2, "add": {"night_dread_relief": 0.3}, "flags": {}},
+	{"id": "deep_pockets", "name": "Deep Pockets", "text": "Start each run with 8 more cash per rank.", "cost": 6, "max_rank": 3, "add": {"start_cash": 8}, "flags": {}}
 ]

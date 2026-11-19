@@ -13,8 +13,8 @@ const BOOK := Rect2(60.0, 16.0, 520.0, 328.0)
 const BTN_W: float = 150.0
 const BTN_H: float = 20.0
 const BTN_STEP: float = 28.0
-const IDS: Array[String] = ["resume", "grimoire", "settings", "quit_title"]
-const LABELS: Dictionary = {"resume": "RESUME [ESC]", "grimoire": "GRIMOIRE", "settings": "SETTINGS", "quit_title": "QUIT TO TITLE"}
+const IDS: Array[String] = ["resume", "grimoire", "ledger", "settings", "quit_title"]
+const LABELS: Dictionary = {"resume": "RESUME [ESC]", "grimoire": "GRIMOIRE", "ledger": "LEDGER", "settings": "SETTINGS", "quit_title": "QUIT TO TITLE"}
 
 var blocked: bool = false  ## the host sets this while Esc means something else (tarot stake open, a card up)
 var pauses_tree: bool = true
@@ -37,6 +37,7 @@ func open() -> void:
 	settings_open = false
 	grimoire_open = false
 	focus_id = "resume"
+	ledger_open = false
 	visible = true
 	if pauses_tree and is_inside_tree():
 		get_tree().paused = true
@@ -46,6 +47,7 @@ func close() -> void:
 	visible = false
 	settings_open = false
 	grimoire_open = false
+	ledger_open = false
 	if pauses_tree and is_inside_tree():
 		get_tree().paused = false
 
@@ -66,6 +68,8 @@ func ts_activate_menu(id: String) -> void:
 		"grimoire_back":
 			grimoire_open = false
 			focus_id = "grimoire"
+		"ledger":
+			ts_open_ledger()
 		"settings":
 			ts_open_settings()
 		"quit_title":

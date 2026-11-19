@@ -177,3 +177,56 @@ func test_progress_round_trip_and_old_file_loads() -> void:
 	assert_eq(c.haunting_unlocked, 0)
 	assert_eq(c.daily_best.size(), 0)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+
+
+func test_journal_round_trips() -> void:
+	var a := pp_store(3)
+	a.regulars = {"march": 2, "ned": 4}
+	a.deeds = PackedStringArray(["first_dawn", "hedge_witch"])
+	a.tutorial_done = true
+	assert_eq(PlayerProfile.save(a, PP_PATH), OK)
+	var b := pp_store(9)
+	assert_true(PlayerProfile.load_into(b, PP_PATH))
+	assert_eq(b.regulars, {"march": 2, "ned": 4})
+	assert_eq(b.deeds, PackedStringArray(["first_dawn", "hedge_witch"]))
+	assert_true(b.tutorial_done)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+
+
+func test_unfinished_tutorial_is_remembered() -> void:
+	var a := pp_store(3)
+	PlayerProfile.save(a, PP_PATH)
+	var b := pp_store(9)
+	b.tutorial_done = true
+	PlayerProfile.load_into(b, PP_PATH)
+	assert_false(b.tutorial_done, "a version-5 file that says not done stays not done")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+
+
+func test_old_version_file_loads_with_defaults_and_skips_the_tutorial() -> void:
+	var f := FileAccess.open(PP_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"version": 4, "store": {"age_ok": true}, "grimoire": ["scry", "hex"],
+		"progress": {"haunting_unlocked": 3, "best_cash": 410, "daily_last": "", "daily_best": {}},
+		"altar": {"ecto": 12, "upgrades": {"keen_eye": 1}, "carry_cash": 0}}))
+	f.close()
+	var s := pp_store(1)
+	assert_true(PlayerProfile.load_into(s, PP_PATH))
+	assert_eq(s.haunting_unlocked, 3)
+	assert_eq(s.ecto, 12)
+	assert_eq(s.upgrades, {"keen_eye": 1})
+	assert_eq(s.regulars, {})
+	assert_eq(s.deeds, PackedStringArray())
+	assert_true(s.tutorial_done, "a player who already has a profile is not walked through night 1 again")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))
+
+
+func test_journal_cleans_unknown_entries() -> void:
+	var f := FileAccess.open(PP_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"version": 5, "store": {}, "journal": {"regulars": {"march": 99, "nobody": 2},
+		"deeds": ["first_dawn", "no_such_deed", "first_dawn"], "tutorial_done": true}}))
+	f.close()
+	var s := pp_store(1)
+	assert_true(PlayerProfile.load_into(s, PP_PATH))
+	assert_eq(s.regulars, {"march": 4})
+	assert_eq(s.deeds, PackedStringArray(["first_dawn"]))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(PP_PATH))

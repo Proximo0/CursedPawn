@@ -14,6 +14,9 @@ func _initialize() -> void:
 	var sheet: Image = Image.create_empty(SHEET_W, SHEET_H, false, Image.FORMAT_RGBA8)
 	sheet.fill(BG)
 	var y: int = 4
+	if OS.get_cmdline_user_args().has("--r6"):  # only the round 6 cells: regulars, deed seals, the Collector, two omens
+		_round6(sheet)
+		return
 	var objs: Array = _load("res://game/data/objects.json")
 	var col: int = 0
 	# the redrawn toys and books first, at 3x
@@ -175,6 +178,53 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute("/tmp/shots")
 	sheet.get_region(Rect2i(0, 0, SHEET_W, mini(y, SHEET_H))).save_png(OUT_PATH)
 	print("SPRITE SHEET ", OUT_PATH, " h=", y)
+	quit()
+
+
+## Round 6: regular portraits (the six in regulars.json, else a hash set), 12 deed seals, the Collector frames, curio
+## icons at the cabinet's 16 px size, and the two repainted omens.
+func _round6(sheet: Image) -> void:
+	var y: int = 4
+	var x: int = 4
+	var ids: PackedStringArray = PackedStringArray()
+	if FileAccess.file_exists("res://game/data/regulars.json"):
+		var parsed: Variant = JSON.parse_string(FileAccess.open("res://game/data/regulars.json", FileAccess.READ).get_as_text())
+		var rows: Array = parsed as Array if parsed is Array else ((parsed as Dictionary).get("regulars", []) as Array)
+		for r: Variant in rows:
+			ids.append(str((r as Dictionary).get("id", "")))
+	for extra: String in ["widow_march", "boy_radio", "father_ash", "magician_vale", "monk_quill", "granny_pip"]:
+		if ids.size() < 6:
+			ids.append(extra)
+	for id: String in ids:
+		_put(sheet, SpriteKit.regular_portrait(id).get_image(), x, y, id.substr(0, 12), 4)
+		x += 150
+	y += 40 * 4 + 18
+	x = 4
+	for i: int in range(12):
+		_put(sheet, SpriteKit.deed_seal("deed_%d" % i).get_image(), x, y, "seal %d" % i, 4)
+		x += 100
+	y += 20 * 4 + 18
+	x = 4
+	for f: ImageTexture in SpriteKit.collector_frames():
+		_put(sheet, f.get_image(), x, y, "collector", 2)
+		x += 160
+	var face: Image = SpriteKit.collector_frames()[0].get_image().get_region(Rect2i(20, 0, 32, 44))
+	_put(sheet, face, x, y, "face 4x", 4)
+	x += 150
+	for id: String in ["blind_lamp", "deaf_ear"]:
+		_put(sheet, SpriteKit.omen_art(id).get_image(), x, y, id, 3)
+		x += 150
+	y += 110 * 2 + 18
+	x = 4
+	for cr: Dictionary in _load("res://game/data/curios.json").slice(0, 12):
+		var ic: Image = SpriteKit.curio_icon(str(cr["id"])).get_image()
+		ic.resize(16, 16, Image.INTERPOLATE_NEAREST)
+		_put(sheet, ic, x, y, str(cr["id"]).substr(0, 8), 4)
+		x += 80
+	y += 16 * 4 + 18
+	DirAccess.make_dir_recursive_absolute("/tmp/shots")
+	sheet.get_region(Rect2i(0, 0, SHEET_W, mini(y, SHEET_H))).save_png("/tmp/shots/sprite_sheet_r6.png")
+	print("SPRITE SHEET r6 /tmp/shots/sprite_sheet_r6.png h=", y)
 	quit()
 
 

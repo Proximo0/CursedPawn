@@ -55,6 +55,19 @@ var requests_failed: int = 0
 ## The Collector (night-5 boss): {want: {category, curse, text}, rolled, arrived, done, result: "" | "pleased" | "refused"}.
 ## Empty until the roll. See Collector and docs/core_brief.md.
 var collector: Dictionary = {}
+## Round 6. Counters the Ledger of Deeds reads (all in snapshot/restore): spells cast, Midnight Table games won, Tarot
+## Pairs games with every card matched, tools used, and the most cursed objects held at once.
+var spells_cast: int = 0
+var table_wins: int = 0
+var pairs_perfect: int = 0
+var tools_used: int = 0
+var max_cursed_held: int = 0
+## The regular who visits this run: {id, night, chapter (0-based), state: "" | "here" | "done" | "refused"}, or {} for
+## none (see Regulars). `regular_progress` is {id: next chapter index} for chapters played this run, for the profile.
+var regular: Dictionary = {}
+var regular_progress: Dictionary = {}
+## The guided first night: {idx: scripted customers shown, shown: [hint steps shown]}; {} outside the tutorial.
+var tutorial: Dictionary = {}
 
 
 ## Starts a run. `gift` is an item passed on by a friend (its keys as in `inventory`); empty for none.
@@ -79,6 +92,20 @@ func start(seed_value: int, cat: Catalog, tun: Tuning = null, gift: Dictionary =
 	summon_category = ""
 	night = 1
 	cash = int(tuning.start_cash) + maxi(0, int(opts.get("carry_cash", 0)))
+	tutorial = {"idx": 0, "shown": []} if bool(opts.get("tutorial", false)) else {}
+	if not tutorial.is_empty():
+		cash += int(tuning.tutorial_purse)
+	spells_cast = 0
+	table_wins = 0
+	pairs_perfect = 0
+	tools_used = 0
+	max_cursed_held = 0
+	regular_progress = {}
+	regular = {}
+	if opts.has("regulars") and tutorial.is_empty():
+		regular = Regulars.plan(seed_value, opts["regulars"], tuning.regular_chance, int(tuning.nights))
+		if not regular.is_empty():
+			regular["state"] = ""
 	dread = 0.0
 	inventory.clear()
 	customer = {}
@@ -108,6 +135,7 @@ func start(seed_value: int, cat: Catalog, tun: Tuning = null, gift: Dictionary =
 			spells_known.append(sp)
 	if bool(rules["upgrade_spell"]):
 		_grant_upgrade_spell()
+	_track_cursed()
 	clock = tuning.day_minutes
 	var ev: Array[Dictionary] = [{"e": "night_start", "night": night, "rent": rent_for(night)}]
 	_maybe_roll_collector(ev)
@@ -115,6 +143,7 @@ func start(seed_value: int, cat: Catalog, tun: Tuning = null, gift: Dictionary =
 		ev.push_front({"e": "run_opts", "haunting": opts["haunting"], "omen": opts["omen"], "omen_name": opts["omen_name"],
 			"daily": opts["daily"]})
 	_next_customer(ev)
+	_tutorial_hints(ev)
 	last_events = ev
 	return ev
 
@@ -134,6 +163,10 @@ func _take_opts(run_opts: Dictionary) -> bool:
 		opts["upgrades"] = ranks
 	if int(run_opts.get("carry_cash", 0)) > 0:
 		opts["carry_cash"] = int(run_opts["carry_cash"])
+	if bool(run_opts.get("tutorial", false)):
+		opts["tutorial"] = true
+	if run_opts.get("regulars") is Dictionary:
+		opts["regulars"] = Regulars.clean(run_opts["regulars"])
 	rules = {"all_cursed": false, "no_tool": "", "double_table": false, "seller_type": "", "start_cursed": false,
 		"start_spells": [], "pendulum": false, "upgrade_spell": false}
 	for h: Dictionary in Hauntings.upto(int(opts["haunting"])):
@@ -229,6 +262,8 @@ func sellable() -> Array[Dictionary]:
 
 ## Whether the current buyer takes `item`.
 func _wants(item: Dictionary) -> bool:
+	if str(customer.get("regular", "")) != "":
+		return Regulars.matches(customer["want"], item)
 	if customer.get("collector", false):
 		return Collector.matches(customer["want"], item)
 	if customer.get("request", false):
@@ -240,6 +275,8 @@ func _wants(item: Dictionary) -> bool:
 func sale_price(item: Dictionary) -> int:
 	if customer.get("kind", "") != BUYER:
 		return 0
+	if str(customer.get("regular", "")) != "":
+		return int(round(float(item["value"]) * tuning.regular_pay_mult))
 	if customer.get("collector", false):
 		return int(round(float(item["value"]) * tuning.collector_pay_mult * float(customer["pay_mult"])))
 	if customer.get("request", false):
@@ -295,6 +332,7 @@ func apply(cmd: Dictionary) -> Array[Dictionary]:
 		_wager(int(cmd.get("amount", 0)), ev)
 	else:
 		ev.append({"e": "invalid", "why": "cannot %s now" % t})
+	_tutorial_hints(ev)
 	last_events = ev
 	return ev
 
@@ -310,12 +348,15 @@ func _inspect(tool: String, ev: Array[Dictionary]) -> void:
 		ev.append({"e": "invalid", "why": "tool %s" % tool})
 		return
 	tools.append(tool)
-	clock -= tuning.inspect_minutes
+	tools_used += 1
+	clock -= tuning.pendulum_minutes if tool == "pendulum" else tuning.inspect_minutes
 	play_secs += tuning.secs_per_inspect
 	var tell: String = ""
 	var cid: String = customer["item"]["curse"]
 	if tool == "pendulum":
 		tell = "cursed" if cid != "" else "clean"  # certain, and never says which curse
+	elif cid != "" and tool == str(customer.get("sure_tell", "")):
+		tell = str(catalog.curse(cid).get("tells", {}).get(tool, ""))  # the tutorial's obvious tell: no dice
 	elif cid != "" and rng.randf() < tuning.tell_chance:
 		tell = str(catalog.curse(cid).get("tells", {}).get(tool, ""))
 	if tell != "" and (tool != "pendulum" or cid != ""):
@@ -357,11 +398,14 @@ func _buy_at(price: int, ev: Array[Dictionary]) -> void:
 	item.erase("hidden")
 	inventory.append(item)
 	ev.append({"e": "bought", "uid": item["uid"], "name": item["name"], "price": price})
+	if str(customer.get("regular", "")) != "":
+		_regular_done(price, ev)
 	if not hidden.is_empty():
 		_add_find(hidden, ev)
 	if item["curse"] != "":
 		dread += tuning.dread_on_buy * float(catalog.curse(item["curse"]).get("dread", 1.0))
 		_check_wake(ev)
+	_track_cursed()
 	_next_customer(ev)
 
 
@@ -380,6 +424,8 @@ func _sell(uid: int, ev: Array[Dictionary]) -> void:
 			_complete_request(str(customer["request_id"]), price, ev)
 		if customer.get("collector", false):
 			_collector_pleased(price, ev)
+		if str(customer.get("regular", "")) != "":
+			_regular_done(price, ev)
 		_next_customer(ev)
 		return
 	ev.append({"e": "invalid", "why": "cannot sell %d" % uid})
@@ -434,13 +480,21 @@ func _next_customer(ev: Array[Dictionary]) -> void:
 		return
 	if prev.get("collector", false) and str(collector.get("result", "")) == "":
 		_collector_refuse(ev)  # passed on, or fled
+	if str(prev.get("regular", "")) != "" and str(regular.get("state", "")) == "here":
+		_regular_refuse(ev)  # passed on, or fled
 	if prev.get("request", false) and not _find_request(str(prev["request_id"])).is_empty():
 		_fail_request(_find_request(str(prev["request_id"])), ev)  # passed on, or fled
+	if not tutorial.is_empty() and night == 1:
+		_tutorial_customer(ev)
+		return
 	if clock < tuning.customer_minutes:
 		_end_night(ev)
 		return
 	if _collector_due():
 		_collector_arrive(ev)
+		return
+	if _regular_due():
+		_regular_arrive(ev)
 		return
 	if _call_requester(ev):
 		return
@@ -521,6 +575,9 @@ func _pick_type(kind: String) -> Dictionary:
 
 
 func _check_wake(ev: Array[Dictionary]) -> void:
+	if not tutorial.is_empty() and night == 1:
+		dread = minf(dread, tuning.wake_threshold * 0.9)  # the guided night is safe
+		return
 	if sealed or dread < tuning.wake_threshold:
 		return
 	var w: Dictionary = {"e": "wake", "night": night, "dread": dread, "broke": "", "closed": false}
@@ -548,6 +605,8 @@ func _end_night(ev: Array[Dictionary]) -> void:
 	if sealed:
 		rent = int(round(rent * tuning.seal_debt_mult))
 	ev.append({"e": "night_end", "night": night, "rent": rent, "cash": cash, "curse_cash": curse_cash})
+	if cash < rent and not tutorial.is_empty() and night == 1:
+		cash = rent  # the purse covers the first rent
 	if cash < rent:
 		phase = PHASE_OVER
 		ev.append({"e": "run_lost", "night": night, "cash": cash, "rent": rent})
@@ -599,7 +658,10 @@ func snapshot() -> Dictionary:
 		"sealed": sealed, "table": table.duplicate(true), "summon_category": summon_category,
 		"opts": opts.duplicate(true), "rules": rules.duplicate(true), "requests": requests.duplicate(true),
 		"request_seq": request_seq, "requests_done": requests_done, "requests_failed": requests_failed,
-		"collector": collector.duplicate(true),
+		"collector": collector.duplicate(true), "spells_cast": spells_cast, "table_wins": table_wins,
+		"pairs_perfect": pairs_perfect, "tools_used": tools_used, "max_cursed_held": max_cursed_held,
+		"regular": regular.duplicate(true), "regular_progress": regular_progress.duplicate(true),
+		"tutorial": tutorial.duplicate(true),
 	}
 
 
@@ -639,6 +701,14 @@ func restore(d: Dictionary, cat: Catalog) -> void:
 	requests_done = int(d.get("requests_done", 0))
 	requests_failed = int(d.get("requests_failed", 0))
 	collector = (d.get("collector", {}) as Dictionary).duplicate(true)
+	spells_cast = int(d.get("spells_cast", 0))
+	table_wins = int(d.get("table_wins", 0))
+	pairs_perfect = int(d.get("pairs_perfect", 0))
+	tools_used = int(d.get("tools_used", 0))
+	max_cursed_held = int(d.get("max_cursed_held", 0))
+	regular = (d.get("regular", {}) as Dictionary).duplicate(true)
+	regular_progress = (d.get("regular_progress", {}) as Dictionary).duplicate(true)
+	tutorial = (d.get("tutorial", {}) as Dictionary).duplicate(true)
 
 
 func state_hash() -> int:
@@ -710,6 +780,7 @@ func _cast(cmd: Dictionary, ev: Array[Dictionary]) -> void:
 		return
 	var sp: Dictionary = grimoire.spell(id)
 	casts_left -= 1
+	spells_cast += 1
 	var backfired: bool = rng.randf() < grimoire.backfire_chance(dread)
 	var cost: float = float(sp["dread"]) * tuning.spell_dread_mult
 	dread += cost
@@ -774,6 +845,7 @@ func _backfire(id: String, ev: Array[Dictionary]) -> void:
 					clean.append(i)
 			var pick: int = clean[rng.randi_range(0, clean.size() - 1)]
 			inventory[pick]["curse"] = str(catalog.curses[rng.randi_range(0, catalog.curses.size() - 1)]["id"])
+			_track_cursed()
 
 
 func _stake_ok(cmd: Dictionary) -> bool:
@@ -818,6 +890,7 @@ func _table_cmd(t: String, cmd: Dictionary, ev: Array[Dictionary]) -> void:
 				return
 			var r: Dictionary = house.dice_roll(rng, call, int(cmd["stake"]))
 			cash += int(r["payout"]) - int(r["stake"])
+			table_wins += 1 if int(r["payout"]) > int(r["stake"]) else 0
 			r["e"] = "dice"
 			ev.append(r)
 		"table_hand":
@@ -836,6 +909,7 @@ func _table_cmd(t: String, cmd: Dictionary, ev: Array[Dictionary]) -> void:
 				return
 			var w: Dictionary = house.wheel_spin(rng, int(cmd["stake"]))
 			cash += int(w["payout"]) - int(w["stake"])
+			table_wins += 1 if int(w["payout"]) > int(w["stake"]) else 0
 			var find: Dictionary = {}
 			if w["prize"] != "":
 				find = _pick_find(w["prize"] == "page")
@@ -857,6 +931,7 @@ func _table_cmd(t: String, cmd: Dictionary, ev: Array[Dictionary]) -> void:
 			var f: Dictionary = house.stake_item_flip(rng, int(item["value"]))
 			ev.append({"e": "item_staked", "uid": item["uid"], "name": item["name"], "win": f["win"], "value": f["value"]})
 			if f["win"]:
+				table_wins += 1
 				item["value"] = f["value"]
 			else:
 				inventory.erase(item)
@@ -905,6 +980,7 @@ func _hand_step(draw: bool, ev: Array[Dictionary]) -> void:
 		ev.append({"e": "hand_card", "who": "house", "card": c, "total": total})
 	var r: Dictionary = house.hand_result(you, total, stake)
 	cash += int(r["payout"])
+	table_wins += 1 if bool(r["win"]) else 0
 	ev.append({"e": "hand_end", "you": you, "house": total, "win": r["win"], "stake": stake, "payout": r["payout"]})
 	table["hand"] = {}
 
@@ -939,6 +1015,8 @@ func _pairs_flip(i: int, ev: Array[Dictionary]) -> void:
 		return
 	var payout: int = int(round(int(p["stake"]) * float(p["acc"])))
 	cash += payout
+	table_wins += 1 if payout > int(p["stake"]) else 0
+	pairs_perfect += 1 if up.size() >= board.size() else 0
 	ev.append({"e": "pairs_end", "matches": p["matches"], "stake": p["stake"], "payout": payout, "dread": p["dread"]})
 	table["pairs"] = {}
 	_check_wake(ev)
@@ -956,6 +1034,7 @@ func _buy_lot(ev: Array[Dictionary]) -> void:
 		"value": int(round(value)), "curse": cid, "uid": _take_uid(), "est": int(obj["value"]), "tells": 0}
 	cash -= int(tuning.lot_price)
 	inventory.append(item)
+	_track_cursed()
 	ev.append({"e": "lot", "name": item["name"], "price": int(tuning.lot_price), "item_uid": item["uid"],
 		"hidden": not hidden.is_empty()})
 	if not hidden.is_empty():
@@ -1108,3 +1187,132 @@ func _collector_refuse(ev: Array[Dictionary]) -> void:
 	ev.append({"e": "collector_refused", "toll": toll, "dread": tuning.collector_curse_dread,
 		"line": Collector.line("refused"), "curse_line": Collector.line("curse")})
 	_check_wake(ev)
+
+
+## The most cursed objects held at once (a Ledger of Deeds counter).
+func _track_cursed() -> void:
+	var n: int = 0
+	for item: Dictionary in inventory:
+		if str(item["curse"]) != "":
+			n += 1
+	max_cursed_held = maxi(max_cursed_held, n)
+
+
+# ---- regulars (stories across runs)
+
+## The regular's next customer slot: on or after their night (through night 4), a seller chapter at once, a buyer
+## chapter as soon as a held object matches.
+func _regular_due() -> bool:
+	if regular.is_empty() or str(regular["state"]) != "" or night < int(regular["night"]) or night > mini(Regulars.LAST_NIGHT, int(tuning.nights) - 1):
+		return false
+	var chap: Dictionary = Regulars.chapter(str(regular["id"]), int(regular["chapter"]))
+	if chap.is_empty():
+		return false
+	if str(chap["kind"]) == SELLER:
+		return true
+	for item: Dictionary in inventory:
+		if Regulars.matches(chap, item):
+			return true
+	return false
+
+
+func _object(id: String) -> Dictionary:
+	for o: Dictionary in catalog.objects:
+		if str(o["id"]) == id:
+			return o
+	return {}
+
+
+func _regular_arrive(ev: Array[Dictionary]) -> void:
+	var id: String = str(regular["id"])
+	var def: Dictionary = Regulars.get_regular(id)
+	var chap: Dictionary = Regulars.chapter(id, int(regular["chapter"]))
+	regular["state"] = "here"
+	clock -= tuning.customer_minutes
+	play_secs += tuning.secs_per_customer
+	customers_seen += 1
+	var obj: Dictionary = _object(str(chap.get("item_id", "")))
+	var who: String = str(def["name"])
+	if str(chap["kind"]) == SELLER:
+		var cid: String = str(chap.get("curse", ""))
+		var value: float = float(obj["value"]) * (tuning.cursed_value_mult if cid != "" else 1.0)
+		var reserve: int = maxi(1, int(round(value * tuning.seller_reserve_frac)))
+		customer = {"kind": SELLER,
+			"item": {"id": obj["id"], "name": obj["name"], "category": obj["category"], "value": int(round(value)), "curse": cid, "hidden": {}},
+			"reserve": reserve, "ask": int(round(reserve * tuning.seller_ask_markup)), "patience": maxi(1, int(tuning.patience_base)),
+			"type": str(def["tid"]), "noise_u": rng.randf_range(-1.0, 1.0), "tools": [], "tells": [], "imposter": false,
+			"regular": id, "who": who}
+		ev.append({"e": "customer", "kind": SELLER, "name": obj["name"], "ask": customer["ask"], "type": who,
+			"tid": str(def["tid"]), "line": str(chap["line"]), "regular": id})
+	else:
+		var category: String = str(chap.get("category", obj.get("category", "")))
+		customer = {"kind": BUYER, "category": category, "imposter": false, "type": str(def["tid"]), "pay_mult": 1.0,
+			"cursed_mult": 1.0, "regular": id, "who": who, "want": {"item_id": str(chap.get("item_id", "")),
+			"category": str(chap.get("category", "")), "curse": str(chap.get("curse", ""))}}
+		ev.append({"e": "customer", "kind": BUYER, "category": category, "type": who, "tid": str(def["tid"]),
+			"line": str(chap["line"]), "regular": id})
+	ev.append({"e": "regular", "id": id, "name": who, "chapter": int(regular["chapter"]) + 1,
+		"chapters": Regulars.chapter_count(id), "line": str(chap["line"])})
+
+
+func _regular_done(price: int, ev: Array[Dictionary]) -> void:
+	var chap: Dictionary = Regulars.chapter(str(regular["id"]), int(regular["chapter"]))
+	regular["state"] = "done"
+	regular_progress[str(regular["id"])] = int(regular["chapter"]) + 1
+	var reward: Dictionary = (chap.get("reward", {}) as Dictionary).duplicate()
+	ev.append({"e": "regular_done", "id": regular["id"], "chapter": int(regular["chapter"]) + 1,
+		"line": str((chap["outcome_lines"] as Dictionary)["done"]), "reward": reward, "price": price})
+	if not reward.is_empty():
+		_add_find(reward, ev)
+
+
+func _regular_refuse(ev: Array[Dictionary]) -> void:
+	var chap: Dictionary = Regulars.chapter(str(regular["id"]), int(regular["chapter"]))
+	regular["state"] = "refused"
+	regular_progress[str(regular["id"])] = int(regular["chapter"]) + 1
+	ev.append({"e": "regular_refused", "id": regular["id"], "chapter": int(regular["chapter"]) + 1,
+		"line": str((chap["outcome_lines"] as Dictionary)["refused"])})
+
+
+# ---- the guided first night
+
+## The next scripted customer of the tutorial night, or the end of the night after the last.
+func _tutorial_customer(ev: Array[Dictionary]) -> void:
+	var script: Array[Dictionary] = Tutorial.customers()
+	if int(tutorial["idx"]) >= script.size():
+		_end_night(ev)
+		return
+	var c: Dictionary = script[int(tutorial["idx"])]
+	tutorial["idx"] = int(tutorial["idx"]) + 1
+	clock -= tuning.customer_minutes
+	play_secs += tuning.secs_per_customer
+	customers_seen += 1
+	var kind: String = str(c["kind"])
+	var t: Dictionary = {}
+	for ct: Dictionary in catalog.customer_types(kind):
+		if str(ct["id"]) == str(c["tid"]):
+			t = ct
+	if kind == SELLER:
+		var obj: Dictionary = _object(str(c["item_id"]))
+		var cid: String = str(c["curse"])
+		var value: float = float(obj["value"]) * (tuning.cursed_value_mult if cid != "" else 1.0)
+		var reserve: int = maxi(1, int(round(value * tuning.seller_reserve_frac * float(t.get("reserve_mult", 1.0)))))
+		customer = {"kind": SELLER,
+			"item": {"id": obj["id"], "name": obj["name"], "category": obj["category"], "value": int(round(value)), "curse": cid, "hidden": {}},
+			"reserve": reserve, "ask": int(round(reserve * tuning.seller_ask_markup)),
+			"patience": maxi(1, int(tuning.patience_base) + 1 + int(t.get("patience", 0))), "type": str(c["tid"]),
+			"noise_u": 0.3, "tools": [], "tells": [], "imposter": false, "sure_tell": str(c.get("sure_tell", ""))}
+		ev.append({"e": "customer", "kind": SELLER, "name": obj["name"], "ask": customer["ask"], "type": t.get("name", ""),
+			"tid": str(c["tid"]), "line": t.get("line", ""), "tutorial": int(c["step"])})
+	else:
+		customer = {"kind": BUYER, "category": str(c["category"]), "imposter": false, "type": str(c["tid"]),
+			"pay_mult": float(c["pay_mult"]), "cursed_mult": 1.0}
+		ev.append({"e": "customer", "kind": BUYER, "category": customer["category"], "type": t.get("name", ""),
+			"tid": str(c["tid"]), "line": t.get("line", ""), "tutorial": int(c["step"])})
+
+
+## Appends the tutorial_step events that the events so far trigger (see Tutorial.script).
+func _tutorial_hints(ev: Array[Dictionary]) -> void:
+	if tutorial.is_empty():
+		return
+	ev.append_array(Tutorial.hints_for(ev.duplicate(), tutorial, night))

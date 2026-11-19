@@ -123,7 +123,8 @@ static func make_opts(haunting: int, omen: String, daily: bool) -> Dictionary:
 ## True when an opts dictionary changes nothing (so today's start path is used unchanged).
 static func opts_empty(opts: Dictionary) -> bool:
 	return int(opts.get("haunting", 0)) == 0 and str(opts.get("omen", "")) == "" and not bool(opts.get("daily", false)) \
-		and not opts.has("upgrades") and int(opts.get("carry_cash", 0)) == 0
+		and not opts.has("upgrades") and int(opts.get("carry_cash", 0)) == 0 and not opts.has("regulars") \
+		and not bool(opts.get("tutorial", false))
 
 
 ## RunRecording.begin with run options when the logic accepts them (its sixth parameter), else without them.

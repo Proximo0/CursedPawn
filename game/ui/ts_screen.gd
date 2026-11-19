@@ -17,6 +17,9 @@ var focus_id: String = ""
 var down_id: String = ""
 var reset_msg: String = ""
 var canvas: TsCanvas
+var profile: Object  ## optional: the player profile (RelicStore); the Ledger reads deeds and regulars from it
+var ledger := UiLedger.new()
+var ledger_open: bool = false
 
 var _view: TextureRect
 var _vp: SubViewport
@@ -50,7 +53,8 @@ func _ready() -> void:
 	_ts_on_visibility()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	ledger.age += delta
 	if _view != null:
 		ShopGame.ui_place(_view, get_viewport().get_visible_rect().size)
 
@@ -101,7 +105,9 @@ func ts_escape_menu() -> void:
 
 func ts_draw(c: TsCanvas) -> void:
 	ts_draw_scene(c)
-	if settings_open:
+	if ledger_open:
+		ledger.draw(c, self)
+	elif settings_open:
 		_ts_draw_settings(c)
 	else:
 		ts_draw_menu(c)
@@ -113,6 +119,8 @@ func is_focused(id: String) -> bool:
 
 ## The focusable ids on screen now (the settings panel's while it is open).
 func ts_focus_ids() -> Array[String]:
+	if ledger_open:
+		return ledger.focus_ids()
 	return ts_settings_ids(desktop) if settings_open else ts_menu_ids()
 
 
@@ -145,6 +153,18 @@ func ts_move_focus(dir: int) -> void:
 		sfx.ui("hover")
 
 
+func ts_open_ledger() -> void:
+	ledger.open_from(profile)
+	ledger_open = true
+	focus_id = "ledger_tab_deeds"
+
+
+func ts_close_ledger() -> void:
+	ledger_open = false
+	var ids: Array[String] = ts_menu_ids()
+	focus_id = "ledger" if ids.has("ledger") else (ids[0] if not ids.is_empty() else "")
+
+
 func ts_open_settings() -> void:
 	settings_open = true
 	reset_msg = ""
@@ -161,6 +181,14 @@ func ts_close_settings(back_to: String) -> void:
 func ts_activate(id: String) -> void:
 	if sfx != null:
 		sfx.ui("click")
+	if ledger_open:
+		if id == "ledger_back":
+			ts_close_ledger()
+		else:
+			ledger.activate(id)
+			if not ts_focus_ids().has(focus_id):
+				focus_id = "ledger_tab_deeds"
+		return
 	if not settings_open:
 		ts_activate_menu(id)
 		return
@@ -190,7 +218,9 @@ func ts_activate(id: String) -> void:
 
 
 func ts_escape() -> void:
-	if settings_open:
+	if ledger_open:
+		ts_close_ledger()
+	elif settings_open:
 		ts_close_settings("settings")
 	else:
 		ts_escape_menu()
@@ -203,7 +233,9 @@ func ts_key(k: int) -> bool:
 		KEY_DOWN:
 			ts_move_focus(1)
 		KEY_LEFT, KEY_RIGHT:
-			if settings_open and focus_id == FOCUS_VOLUME:
+			if ledger_open:
+				ledger.turn(-1 if k == KEY_LEFT else 1)
+			elif settings_open and focus_id == FOCUS_VOLUME:
 				ts_activate("vol_inc" if k == KEY_RIGHT else "vol_dec")
 		KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
 			if focus_id != "" and focus_id != FOCUS_VOLUME:

@@ -32,12 +32,14 @@ func _ready() -> void:
 		_lab_line("%s_stuck" % style, s["stuck"] == 0, true, "stuck=%d of %d" % [s["stuck"], runs])
 		_lab_line("%s_replay" % style, s["diverged"] == 0, true, "diverged=%d of %d" % [s["diverged"], s["checked"]])
 	_lab_line("restore", _lab_restore_ok(cat), true, "snapshot/restore mid-run continues identically")
+	var before: int = warns
 	_lab_target("run_minutes_median", _lab_median(g["minutes"] + c["minutes"]), 15.0, 25.0, "min")
 	_lab_target("wake_by_night3", _lab_rate(g["woke3"] + c["woke3"], 2 * runs), 0.8, 1.0, "share")
 	_lab_target("greedy_survival", _lab_rate(g["won"], runs), 0.25, 0.40, "share")
 	_lab_target("cautious_survival", _lab_rate(c["won"], runs), 0.50, 0.65, "share")
 	var ratio: float = _lab_mean(g["won_cash"]) / maxf(1.0, _lab_mean(c["won_cash"]))
 	_lab_target("greedy_cash_ratio", ratio, 1.5, 1000.0, "x cautious (survivors' final cash)")
+	_lab_line("haunting0_five_targets", warns == before, false, "haunting 0, no upgrades: all five feel targets hold")
 	for style: String in ShopBot.STYLES:
 		var s: Dictionary = stats[style]
 		print("LAB %s_info INFO won=%d/%d cash_mean=%.0f wakes_mean=%.2f wake_by_n3=%.2f lost_by_night=%s" % [
@@ -63,8 +65,23 @@ func _ready() -> void:
 	var uc: Dictionary = _lab_play(ShopBot.CAUTIOUS, runs, cat, {"upgrades": maxed})
 	var ug: Dictionary = _lab_play(ShopBot.GREEDY, runs, cat, {"upgrades": maxed})
 	_lab_line("upgrades_checks", uc["stuck"] + ug["stuck"] + uc["diverged"] + ug["diverged"] == 0, true, "stuck/diverged with every upgrade")
+	_lab_target("maxed_cautious_survival", _lab_rate(uc["won"], runs), 0.0, 0.80, "share, every upgrade maxed at haunting 0")
+	_lab_target("maxed_greedy_survival", _lab_rate(ug["won"], runs), 0.0, 0.65, "share, every upgrade maxed at haunting 0")
 	print("LAB upgrades_info INFO every upgrade maxed: cautious_survival=%.2f greedy_survival=%.2f (targets above are with upgrades off)" % [
 		_lab_rate(uc["won"], runs), _lab_rate(ug["won"], runs)])
+	var ecto_base: float = (_lab_mean(c["ecto"]) + _lab_mean(g["ecto"])) / 2.0
+	var ecto_max: float = (_lab_mean(uc["ecto"]) + _lab_mean(ug["ecto"])) / 2.0
+	var ecto_mid: float = (ecto_base + ecto_max) / 2.0
+	var total: int = Upgrades.total_cost()
+	print("LAB ecto_info INFO ectoplasm per run: %.1f with no upgrades, %.1f maxed; every upgrade costs %d" % [ecto_base, ecto_max, total])
+	_lab_target("runs_to_max", float(total) / maxf(0.1, ecto_mid), 15.0, 25.0, "runs to max everything (cost / mean ectoplasm per run, no upgrades to maxed)")
+	var rc: Dictionary = _lab_play(ShopBot.CAUTIOUS, runs, cat, {"regulars": {}})
+	var rg: Dictionary = _lab_play(ShopBot.GREEDY, runs, cat, {"regulars": {}})
+	_lab_line("regulars_checks", rc["stuck"] + rg["stuck"] + rc["diverged"] + rg["diverged"] == 0, true, "stuck/diverged with regulars on")
+	print("LAB regulars_info INFO per run, cautious/greedy: visits %.2f/%.2f, chapters done %.2f/%.2f, refused %.2f/%.2f; survival %.2f/%.2f" % [
+		_lab_rate(rc["reg_done"] + rc["reg_refused"], runs), _lab_rate(rg["reg_done"] + rg["reg_refused"], runs),
+		_lab_rate(rc["reg_done"], runs), _lab_rate(rg["reg_done"], runs), _lab_rate(rc["reg_refused"], runs),
+		_lab_rate(rg["reg_refused"], runs), _lab_rate(rc["won"], runs), _lab_rate(rg["won"], runs)])
 	var cprob: PackedStringArray = Collector.problems(cat)
 	_lab_line("collector_data", cprob.is_empty(), true, "problems=%d %s" % [cprob.size(), "; ".join(cprob)])
 	print("LAB done runs=%d warn=%d fail=%d" % [runs, warns, fails])
@@ -85,7 +102,7 @@ func _lab_arg(key: String, default: String) -> String:
 
 func _lab_play(style: String, runs: int, cat: Catalog, opts: Dictionary = {}) -> Dictionary:
 	var s: Dictionary = {"won": 0, "won_cash": [], "minutes": [], "woke3": 0, "wakes": [], "stuck": 0,
-		"diverged": 0, "checked": 0, "lost_night": {}, "req_done": 0, "req_failed": 0, "col_pleased": 0, "col_refused": 0}
+		"diverged": 0, "checked": 0, "lost_night": {}, "req_done": 0, "req_failed": 0, "col_pleased": 0, "col_refused": 0, "ecto": [], "reg_done": 0, "reg_refused": 0}
 	var bot := ShopBot.new(style)
 	for i: int in range(runs):
 		var tun := Tuning.new()
@@ -104,6 +121,9 @@ func _lab_play(style: String, runs: int, cat: Catalog, opts: Dictionary = {}) ->
 				s["diverged"] += 1
 		s["col_pleased"] += 1 if str(run.collector.get("result", "")) == "pleased" else 0
 		s["col_refused"] += 1 if str(run.collector.get("result", "")) == "refused" else 0
+		(s["ecto"] as Array).append(float(Upgrades.ecto_for(run)))
+		s["reg_done"] += 1 if str(run.regular.get("state", "")) == "done" else 0
+		s["reg_refused"] += 1 if str(run.regular.get("state", "")) == "refused" else 0
 		s["req_done"] += run.requests_done
 		s["req_failed"] += run.requests_failed
 		(s["minutes"] as Array).append(run.play_secs / 60.0)

@@ -137,6 +137,10 @@ func problems() -> PackedStringArray:
 	out.append_array(Hauntings.problems())
 	out.append_array(Omens.problems())
 	out.append_array(Upgrades.problems())
+	if not curios.is_empty() and not customers.is_empty():  # skipped for a hand-built test catalog
+		out.append_array(Regulars.problems(self))
+		out.append_array(Deeds.problems())
+		out.append_array(Tutorial.problems(self))
 	return out
 
 

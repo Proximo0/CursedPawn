@@ -23,7 +23,7 @@ const NAMES: PackedStringArray = [
 	"run_won", "run_lost", "ui_click", "ui_hover", "wrong_note", "ambient", "dread",
 	"cast_scry", "cast_hex", "cast_glamour", "cast_banish", "cast_summon", "cast_seal",
 	"backfire", "found_page", "found_curio", "found_hint", "dice_roll", "card_deal", "card_flip", "wheel_tick", "wheel_settle", "pairs_match",
-	"pairs_miss", "stake_win", "stake_lose", "lot_unwrap", "table_open", "request_pinned", "request_done", "request_failed", "omen_flip", "collector_arrive", "collector_pleased", "collector_refused", "altar_buy", "haunt_unlock",
+	"pairs_miss", "stake_win", "stake_lose", "lot_unwrap", "table_open", "request_pinned", "request_done", "request_failed", "omen_flip", "collector_arrive", "collector_pleased", "collector_refused", "altar_buy", "haunt_unlock", "deed", "regular",
 ]
 ## Sounds that loop (ambient bed and dread layer); the rest are one-shots.
 const LOOPS: PackedStringArray = ["ambient", "dread"]
@@ -263,6 +263,8 @@ static func build(name: String, seed_value: int = 1) -> AudioStreamWAV:
 		"collector_refused": return collector_refused(r)
 		"altar_buy": return altar_buy(r)
 		"haunt_unlock": return haunt_unlock(r)
+		"deed": return deed(r)
+		"regular": return regular(r)
 	return null
 
 
@@ -860,3 +862,25 @@ static func haunt_unlock(r: RandomNumberGenerator) -> AudioStreamWAV:
 	au_tremolo(sh, 5.0, 0.6)
 	au_mix(b, sh, 0.0, 0.3)
 	return au_finish(b, STINGER_PEAK)
+
+
+## A deed earned: a wax-seal thump, then a quill scratching a name.
+static func deed(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.8)
+	au_voice(b, SINE, 0.0, 0.2, 110.0, 45.0, 0.9, Vector4(0.002, 0.06, 0.0, 0.08), r)
+	au_voice(b, NOISE, 0.0, 0.05, 0.0, 0.0, 0.5, Vector4(0.001, 0.015, 0.0, 0.02), r, 0.2)
+	var q: PackedFloat32Array = au_buf(0.8)
+	for k: int in range(5):
+		var t0: float = 0.27 + 0.085 * float(k)
+		au_voice(q, NOISE, t0, 0.07, 0.0, 0.0, 0.5, Vector4(0.01, 0.03, 0.0, 0.03), r, 0.7 - 0.08 * float(k % 2))
+	au_mix(b, q, 0.0, 0.3)
+	return au_finish(b, SFX_PEAK)
+
+
+## A regular walks in: a soft, warm two-note bell.
+static func regular(r: RandomNumberGenerator) -> AudioStreamWAV:
+	var b: PackedFloat32Array = au_buf(0.9)
+	au_bell(b, r, 0.0, au_hz(72.0), 0.7, 0.35)
+	au_bell(b, r, 0.18, au_hz(76.0), 0.65, 0.3)
+	au_lowpass(b, 0.45)
+	return au_finish(b, SFX_PEAK)
