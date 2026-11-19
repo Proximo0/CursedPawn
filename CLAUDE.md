@@ -10,8 +10,8 @@ pipeline" doc, section "Design: the cursed pawnshop" (https://claude.ai/artifact
 Web export uses the Compatibility renderer, single-threaded, GDScript only.
 
 ## Commands
-- `tools/run_tests.sh [test_name]`: headless unit tests (`tests/unit/test_*.gd`), split across the CPUs (~4 s for all).
-  A pass prints one `TESTS` line; a failure prints that shard's full output.
+- `tools/run_tests.sh [test_name]`: headless unit tests (`tests/unit/test_*.gd`); one process per CPU, sharing one queue
+  of test methods (~20 s for all). A pass prints one `TESTS` line; a failure prints that process's full output.
 - `tools/lint.sh`: parse and static checks for every script. Ends with `LINT problems=<n>`.
 - `tools/run_sims.sh`: regression sims (`tests/sim/sim_*.gd`, listed in `tests/sim/sim_suite.gd`).
 - `tools/check_all.sh`: everything at once (unit, sims, lint, plus the bot and lab if their scenes exist).
@@ -27,7 +27,9 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
 - `.claude/hooks/lint-on-edit.sh`: after every Edit/Write of a `.gd` file, parse-checks that script and lints it (~0.3 s;
   ~4 s when it adds a new `class_name`). Problems come back to the agent at once.
 - `tools/import.sh`: the shared import step; skipped when no file changed (`FORCE_IMPORT=1` to force). Every tool calls it.
-- CI: `checks` (unit, lint, sims, lab) and `web` (playable build; main deploys to GitHub Pages). Doc-only pushes to main skip both; every PR runs both, because main requires `unit`, `lint`, `sims`, `lab` and `build` to pass and PRs auto-merge when they do.
+- CI: `checks` (unit, lint, sims, lab) runs on every PR; main requires `unit`, `lint`, `sims` and `lab`, and PRs auto-merge
+  when they pass. `web` (playable build, browser bot check, GitHub Pages deploy) runs only after merge, on pushes to main;
+  run it on a branch by hand with workflow_dispatch. Doc-only pushes to main skip both.
 - Run the game: `godot --path .` (add `-- --dev` for dev entries, `-- --stamp` to show the frame stamp). In the game
   screen and the debug shop, F12 reloads `game/data/*.json` and restarts the run on the same seed; F1 loads a tuning
   preset.
