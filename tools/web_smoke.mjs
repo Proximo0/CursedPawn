@@ -41,7 +41,7 @@ page.on('console', (m) => {
 page.on('pageerror', (e) => problems.push(`page error: ${String(e).slice(0, 200)}`));
 await page.goto(`http://localhost:${port}/index.html`);
 // Ready = the game set window.cursedPawnReady after its first shop frame (Flags._process, whatever the main scene). Then the
-// screenshot must not be blank: at the game's native 640x360 a drawn shop is 40-90 KB as PNG, an empty canvas 1-2 KB.
+// screenshot must not be blank: at the game's native 640x360 a drawn shop is 40-90 KB as PNG, a black page about 5 KB (measured).
 const MIN_SHOT_BYTES = 8000;
 let first = -1;
 try {
