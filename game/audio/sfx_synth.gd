@@ -669,18 +669,21 @@ static func ambient(r: RandomNumberGenerator) -> AudioStreamWAV:
 
 ## 4 s seamless detuned shimmer: pairs of sines a hair apart (beats at 0.5-1.5 Hz), slow swell. Whole cycles in 4 s.
 static func dread(_r: RandomNumberGenerator) -> AudioStreamWAV:
+	## One low breath per loop with near-silence between, not a held chord: A3 and E4 with slow-beating twins.
 	var n: int = int(DREAD_SECS * SR)
 	var b: PackedFloat32Array = PackedFloat32Array()
 	b.resize(n)
-	var freqs: PackedFloat32Array = [440.0, 440.75, 659.25, 660.5, 880.0, 881.5, 1318.5, 1320.25]
-	var amps: PackedFloat32Array = [0.5, 0.5, 0.35, 0.35, 0.25, 0.25, 0.15, 0.15]
+	var freqs: PackedFloat32Array = [220.0, 220.5, 329.5, 330.0, 440.0]  ## whole cycles in the 4 s loop, so the seam is clean
+	var amps: PackedFloat32Array = [0.5, 0.5, 0.25, 0.25, 0.08]
 	for k: int in range(freqs.size()):
 		var w: float = TAU * freqs[k] / SR
 		var a: float = amps[k]
 		for i: int in range(n):
 			b[i] += a * sin(w * float(i))
 	for i: int in range(n):
-		b[i] *= 0.7 + 0.3 * sin(TAU * 0.5 * float(i) / SR)  ## 2 swells in the loop
+		var x: float = float(i) / float(n)  ## the breath: peaks at 0.42 of the loop, gone by 0.85, then a low floor
+		var breath: float = sin(PI * clampf(x / 0.85, 0.0, 1.0))
+		b[i] *= 0.06 + 0.94 * breath * breath
 	var g: float = DREAD_RMS / au_rms(b)
 	for i: int in range(n):
 		b[i] *= g
