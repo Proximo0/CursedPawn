@@ -197,3 +197,18 @@ func test_sfx_volume_clamps() -> void:
 	p.set_sfx_volume(-1.0)
 	assert_eq(p.sfx_volume, 0.0)
 	p.free()
+
+
+func test_dread_layer_breathes_and_settles() -> void:
+	assert_true(SfxPlayer.DREAD_MAX_DB <= -12.0, "the Dread layer sits under the room")
+	assert_eq(SfxPlayer.dread_settle(0.0), 1.0)
+	assert_true(SfxPlayer.dread_settle(SfxPlayer.DREAD_SETTLE_AFTER + SfxPlayer.DREAD_SETTLE_SECS) <= SfxPlayer.DREAD_SETTLE + 0.001,
+		"a held Dread level eases down instead of droning")
+	var s: PackedInt32Array = au_samples(SfxSynth.build("dread", 1))
+	var q: int = s.size() / 8
+	var loud: float = 0.0
+	var tail: float = 0.0
+	for i: int in range(q):
+		loud = maxf(loud, absf(float(s[3 * q + i])))
+		tail = maxf(tail, absf(float(s[7 * q + i])))
+	assert_true(tail < loud * 0.15, "the loop has a quiet gap (tail %f vs swell %f)" % [tail, loud])

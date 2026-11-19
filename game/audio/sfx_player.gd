@@ -8,7 +8,13 @@ const POOL_SIZE: int = 8
 const SILENT_DB: float = -80.0
 const BIG_SALE: int = 90  ## a sale at or above this price rings the register
 const AMBIENT_DB: float = -6.0  ## ambient is already -18 dBFS RMS in the file
-const DREAD_MAX_DB: float = -4.0
+const DREAD_MAX_DB: float = -14.0  ## a bed under the room, never over it (it was -4 and droned over everything)
+## Habituation: once Dread has sat at a level this long, the layer eases down to DREAD_SETTLE of its volume, and swells
+## again only when Dread climbs another DREAD_RISE. A held level should unsettle, not drone.
+const DREAD_SETTLE_AFTER: float = 12.0
+const DREAD_SETTLE_SECS: float = 25.0
+const DREAD_SETTLE: float = 0.3
+const DREAD_RISE: float = 0.08
 const DREAD_EASE: float = 2.0  ## per second
 const PITCH_JITTER: float = 0.04
 const BLIP_DB: float = -18.0  ## speech-bubble typing blips sit well under the other sounds
@@ -56,6 +62,8 @@ var _ambient: AudioStreamPlayer
 var _dread: AudioStreamPlayer
 var _dread_target: float = 0.0
 var _dread_level: float = 0.0
+var _dread_peak: float = 0.0  ## the level the current hold started at
+var _dread_hold: float = 0.0  ## seconds Dread has sat without climbing
 var _pending: Array[Dictionary] = []  ## {t, name, vol_db}
 var _warm_i: int = 0
 var _warm_wait: int = 0
@@ -94,6 +102,11 @@ func _process(delta: float) -> void:
 		else:
 			i += 1
 	_dread_level = move_toward(_dread_level, _dread_target, DREAD_EASE * delta)
+	if _dread_target > _dread_peak + DREAD_RISE or _dread_target < _dread_peak - 2.0 * DREAD_RISE:
+		_dread_peak = _dread_target
+		_dread_hold = 0.0
+	else:
+		_dread_hold += delta
 	_apply_dread()
 
 
@@ -339,6 +352,12 @@ func stop_ambient() -> void:
 	_dread.stop()
 
 
+## How much of the Dread layer is left after `hold` seconds at one level: 1, then easing down to DREAD_SETTLE.
+static func dread_settle(hold: float) -> float:
+	var t: float = clampf((hold - DREAD_SETTLE_AFTER) / DREAD_SETTLE_SECS, 0.0, 1.0)
+	return lerpf(1.0, DREAD_SETTLE, t * t * (3.0 - 2.0 * t))
+
+
 ## Dread layer volume from 0..1 (the game's Dread over its wake threshold). Eases towards the target.
 func set_dread(norm: float) -> void:
 	_dread_target = clampf(norm, 0.0, 1.0)
@@ -373,7 +392,7 @@ func _apply_dread() -> void:
 		return
 	if _dread.stream == null and _dread_target > 0.05:
 		_dread.stream = stream_for("dread")  ## built when Dread first shows, not at boot
-	var curve: float = pow(_dread_level, 1.5)
+	var curve: float = pow(_dread_level, 1.5) * dread_settle(_dread_hold)
 	var db: float = SILENT_DB if curve <= 0.01 else _db(lerpf(-30.0, DREAD_MAX_DB, curve))
 	_dread.volume_db = db
 	if _dread.stream != null and _ambient.playing and not _dread.playing:

@@ -79,8 +79,10 @@ static func ts_entries(has_save_in: bool, web_in: bool, daily_in: bool = false, 
 
 
 ## The test menu shows in debug builds and with --dev, never in a release build otherwise.
+## The test menu shows in every build until launch: project setting cursed_pawn/test_menu (false for the shipping build,
+## see docs/release_checklist.md). Debug builds and --dev always have it.
 static func ts_test_allowed() -> bool:
-	return OS.is_debug_build() or Flags.dev_menu()
+	return bool(ProjectSettings.get_setting("cursed_pawn/test_menu", true)) or OS.is_debug_build() or Flags.dev_menu()
 
 
 ## What the Continue card shows for a saved run: {night, nights, cash, dread, items: [names], badge}.

@@ -13,6 +13,7 @@ Owner of each line is in brackets. Nothing here spends money, creates an account
 5. Open the web build on a phone (iOS Safari and Android Chrome): title, one night, wake, run end, copy a link. [Curtis]
 6. Soak: ten back-to-back bot runs in one process (`tools/perf.sh --frames=3000`), watch the worst frame. [Lane D]
 7. No credentials in git: `git ls-files | grep -i credentials` is empty. [lead]
+8. Hide the test menu: set `cursed_pawn/test_menu=false` in project.godot on the release branch (it shows in every build until then; `--dev` still opens it). [lead]
 
 ## 2. Changelog (keep a draft in the PR; players see the short form)
 - Format: one line per change, player words first ("The Collector's theme now follows Dread"). Sections: New, Changed, Fixed.
