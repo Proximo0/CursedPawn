@@ -1414,8 +1414,9 @@ func leave_test_menu() -> void:
 	_hud_view.visible = title == null  # scripted runs have no title: the shop is what shows
 
 
-## Opens one tile of the menu.
-func run_test_tile(id: String) -> void:
+## Opens one tile of the menu. Connected to TestMenu.picked(id, opt), so it takes the signal's options argument too
+## (it reads the same options from the menu itself).
+func run_test_tile(id: String, _picked_opt: Dictionary = {}) -> void:
 	if test_menu == null:
 		return
 	var opt: Dictionary = test_menu.opts()
