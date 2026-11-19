@@ -13,6 +13,7 @@ var master: float = 1.0  ## linear 0..1, in steps of VOLUME_STEP
 var muted: bool = false
 var dither: bool = true
 var fullscreen: bool = false
+var scares_full: bool = true  ## false = gentle: no sudden flashes, loud stingers or screen-filling faces
 var seen: Array[String] = []  ## tutorial hint ids that have been shown
 
 
@@ -55,7 +56,7 @@ func reset_hints() -> void:
 
 func to_dict() -> Dictionary:
 	return {"version": VERSION, "master": master, "muted": muted, "dither": dither, "fullscreen": fullscreen,
-		"seen": seen.duplicate()}
+		"scares": "full" if scares_full else "gentle", "seen": seen.duplicate()}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -63,6 +64,7 @@ func from_dict(d: Dictionary) -> void:
 	muted = bool(d.get("muted", false))
 	dither = bool(d.get("dither", true))
 	fullscreen = bool(d.get("fullscreen", false))
+	scares_full = str(d.get("scares", "full")) != "gentle"
 	seen.clear()
 	var raw: Variant = d.get("seen", [])
 	if raw is Array:
@@ -104,6 +106,8 @@ func apply(sfx: SfxPlayer, room: ShopRoom2D) -> void:
 		sfx.set_muted(muted)
 	if room != null:
 		room.dither_enabled = dither
+		if "scare_level" in room:  # the room worker's property; 0 gentle, 1 full
+			room.set("scare_level", 1 if scares_full else 0)
 	if not Flags.is_scripted_run() and ts_is_desktop():
 		var mode: int = DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 		if DisplayServer.window_get_mode() != mode:

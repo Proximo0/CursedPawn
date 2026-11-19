@@ -8,10 +8,10 @@ extends TsScreen
 signal resumed
 signal quit_to_title
 
-const PANEL := Rect2(150.0, 62.0, 180.0, 134.0)
-const BTN_W: float = 140.0
-const BTN_H: float = 18.0
-const BTN_STEP: float = 24.0
+const PANEL := Rect2(220.0, 88.0, 200.0, 176.0)
+const BTN_W: float = 150.0
+const BTN_H: float = 20.0
+const BTN_STEP: float = 30.0
 const IDS: Array[String] = ["resume", "settings", "quit_title"]
 const LABELS: Dictionary = {"resume": "RESUME [ESC]", "settings": "SETTINGS", "quit_title": "QUIT TO TITLE"}
 
@@ -71,15 +71,17 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func ts_draw_scene(c: TsCanvas) -> void:
-	c.dim(Rect2(Vector2.ZERO, ShopGame.VIEW), 8)
+	c.dim(Rect2(Vector2.ZERO, ShopGame.VIEW), 10)
 
 
 func ts_draw_menu(c: TsCanvas) -> void:
 	c.frame(PANEL, "panel")
-	c.text_c(240.0, PANEL.position.y + 9.0, "PAUSED", 11, 3)
-	var y: float = PANEL.position.y + 40.0
+	c.head_c(320.0, PANEL.position.y + 16.0, "PAUSED", 11, 2)
+	c.fill(Rect2(PANEL.position.x + 16.0, PANEL.position.y + 46.0, PANEL.size.x - 32.0, 1.0), 9)
+	c.fill(Rect2(PANEL.position.x + 16.0, PANEL.position.y + 47.0, PANEL.size.x - 32.0, 1.0), 8)
+	var y: float = PANEL.position.y + 62.0
 	for i: int in range(IDS.size()):
-		var rect := Rect2(240.0 - BTN_W * 0.5, y + BTN_STEP * float(i), BTN_W, BTN_H)
+		var rect := Rect2(320.0 - BTN_W * 0.5, y + BTN_STEP * float(i), BTN_W, BTN_H)
 		c.button(IDS[i], rect, str(LABELS[IDS[i]]), true, i == 0)
 		if is_focused(IDS[i]):
-			c.text(Vector2(rect.position.x - 10.0, rect.position.y + 5.0), ">", 11)
+			c.cursor_flame(Vector2(rect.position.x - 14.0, rect.position.y + 6.0))

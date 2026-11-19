@@ -1,12 +1,13 @@
 extends SceneTree
-## Contact sheet of the 2D shop room: calm, props, the four tools, a card, three customers, Dread, and the wake.
+## Contact sheet of the 2D shop room (640x360): calm, props, bubble stages, tools and the cursed overlay, a card, customers,
+## sale sparkles, smoke, Dread 0.3 / 0.5 / 0.7 / 0.9, the wake beat (full and gentle) and the wake. Reports ms per frame.
 ## Run: xvfb-run -a godot --path . --resolution 1280x720 -s res://tests/shots/room2d_sheet.gd -- --scripted
 ## Writes /tmp/shots/room2d_sheet.png and prints the mean luminance of each cell. Never touches player data.
 
 const OUT_PATH: String = "/tmp/shots/room2d_sheet.png"
-const CELL := Vector2i(480, 270)
+const CELL := Vector2i(427, 240)
 const LABEL_H: int = 16
-const COLS: int = 4
+const COLS: int = 3
 
 var _room: ShopRoom2D
 var _cells: Array[Image] = []
@@ -80,32 +81,99 @@ func _go() -> void:
 	await _snap("calm empty")
 	_room.setup(_run_with(cat, picks))
 	await _snap("calm, 10 props")
-	var seller: String = picks[0]
-	_customer("seller", seller, "widow")
-	await _snap("customer: widow + bubble")
-	for tool: String in ["uv", "scale", "listen", "touch"]:
-		_room.apply_events([{"e": "inspected", "tool": tool, "tell": "", "estimate": {}}] as Array[Dictionary])
+	_customer("seller", picks[0], "widow")
+	_room._show_bubble()
+	_room._bubble.advance(0.4)
+	await _snap("bubble typing (pop+letters)")
+	_room._bubble.finish_typing()
+	await _snap("bubble full, dread words")
+	_room._bubble.close()
+	_room._bubble.advance(0.3)
+	await _snap("bubble fraying to ash")
+	_room._bubble.hide_now()
+	for tool: String in ["uv", "scale"]:
+		_room.apply_events([{"e": "inspected", "tool": tool, "tell": "glows" if tool == "uv" else "", "estimate": {}}] as Array[Dictionary])
 		_room._fx_t = 0.5
 		await _frames(1)
 		_room._fx_t = 0.5
-		await _snap("tool: " + tool)
+		await _snap("tool: " + tool + (" + cursed overlay" if tool == "uv" else ""))
 	_room.apply_events([{"e": "wager", "card": "The Fool", "stake": 5, "payout": 10, "dread": 1.0}] as Array[Dictionary])
-	_room._card_t = 0.62
-	await _snap("card flip")
+	_room._card_t = 0.5
+	_room._update_card(0.05)
+	_room._update_card(0.05)
+	await _snap("card flip + spark trail")
+	_room.apply_events([{"e": "sold", "uid": 100, "name": picks[0], "price": 9, "imposter": false}] as Array[Dictionary])
+	_room._fx_sys.update(0.12)
+	await _snap("sale: coin sparkles")
+	_room._fx_sys.clear()
+	_room._cust_state = "here"
+	_room.apply_events([{"e": "passed", "kind": "seller"}] as Array[Dictionary])
+	_room._fx_sys.update(0.35)
+	await _snap("leaving: ink smoke")
 	_customer("buyer", "", "priest")
 	await _snap("customer: priest (tall)")
 	_customer("buyer", "", "haggler")
 	await _snap("customer: haggler (short)")
-	_room.set_dread(Tuning.shared().wake_threshold * 1.2)
-	await _snap("dread high")
+	var thr: float = Tuning.shared().wake_threshold
+	for lvl: float in [0.3, 0.5, 0.7, 0.9]:
+		_room.set_dread(lvl * thr)
+		_customer("buyer", "", "widow")
+		_room._bubble.hide_now()
+		await _frames(45)
+		await _snap("dread %.1f" % lvl)
 	_room.set_dread(0.0)
 	_room.setup(_run_with(cat, picks))
 	_room.wake(7)
-	for target: int in [30, 90, 180]:
+	for mode: int in [1, 0]:
+		_room.scare_level = mode
+		_room.wake(7)
+		while _room._wake_tick < (38 if mode == 1 else 40):
+			await physics_frame
+		_room.process_mode = Node.PROCESS_MODE_DISABLED
+		_room._fx.queue_redraw()
+		await _snap("wake beat: silhouette, " + ("FULL" if mode == 1 else "GENTLE"))
+		_room.process_mode = Node.PROCESS_MODE_INHERIT
+		if mode == 1:
+			while _room.is_waking():
+				await physics_frame
+			await _frames(200)
+	_room.scare_level = 1
+	_room.setup(_run_with(cat, picks))
+	_room.wake(7)
+	for target: int in [110, 180]:
 		while _room._wake_tick < target and _room.is_waking():
 			await physics_frame
 		await _snap("wake %.1f s" % (float(target) / 60.0))
+	await _measure(cat, picks)
 	_save_sheet()
+
+
+## Script cost (the room's _process) and wall time per frame with a busy scene (dread 0.9, customer, bubble, particles).
+func _measure(cat: Catalog, picks: PackedStringArray) -> void:
+	_room.set_dread(0.9 * Tuning.shared().wake_threshold)
+	_room.setup(_run_with(cat, picks))
+	_customer("seller", picks[0], "widow")
+	_room._show_bubble()
+	_room._fx_sys.emit("sparkle", Vector2(300.0, 200.0), 60)
+	await _frames(10)
+	var t0: int = Time.get_ticks_usec()
+	for i: int in range(300):
+		_room._process(1.0 / 60.0)
+	var script_ms: float = float(Time.get_ticks_usec() - t0) / 1000.0 / 300.0
+	var worst: float = 0.0
+	var total: float = 0.0
+	var samples: PackedFloat64Array = []
+	var last: int = Time.get_ticks_usec()
+	for i: int in range(120):
+		await process_frame
+		var now: int = Time.get_ticks_usec()
+		samples.append(float(now - last) / 1000.0)
+		last = now
+	samples.sort()
+	for v: float in samples:
+		total += v
+		worst = maxf(worst, v)
+	print("MS script_process=%.3f ms/frame  frame_wall avg=%.2f p95=%.2f max=%.2f (xvfb software GL)" % [script_ms, total / 120.0, samples[int(120 * 0.95)], worst])
 
 
 func _save_sheet() -> void:

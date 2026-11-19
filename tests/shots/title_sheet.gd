@@ -1,10 +1,10 @@
 extends SceneTree
-## Contact sheet of the title and pause UI: title (no save), title with Continue and the parcel line, pause menu,
-## settings panel, and a hint shown over the shop. Writes /tmp/shots/title_sheet.png. Never touches player data.
-## xvfb-run -a godot --path . --resolution 960x540 -s res://tests/shots/title_sheet.gd -- --scripted
+## Contact sheet of the title and pause UI: the title intro (near black, title fading up, menu lighting, eyes opening),
+## title with Continue and the parcel line, the settings panel on its Scares row, a hint pinned over the shop and the pause menu. Writes /tmp/shots/title_sheet.png. Never touches player data.
+## xvfb-run -a godot --path . -s res://tests/shots/title_sheet.gd -- --scripted
 
 const OUT_PATH: String = "/tmp/shots/title_sheet.png"
-const CELL := Vector2i(480, 270)
+const CELL := Vector2i(640, 360)
 const LABEL_H: int = 16
 const COLS: int = 3
 
@@ -45,20 +45,27 @@ func _title(has_save: bool, parcel: bool) -> Variant:
 
 
 func _go() -> void:
-	var t1: Variant = _title(false, false)
-	await _frames(10)
-	await _snap("title, no save")
-	t1.free()
-	await _frames(2)
+	var intro: Array = [[0.5, "intro 0.5s: near black, one candle"], [2.2, "intro 2.2s: the title fades up"],
+		[4.3, "intro 4.3s: subtitle, the menu lights"], [7.0, "intro 7.0s: eyes open in the dark, flame cursor"]]
+	for step: Array in intro:
+		var ti: Variant = _title(false, false)
+		await _frames(3)
+		ti.canvas.t = float(step[0])
+		await _snap(str(step[1]))
+		ti.free()
+		await _frames(2)
 	var t2: Variant = _title(true, true)
-	await _frames(10)
+	await _frames(3)
+	t2.canvas.t = 12.0
 	t2.ts_key(KEY_DOWN)
 	await _snap("title, continue + parcel")
 	t2.ts_open_settings()
 	t2.settings.master = 0.7
 	t2.settings.fullscreen = false
 	t2.ts_key(KEY_DOWN)
-	await _snap("settings panel")
+	t2.ts_key(KEY_DOWN)
+	t2.ts_key(KEY_DOWN)
+	await _snap("settings panel, Scares row")
 	t2.free()
 	await _frames(2)
 	var game: Variant = (load("res://game/ui/shop_game.tscn") as PackedScene).instantiate()
@@ -76,9 +83,9 @@ func _go() -> void:
 	await _frames(2)
 	var hint_view := _HintDraw.new()
 	hint_view.text = hints.text()
-	hint_view.age = 1.0
+	hint_view.age = 0.2
 	game.add_child(hint_view)
-	await _snap("hint over the shop")
+	await _snap("hint note fluttering in")
 	hint_view.free()
 	pause.open()
 	pause.ts_key(KEY_DOWN)
@@ -86,7 +93,7 @@ func _go() -> void:
 	_save_sheet()
 
 
-## Draws a hint at the top of the window the way the HUD would (same 480x270 grid, scaled to the window).
+## Draws a hint at the top of the window the way the HUD would (same 640x360 grid, scaled to the window).
 class _HintDraw extends Control:
 	var text: String = ""
 	var age: float = 0.0
@@ -97,8 +104,8 @@ class _HintDraw extends Control:
 		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 	func _draw() -> void:
-		var s: float = minf(size.x / 480.0, size.y / 270.0)
-		draw_set_transform((size - Vector2(480.0, 270.0) * s) * 0.5, 0.0, Vector2(s, s))
+		var s: float = minf(size.x / 640.0, size.y / 360.0)
+		draw_set_transform((size - Vector2(640.0, 360.0) * s) * 0.5, 0.0, Vector2(s, s))
 		TsHintFrame.ts_draw(self, text, age)
 
 

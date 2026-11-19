@@ -3,8 +3,8 @@ extends "res://tests/sim/sim_base.gd"
 ## (speed < 2 px/s) within 8 s, and two wakes with the same seed end within 1 px. Also checks the props moved.
 
 const PROPS: int = 14
-const ROOM_W: float = 480.0
-const ROOM_FLOOR: float = 230.0
+const ROOM_W: float = 640.0
+const ROOM_FLOOR: float = 300.0
 const REST_SPEED: float = 2.0
 const SAME_TOL: float = 1.0
 
@@ -23,7 +23,7 @@ func _make_run() -> RunState:
 
 func _out_of_bounds(room: ShopRoom2D) -> bool:
 	for b: RigidBody2D in room.all_bodies():
-		if b.position.x < 0.0 or b.position.x > ROOM_W or b.position.y > ROOM_FLOOR or b.position.y < -10.0:
+		if b.position.x < 0.0 or b.position.x > ROOM_W or b.position.y > ROOM_FLOOR + 2.0 or b.position.y < -10.0:
 			return true
 	return false
 

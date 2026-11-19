@@ -226,3 +226,24 @@ func test_pause_menu_choices() -> void:
 	assert_eq(got, ["resumed", "quit_to_title"] as Array[String])
 	assert_false(p.is_open())
 	p.free()
+
+
+func test_scares_setting_round_trips_and_toggles_from_the_panel() -> void:
+	var s := TsSettings.new()
+	assert_true(s.scares_full, "full by default")
+	s.scares_full = false
+	var back := TsSettings.new()
+	back.from_dict(s.to_dict())
+	assert_false(back.scares_full)
+	assert_eq(str(s.to_dict()["scares"]), "gentle")
+	back.from_dict({"version": 1})
+	assert_true(back.scares_full, "older files read as full")
+	assert_true(TsScreen.ts_settings_ids(false).has("scares"))
+	var t := TitleScreen.new()
+	t.settings = TsSettings.new()
+	t.web = false
+	t.ts_open_settings()
+	t.focus_id = "scares"
+	t.ts_key(KEY_ENTER)
+	assert_false(t.settings.scares_full)
+	t.free()

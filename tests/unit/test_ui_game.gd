@@ -16,12 +16,19 @@ func _seller_run() -> RunState:
 	return run
 
 
-func test_view_mapping_matches_cover_scaling() -> void:
-	assert_eq(ShopGame.ui_to_view(Vector2(0, 0), Vector2(960, 540)), Vector2(0, 0))
-	assert_eq(ShopGame.ui_to_view(Vector2(960, 540), Vector2(960, 540)), Vector2(480, 270))
-	assert_eq(ShopGame.ui_to_view(Vector2(480, 270), Vector2(1920, 1080)), Vector2(120, 67.5))
-	# a wider window crops top and bottom: the centre stays the centre
-	assert_eq(ShopGame.ui_to_view(Vector2(1000, 400), Vector2(2000, 800)), Vector2(240, 135))
+func test_view_mapping_uses_whole_scales_with_letterbox() -> void:
+	assert_eq(ShopGame.VIEW, Vector2(640.0, 360.0))
+	assert_eq(ShopGame.ui_scale(Vector2(1280, 720)), 2.0)
+	assert_eq(ShopGame.ui_scale(Vector2(1920, 1080)), 3.0)
+	assert_eq(ShopGame.ui_scale(Vector2(1600, 900)), 2.0, "2.5 fit keeps 80 percent at 2x")
+	assert_eq(ShopGame.ui_scale(Vector2(1000, 563)), 1.5625, "too far from a whole number: plain fit")
+	assert_eq(ShopGame.ui_scale(Vector2(480, 270)), 0.75, "tiny windows fit")
+	assert_eq(ShopGame.ui_to_view(Vector2(0, 0), Vector2(1280, 720)), Vector2(0, 0))
+	assert_eq(ShopGame.ui_to_view(Vector2(1280, 720), Vector2(1280, 720)), Vector2(640, 360))
+	assert_eq(ShopGame.ui_to_view(Vector2(960, 540), Vector2(1920, 1080)), Vector2(320, 180))
+	# a wider window letterboxes left and right: the centre stays the centre
+	assert_eq(ShopGame.ui_to_view(Vector2(1000, 360), Vector2(2000, 720)), Vector2(320, 180))
+	assert_eq(ShopGame.ui_rect(Vector2(1400, 720)), Rect2(60, 0, 1280, 720))
 
 
 func test_seller_keys_map_to_commands() -> void:
