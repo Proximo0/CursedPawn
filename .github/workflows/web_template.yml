@@ -1,9 +1,18 @@
 name: web-template-2d
-# Builds a smaller 2D-only Godot web export template (no 3D, size-optimised, single-threaded).
-# Manual: gh workflow run web-template-2d. Artifact: web_nothreads_release_2d.zip (drop into the export templates
-# folder as web_nothreads_release.zip, or point the Web preset's custom_template/release at it).
+# Builds a smaller 2D-only Godot web export template (no 3D, size_extra, single-threaded, unused modules off).
+# Manual: gh workflow run web-template-2d. Asset: web_nothreads_release_2d_min.zip, the Web preset's custom release
+# template (tools/fetch_web_template.sh). Measured 19 Nov: wasm 27.2 -> 19.1 MiB raw, 7.0 -> 5.6 MiB gzip; under
+# Cloudflare's 25 MiB per-file limit. Modules kept on purpose: svg (default theme icons), text_server_fb, physics.
+# Trial builds: pass another `variant` and `extra` flags; they upload beside it without replacing it.
 on:
   workflow_dispatch:
+    inputs:
+      variant:
+        description: "Asset suffix: web_nothreads_release_<variant>.zip (2d_min = the one the Web preset uses)"
+        default: "2d_min"
+      extra:
+        description: "Extra scons flags for a trial build (e.g. optimize=size_extra, module_*_enabled=no)"
+        default: ""
 
 permissions:
   contents: write
@@ -31,19 +40,32 @@ jobs:
       - name: SCons
         run: python -m pip install scons
       - name: Compile
+        env:
+          EXTRA: ${{ inputs.extra }}  # via env, not pasted into the script
         run: >-
           scons platform=web target=template_release threads=no arch=wasm32
-          disable_3d=yes optimize=size lto=full debug_symbols=no deprecated=no
+          disable_3d=yes optimize=size_extra lto=full debug_symbols=no deprecated=no
           module_text_server_adv_enabled=no module_text_server_fb_enabled=yes
-          -j$(nproc)
+          module_astcenc_enabled=no module_basis_universal_enabled=no module_bcdec_enabled=no module_bmp_enabled=no
+          module_camera_enabled=no module_csg_enabled=no module_dds_enabled=no module_enet_enabled=no
+          module_etcpak_enabled=no module_fbx_enabled=no module_gltf_enabled=no module_gridmap_enabled=no
+          module_hdr_enabled=no module_interactive_music_enabled=no module_jsonrpc_enabled=no module_ktx_enabled=no
+          module_mbedtls_enabled=no module_meshoptimizer_enabled=no module_mp3_enabled=no module_mobile_vr_enabled=no
+          module_msdfgen_enabled=no module_multiplayer_enabled=no module_noise_enabled=no
+          module_navigation_2d_enabled=no module_navigation_3d_enabled=no module_ogg_enabled=no
+          module_openxr_enabled=no module_raycast_enabled=no module_regex_enabled=no module_tga_enabled=no
+          module_theora_enabled=no module_tinyexr_enabled=no module_upnp_enabled=no module_vhacd_enabled=no
+          module_vorbis_enabled=no module_webrtc_enabled=no module_websocket_enabled=no module_webxr_enabled=no
+          module_zip_enabled=no
+          $EXTRA -j$(nproc)
       - name: Package
         run: |
           ls -la bin
-          cp bin/godot.web.template_release.wasm32.nothreads.zip web_nothreads_release_2d.zip
+          cp bin/godot.web.template_release.wasm32.nothreads.zip "web_nothreads_release_${{ inputs.variant }}.zip"
       - uses: actions/upload-artifact@v4
         with:
-          name: web_nothreads_release_2d
-          path: web_nothreads_release_2d.zip
+          name: web_nothreads_release_${{ inputs.variant }}
+          path: web_nothreads_release_${{ inputs.variant }}.zip
       # Also attach it to a DRAFT release (not public; Curtis approved 18 Nov) so tools can fetch it.
       - name: Attach to draft release
         env:
@@ -52,4 +74,4 @@ jobs:
           gh release view web-template-2d -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create web-template-2d -R "$GITHUB_REPOSITORY" --draft --title "2D web template (internal)" \
               --notes "Built by the web-template-2d workflow. Draft, not public."
-          gh release upload web-template-2d web_nothreads_release_2d.zip -R "$GITHUB_REPOSITORY" --clobber
+          gh release upload web-template-2d "web_nothreads_release_${{ inputs.variant }}.zip" -R "$GITHUB_REPOSITORY" --clobber

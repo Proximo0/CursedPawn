@@ -15,8 +15,9 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
 - `tools/lint.sh`: parse and static checks for every script. Ends with `LINT problems=<n>`.
 - `tools/run_sims.sh`: regression sims (`tests/sim/sim_*.gd`, listed in `tests/sim/sim_suite.gd`).
 - `tools/check_all.sh`: everything at once (unit, sims, lint, plus the bot and lab if their scenes exist).
-- `tools/export_web.sh`: web build in `build/web/` plus its size check. Release uses the 2D-only engine, fetched on
-  first use by `tools/fetch_web_template.sh` (7.3 MB download vs 9.9 MB); `--debug` uses the stock debug template.
+- `tools/export_web.sh`: web build in `build/web/` plus its size check. Release uses the 2D-only engine with unused modules off,
+  fetched on first use by `tools/fetch_web_template.sh` (6.3 MB download, wasm 19 MiB); `--debug` uses the stock debug template.
+  A game that needs a module switched off (ogg, regex, websocket, mbedtls...) must turn it back on in `web_template.yml`.
   `node tools/web_smoke.mjs`: boots `build/web` in headless Chromium (no errors, a full screen within 30 s); with
   `SMOKE_BOT=greedy` a second page plays a whole run with the play-bot (`SMOKE_BOT_HASH` = the native run's hash).
 - Bot play through the real screen: `godot --headless --path . -- --scripted --bot=greedy --seed=7` prints one `BOT`
