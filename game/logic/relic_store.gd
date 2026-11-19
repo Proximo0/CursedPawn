@@ -23,6 +23,11 @@ var haunting_unlocked: int = 0
 var best_cash: int = 0
 var daily_last: String = ""  ## "YYYY-MM-DD" of the last daily played
 var daily_best: Dictionary = {}  ## date -> {number, night, cash, won, wakes}; only the latest 30 dates are kept
+## Altar (profile version 4): ectoplasm earned by finished runs, upgrade ranks {id: rank}, and the cash the
+## Mourning Purse carries into the next run (set by PlayerProfile.record_result).
+var ecto: int = 0
+var upgrades: Dictionary = {}
+var carry_cash: int = 0
 var log: Array[Dictionary] = []  ## {n, id, price_cents, payment_ref, delivered, refunded}
 
 

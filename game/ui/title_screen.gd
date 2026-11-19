@@ -11,6 +11,7 @@ extends TsScreen
 signal start_new
 signal continue_run
 signal start_daily
+signal open_altar
 signal quit
 
 const TITLE: String = "Cursed Pawn"  ## small caps after the capitals, so the letters read as deliberate
@@ -20,6 +21,7 @@ const TITLE_SCALE: int = 4
 const BTN_W: float = 150.0
 const BTN_H: float = 20.0
 const BTN_STEP: float = 26.0
+const BTN_STEP_TIGHT: float = 23.0
 const MENU_X: float = 420.0
 const CANDLE_POS := Vector2(150.0, 312.0)
 const CANDLE_W: int = 16
@@ -42,18 +44,22 @@ var has_save: bool = false  ## show Continue
 var parcel: bool = false  ## the page URL carried a gift: show the parcel line
 var daily_on: bool = false  ## offer the Daily Seance (the logic for it exists)
 var daily_number: int = 0  ## today's Seance number
+var altar_on: bool = false  ## offer the Altar (the logic for upgrades exists)
+var altar_ecto: int = 0  ## ectoplasm waiting to be spent: a green number beside the entry
 var daily_line: String = ""  ## when today's was already played: its short result, shown under the menu
 var _own_room: bool = false
 
 
 ## The menu entries top to bottom: [{id, label}]. Continue needs a saved run; Quit is not offered on the web.
-static func ts_entries(has_save_in: bool, web_in: bool, daily_in: bool = false, daily_no: int = 0) -> Array[Dictionary]:
+static func ts_entries(has_save_in: bool, web_in: bool, daily_in: bool = false, daily_no: int = 0, altar_in: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if has_save_in:
 		out.append({"id": "continue", "label": "CONTINUE"})
 	out.append({"id": "new", "label": "NEW RUN"})
 	if daily_in:
 		out.append({"id": "daily", "label": "DAILY SEANCE #%d" % daily_no})
+	if altar_in:
+		out.append({"id": "altar", "label": "THE ALTAR"})
 	out.append({"id": "settings", "label": "SETTINGS"})
 	if not web_in:
 		out.append({"id": "quit", "label": "QUIT"})
@@ -100,7 +106,7 @@ func ts_ready() -> void:
 
 func ts_menu_ids() -> Array[String]:
 	var ids: Array[String] = []
-	for e: Dictionary in ts_entries(has_save, web, daily_on, daily_number):
+	for e: Dictionary in ts_entries(has_save, web, daily_on, daily_number, altar_on):
 		ids.append(str(e["id"]))
 	return ids
 
@@ -113,6 +119,8 @@ func ts_activate_menu(id: String) -> void:
 			start_new.emit()
 		"daily":
 			start_daily.emit()
+		"altar":
+			open_altar.emit()
 		"settings":
 			ts_open_settings()
 		"quit":
@@ -189,24 +197,28 @@ func _ts_draw_eyes(c: TsCanvas, at: Vector2, w: float, o: float, rim: int, core:
 
 
 func ts_draw_menu(c: TsCanvas) -> void:
-	var entries: Array[Dictionary] = ts_entries(has_save, web, daily_on, daily_number)
-	var y: float = 186.0
+	var entries: Array[Dictionary] = ts_entries(has_save, web, daily_on, daily_number, altar_on)
+	var step: float = BTN_STEP if entries.size() <= 5 else BTN_STEP_TIGHT
+	var y: float = 186.0 if entries.size() <= 5 else 176.0
 	if parcel and c.t > MENU_AT:
 		var pulse: bool = fmod(c.t, 1.6) < 0.9
-		c.text_c(MENU_X, 162.0, PARCEL_LINE, 11 if pulse else 15, 1)
+		c.text_c(MENU_X, y - 24.0, PARCEL_LINE, 11 if pulse else 15, 1)
 	for i: int in range(entries.size()):
 		var e: Dictionary = entries[i]
 		var u: float = UiMotion.ui_out((c.t - MENU_AT - MENU_STEP * float(i)) / 0.35)
-		var rect := Rect2(MENU_X - BTN_W * 0.5, y + BTN_STEP * float(i), BTN_W, BTN_H)
+		var rect := Rect2(MENU_X - BTN_W * 0.5, y + step * float(i), BTN_W, BTN_H)
 		if u <= 0.0:
 			c.add(str(e["id"]), rect, false)
 			continue
 		var shown := Rect2(rect.position + Vector2(0.0, floorf((1.0 - u) * 10.0)), rect.size)
 		c.button(str(e["id"]), shown, str(e["label"]), true, i == 0)
+		if str(e["id"]) == "altar" and altar_ecto > 0 and u >= 1.0:
+			var glow: int = 7 if fmod(c.t, 1.4) < 0.9 else 6
+			c.text(Vector2(rect.end.x + 8.0, rect.position.y + 6.0), "%d" % altar_ecto, glow, 1)  # ectoplasm to spend
 		if is_focused(str(e["id"])) and u >= 1.0:
 			c.cursor_flame(Vector2(rect.position.x - 15.0, rect.position.y + 6.0))
 	if daily_line != "" and c.t > MENU_AT + 0.6:
-		var dy: float = y + BTN_STEP * float(entries.size()) + 1.0
+		var dy: float = y + step * float(entries.size()) + 1.0
 		c.text_c(MENU_X, dy, "PLAYED TODAY: " + daily_line, 14, 1)
 	if c.t > MENU_AT + 0.8:
 		c.text_c(MENU_X, 340.0, "UP DOWN ENTER, OR CLICK", 4, 1)

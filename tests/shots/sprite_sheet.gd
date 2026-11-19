@@ -7,7 +7,7 @@ const OUT_PATH: String = "/tmp/shots/sprite_sheet.png"
 const SCALE: int = 2
 const BG: Color = Color("3a2455")
 const SHEET_W: int = 1320
-const SHEET_H: int = 3400
+const SHEET_H: int = 4600
 
 
 func _initialize() -> void:
@@ -102,7 +102,7 @@ func _initialize() -> void:
 		bg.blend_rect(img, Rect2i(Vector2i.ZERO, img.get_size()), Vector2i(4, 4))
 		_put(sheet, bg, x, y, k, 3 if k == "moth" else SCALE)
 		x += bg.get_width() * (3 if k == "moth" else SCALE) + 16
-	y += 104 * SCALE + 18
+	y += 152 * SCALE + 18
 	# the occult round: croupier frames, dice, cards, wheel, lot, page, spell icons, then every curio icon at 3x
 	x = 4
 	var rh: int = 0
@@ -139,6 +139,39 @@ func _initialize() -> void:
 			x = 4
 			y += 24 * 3 + 18
 	y += 24 * 3 + 18
+	# round 5: the Collector (4 frames), omen art, altar, pendulum, upgrade icons, banish icon, hands per body plan
+	x = 4
+	for f: ImageTexture in SpriteKit.collector_frames():
+		_put(sheet, f.get_image(), x, y, "collector", SCALE)
+		x += 160
+	_put(sheet, SpriteKit.altar_texture().get_image(), x, y, "altar", 2)
+	x += 210
+	_put(sheet, SpriteKit.pendulum_texture().get_image(), x, y, "pendulum", 4)
+	x += 110
+	_put(sheet, SpriteKit.spell_icon("banish").get_image(), x, y, "banish", 4)
+	y += 110 * SCALE + 18
+	x = 4
+	var on: int = 0
+	for om: Dictionary in _load("res://game/data/omens.json"):
+		_put(sheet, SpriteKit.omen_art(str(om["id"])).get_image(), x, y, str(om["id"]), 3)
+		x += 160
+		on += 1
+		if on % 8 == 0:
+			x = 4
+			y += 40 * 3 + 18
+	y += 40 * 3 + 18
+	x = 4
+	for uid: String in ["extra_shelf", "spell_slot", "extra_cast", "tell_chance", "cheap_rent", "pendulum", "altar_candle", "keep_cash", "u9", "u10"]:
+		_put(sheet, SpriteKit.upgrade_icon(uid).get_image(), x, y, uid.substr(0, 10), 4)
+		x += 100
+	y += 16 * 4 + 18
+	x = 4
+	for plan: String in ["normal", "hunched", "tall", "broad", "child"]:
+		var look: Dictionary = {"id": "x_" + plan, "cloak": "#4b2a78", "eyes": "#ffd27a", "height": 1.0, "plan": plan}
+		var himg: Image = SpriteKit.customer_texture(look).get_image().get_region(Rect2i(4, 70, 56, 26))
+		_put(sheet, himg, x, y, plan, 3)
+		x += 190
+	y += 26 * 3 + 18
 	DirAccess.make_dir_recursive_absolute("/tmp/shots")
 	sheet.get_region(Rect2i(0, 0, SHEET_W, mini(y, SHEET_H))).save_png(OUT_PATH)
 	print("SPRITE SHEET ", OUT_PATH, " h=", y)

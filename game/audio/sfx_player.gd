@@ -18,7 +18,14 @@ const TELL_DELAY_MAX: float = 0.9
 const EVENT_KINDS: PackedStringArray = [
 	"night_start", "customer", "inspected", "counter", "left", "bought", "sold", "passed", "wager", "wake",
 	"night_end", "run_lost", "run_won", "invalid",
+	"cast", "backfire", "found", "found_hint", "dice", "hand_card", "hand_end", "wheel", "pairs_deal", "pairs_flip",
+	"pairs_match", "pairs_miss", "pairs_end", "item_staked", "lot", "table_open", "request_done", "request_failed",
+	"collector_omen", "collector_arrives", "collector_pleased", "collector_refused",
 ]
+## UI-only sounds, played with ui(kind): the screens call these where no run event exists.
+const UI_SOUNDS: Dictionary = {"click": "ui_click", "omen_flip": "omen_flip", "altar_buy": "altar_buy",
+	"haunt_unlock": "haunt_unlock", "request_pinned": "request_pinned"}
+const WHEEL_TICKS: PackedFloat32Array = [0.0, 0.1, 0.2, 0.32, 0.46, 0.64, 0.86]  ## slowing, then the settle
 
 var master: float = 1.0  ## linear 0..1
 var muted: bool = false
@@ -116,6 +123,14 @@ func _queue(name: String, delay: float, vol_db: float = 0.0) -> void:
 	_pending.append({"t": delay, "name": name, "vol_db": vol_db})
 
 
+func _result(win: bool) -> void:
+	play("stake_win" if win else "stake_lose")
+
+
+func _queue_result(win: bool, delay: float) -> void:
+	_queue("stake_win" if win else "stake_lose", delay)
+
+
 func _db(extra: float) -> float:
 	if muted or master <= 0.0 or Flags.is_scripted_run():
 		return SILENT_DB
@@ -168,14 +183,66 @@ func on_events(events: Array[Dictionary]) -> void:
 				play("run_won")
 			"invalid":
 				play("wrong_note", -10.0)
+			"cast":
+				if bool(ev.get("ok", false)):
+					var spell_sound: String = "cast_" + str(ev.get("spell", ""))
+					play(spell_sound if SfxSynth.NAMES.has(spell_sound) else "cast_scry")
+			"backfire":
+				play("backfire")
+			"found":
+				play("found_page" if str(ev.get("kind", "")) == "page" else "found_curio")
+			"found_hint":
+				play("found_hint", -4.0)
+			"dice":
+				play("dice_roll")
+				_queue_result(int(ev.get("payout", 0)) > int(ev.get("stake", 0)), 0.75)
+			"hand_card":
+				play("card_deal")
+			"hand_end":
+				_result(bool(ev.get("win", false)))
+			"wheel":
+				play("wheel_tick", -4.0)
+				for k: int in range(1, WHEEL_TICKS.size()):
+					_queue("wheel_tick", WHEEL_TICKS[k], -4.0 - float(k) * 0.5)
+				_queue("wheel_settle", WHEEL_TICKS[WHEEL_TICKS.size() - 1] + 0.15)
+				if int(ev.get("payout", 0)) > int(ev.get("stake", 0)):
+					_queue("pairs_match", 1.2, -4.0)
+			"pairs_deal":
+				play("card_deal")
+			"pairs_flip":
+				play("card_flip")
+			"pairs_match":
+				play("pairs_match")
+			"pairs_miss":
+				play("pairs_miss")
+			"pairs_end":
+				_result(int(ev.get("payout", 0)) > int(ev.get("stake", 0)))
+			"item_staked":
+				_result(bool(ev.get("win", false)))
+			"lot":
+				play("lot_unwrap")
+			"table_open":
+				play("table_open", -3.0)
+			"request_done":
+				play("request_done")
+			"request_failed":
+				play("request_failed")
+			"collector_omen":
+				play("collector_arrive", -9.0)
+			"collector_arrives":
+				play("collector_arrive")
+			"collector_pleased":
+				play("collector_pleased")
+			"collector_refused":
+				play("collector_refused")
 
 
-## UI feedback: "click" or "hover".
+## UI feedback: "click", "hover", or a UI_SOUNDS kind (omen_flip, altar_buy, haunt_unlock, request_pinned).
 func ui(kind: String) -> void:
-	if kind == "click":
-		play("ui_click")
-	elif kind == "hover":
+	if kind == "hover":
 		play("ui_hover", -6.0)
+	elif UI_SOUNDS.has(kind):
+		play(str(UI_SOUNDS[kind]))
 
 
 ## A soft typing blip for one letter of a speech bubble; `pitch` comes from the room bubble.

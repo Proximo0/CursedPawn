@@ -122,7 +122,8 @@ static func make_opts(haunting: int, omen: String, daily: bool) -> Dictionary:
 
 ## True when an opts dictionary changes nothing (so today's start path is used unchanged).
 static func opts_empty(opts: Dictionary) -> bool:
-	return int(opts.get("haunting", 0)) == 0 and str(opts.get("omen", "")) == "" and not bool(opts.get("daily", false))
+	return int(opts.get("haunting", 0)) == 0 and str(opts.get("omen", "")) == "" and not bool(opts.get("daily", false)) \
+		and not opts.has("upgrades") and int(opts.get("carry_cash", 0)) == 0
 
 
 ## RunRecording.begin with run options when the logic accepts them (its sixth parameter), else without them.
@@ -243,3 +244,98 @@ static func request_line(req: Dictionary) -> String:
 	var who: String = ascii_up(str(req.get("who", "SOMEONE")))
 	var want: String = ascii_up(str(req["want_text"])) if req.has("want_text") else want_text(req.get("want", {}) as Dictionary)
 	return "%s WANTS %s" % [who, want]
+
+
+# ---------------------------------------------------------------- omen cards (round 5)
+
+const OMEN_BAD_WORDS: PackedStringArray = ["FAILS", "SOONER", "HIGHER", " LESS", "ONLY", "CURSED SELLERS", "IS CURSED", "STIR", "HARDER"]
+const OMEN_GOOD_WORDS: PackedStringArray = ["PAY", "MORE FOR", "START WITH", "YOU KNOW", "LOWER", "SLOWER", "LONGER", "CHEAPER", "EVERY TIME",
+	"TWO TABLE", "SHOW"]
+static var _omen_icons: Dictionary = {}
+
+
+## The omen's text as {up, down}: the data's own `up` / `down` fields when it has them, else its clauses sorted by
+## keyword (a clause with a bad word and no more good ones is a downside). Both lines are always filled when the text
+## has two or more clauses; a one-clause text puts it on the upside and leaves the downside empty.
+static func omen_split(id: String) -> Dictionary:
+	var def: Dictionary = omen_def(id)
+	if def.has("up") or def.has("down"):
+		return {"up": ascii_up(str(def.get("up", ""))), "down": ascii_up(str(def.get("down", "")))}
+	var clauses: PackedStringArray = PackedStringArray()
+	for sentence: String in omen_text(id).split(". ", false):
+		for part: String in sentence.replace(", BUT ", ".|").split("|", false):
+			var p: String = part.strip_edges().trim_suffix(".")
+			if p != "":
+				clauses.append(p)
+	var ups: PackedStringArray = PackedStringArray()
+	var downs: PackedStringArray = PackedStringArray()
+	for cl: String in clauses:
+		var bad: int = 0
+		var good: int = 0
+		for w: String in OMEN_BAD_WORDS:
+			bad += 1 if (" " + cl).contains(w) else 0
+		for w: String in OMEN_GOOD_WORDS:
+			good += 1 if cl.contains(w) else 0
+		if bad > 0 and bad >= good:
+			downs.append(cl)
+		else:
+			ups.append(cl)
+	if downs.is_empty() and ups.size() >= 2:
+		downs.append(ups[ups.size() - 1])
+		ups.remove_at(ups.size() - 1)
+	elif ups.is_empty() and downs.size() >= 2:
+		ups.append(downs[0])
+		downs.remove_at(0)
+	return {"up": ". ".join(ups), "down": ". ".join(downs)}
+
+
+## The 48x40 art for an omen: SpriteKit.omen_art(id) when the art worker has shipped it, else a sigil drawn from the id.
+static func omen_icon(id: String) -> ImageTexture:
+	if _omen_icons.has(id):
+		return _omen_icons[id] as ImageTexture
+	var tex: ImageTexture = null
+	var sk: GDScript = load("res://game/room2d/sprite_kit.gd") as GDScript
+	if sk != null and UiOccult.static_has(sk, "omen_art"):
+		tex = sk.call("omen_art", id) as ImageTexture
+	if tex == null:
+		tex = omen_glyph(id)
+	_omen_icons[id] = tex
+	return tex
+
+
+## A stand-in sigil: a ring, spokes and a core, shaped by the id so each omen looks different. 48x40, palette colours.
+static func omen_glyph(id: String) -> ImageTexture:
+	var pal: PackedColorArray = RoomPalette.colors()
+	var img: Image = Image.create_empty(48, 40, false, Image.FORMAT_RGBA8)
+	var h: int = id.hash() & 0x7FFFFFFF
+	var spokes: int = 3 + h % 5
+	var cx: float = 23.5
+	var cy: float = 19.5
+	var ring: int = 10 + (h >> 3) % 2
+	for a: int in range(96):
+		var v: Vector2 = Vector2.from_angle(float(a) * TAU / 96.0)
+		var px: int = int(round(cx + v.x * 17.0))
+		var py: int = int(round(cy + v.y * 14.0))
+		img.set_pixel(clampi(px, 0, 47), clampi(py, 0, 39), pal[ring])
+		img.set_pixel(clampi(int(round(cx + v.x * 15.0)), 0, 47), clampi(int(round(cy + v.y * 12.0)), 0, 39), pal[9])
+	var turn: float = float((h >> 5) % 8) * 0.3
+	for s: int in range(spokes):
+		var dir: Vector2 = Vector2.from_angle(turn + float(s) * TAU / float(spokes))
+		for k: int in range(3, 13):
+			var px2: int = int(round(cx + dir.x * float(k) * 1.2))
+			var py2: int = int(round(cy + dir.y * float(k) * 0.95))
+			img.set_pixel(clampi(px2, 0, 47), clampi(py2, 0, 39), pal[12 if k % 2 == 0 else 13])
+	for dy: int in range(-2, 3):
+		for dx: int in range(-2, 3):
+			if absi(dx) + absi(dy) <= 2:
+				img.set_pixel(int(cx) + dx, int(cy) + dy, pal[11 if absi(dx) + absi(dy) < 2 else 10])
+	img.set_pixel(int(cx), int(cy), pal[15])
+	return ImageTexture.create_from_image(img)
+
+
+# ---------------------------------------------------------------- the Collector (round 5)
+
+## The board line for the Collector's want, announced from night 3 ("THE COLLECTOR WANTS CURSED DOLL").
+static func collector_line(text: String) -> String:
+	var t: String = ascii_up(text).strip_edges()
+	return t if t.contains("COLLECTOR") else "THE COLLECTOR WANTS %s" % t

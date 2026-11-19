@@ -5,11 +5,11 @@ extends RefCounted
 ## Dread cost, pips for the casts left tonight and the backfire odds. A cast flashes the slot, a backfire shakes it red.
 ## Widgets: "spell:<id>", "pick:<uid>", "pick_cancel".
 
-const X: float = 592.0
+const X: float = 588.0
 const Y0: float = 94.0
-const W: float = 42.0
-const H: float = 31.0
-const STEP: float = 34.0
+const W: float = 46.0
+const H: float = 32.0
+const STEP: float = 35.0
 const FLASH_SECS: float = 0.5
 const SHAKE_SECS: float = 0.6
 const CHIP: float = 40.0
@@ -149,14 +149,16 @@ func draw(hud: UiHud, r: RunState, hover: String) -> void:
 		var tex: ImageTexture = icon(id)
 		var tint: Color = Color.WHITE if on else hud._c(3)
 		hud.draw_texture(tex, rc.position + Vector2(3.0, 3.0 + lift), tint)
-		hud._text(rc.position + Vector2(24.0, 3.0 + lift), UiOccult.key_label(id), 15 if on else 4)
+		hud._text(rc.position + Vector2(25.0, 4.0 + lift), UiOccult.key_label(id), 15 if on else 4)
 		for p: int in range(clampi(maxi(left, 1), 1, 5)):
 			var pc: int = 11 if p < left and on else 3
-			hud._rect(Rect2(rc.position.x + 23.0 + float(p) * 3.0, rc.position.y + 13.0 + lift, 2.0, 2.0), pc)
+			hud._rect(Rect2(rc.position.x + 25.0 + float(p) * 4.0, rc.position.y + 15.0 + lift, 3.0, 3.0), pc)
 		var pct: int = UiOccult.backfire_pct(r, id)
 		var col_cost: int = 13 if on else 3
 		var cost: String = UiOccult.dread_text(float(def.get("dread", 0.0)))
-		hud._text(rc.position + Vector2(3.0, 21.0 + lift), cost, col_cost if pct < 25 else 12, 1, false)
+		hud._text(rc.position + Vector2(3.0, 22.0 + lift), cost, col_cost, 1, false)
+		if pct >= 25:
+			hud._text(rc.position + Vector2(27.0, 22.0 + lift), "%d%%" % pct, 12, 1, false)  # the risk, kept off the cost
 		if flashing(id):
 			var fu: float = float(_flash[id]) / FLASH_SECS
 			var grow: float = UiMotion.ui_out(fu) * 5.0

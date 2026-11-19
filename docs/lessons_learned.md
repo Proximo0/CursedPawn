@@ -89,3 +89,4 @@ have them) and the rule that prevents it. At the end of the project, copy the ge
 | What happened | Rule |
 | --- | --- |
 | Secrets (online service client keys) must ship in builds but not in a public repo | Keep them in a git-ignored `config/*credentials*` file injected by the export script; never write them to memory or docs (`docs/online.md`). |
+| `x as RigidBody2D` on a freed node raised "Trying to cast a freed object" twice in ShopRoom2D (slides, then the wake plan), even with an is_instance_valid check right after the cast | Call is_instance_valid on the raw Variant before any `as` cast of a node that a scheduled step may outlive. |

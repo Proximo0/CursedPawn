@@ -5,7 +5,7 @@ extends RefCounted
 ## runs (`Flags.is_scripted_run()`), so tests and captures never touch player data.
 
 const PATH: String = "user://profile.json"
-const VERSION: int = 3  ## 2 adds the grimoire, 3 the progress record (hauntings, best cash, daily); older files load with defaults
+const VERSION: int = 4  ## 2 adds the grimoire, 3 the progress record (hauntings, best cash, daily), 4 the altar (ecto, upgrades, carry cash); older files load with defaults
 const DAILY_KEEP: int = 30
 
 
@@ -16,7 +16,8 @@ static func save(store: RelicStore, path: String = PATH) -> Error:
 		return FileAccess.get_open_error()
 	f.store_string(JSON.stringify({"version": VERSION, "store": store.to_dict(), "grimoire": Array(store.grimoire),
 		"progress": {"haunting_unlocked": store.haunting_unlocked, "best_cash": store.best_cash, "daily_last": store.daily_last,
-			"daily_best": store.daily_best}}))
+			"daily_best": store.daily_best},
+		"altar": {"ecto": store.ecto, "upgrades": store.upgrades, "carry_cash": store.carry_cash}}))
 	f.close()
 	return DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path))
 
@@ -36,6 +37,10 @@ static func load_into(store: RelicStore, path: String = PATH) -> bool:
 	store.best_cash = int(pr.get("best_cash", 0))
 	store.daily_last = str(pr.get("daily_last", ""))
 	store.daily_best = (pr.get("daily_best", {}) as Dictionary).duplicate(true) if pr.get("daily_best") is Dictionary else {}
+	var al: Dictionary = parsed.get("altar", {}) if parsed.get("altar") is Dictionary else {}
+	store.ecto = maxi(0, int(al.get("ecto", 0)))
+	store.upgrades = Upgrades.clean(al.get("upgrades", {}) if al.get("upgrades") is Dictionary else {})
+	store.carry_cash = maxi(0, int(al.get("carry_cash", 0)))
 	return true
 
 
@@ -53,11 +58,22 @@ static func bank_finds(run: RunState, store: RelicStore) -> PackedStringArray:
 	return added
 
 
+## The run options the altar adds for the next run: {upgrades: ranks, carry_cash}. Merge into the opts passed to
+## RunState.start (empty when the player has neither).
+static func altar_opts(store: RelicStore) -> Dictionary:
+	var out: Dictionary = {}
+	if not store.upgrades.is_empty():
+		out["upgrades"] = store.upgrades.duplicate()
+	if store.carry_cash > 0:
+		out["carry_cash"] = store.carry_cash
+	return out
+
+
 ## Records a finished run: unlocks the next haunting on a win at the highest unlocked one, keeps the best winning
 ## cash, and, for a daily run, the first attempt of the date (`opts.date`, else the system date). Returns
-## {unlocked: new haunting level or 0, new_best: bool, daily_counted: bool}. Callers skip it on scripted runs and save after.
+## {unlocked: new haunting level or 0, new_best: bool, daily_counted: bool, ecto: earned, carried: cash kept on a loss}. Callers skip it on scripted runs and save after.
 static func record_result(run: RunState, store: RelicStore) -> Dictionary:
-	var out: Dictionary = {"unlocked": 0, "new_best": false, "daily_counted": false}
+	var out: Dictionary = {"unlocked": 0, "new_best": false, "daily_counted": false, "ecto": 0, "carried": 0}
 	var level: int = int(run.opts.get("haunting", 0))
 	if run.won:
 		if level >= store.haunting_unlocked and store.haunting_unlocked < Hauntings.MAX_LEVEL:
@@ -66,6 +82,13 @@ static func record_result(run: RunState, store: RelicStore) -> Dictionary:
 		if run.cash > store.best_cash:
 			store.best_cash = run.cash
 			out["new_best"] = true
+	out["ecto"] = Upgrades.ecto_for(run)
+	store.ecto += int(out["ecto"])
+	store.carry_cash = 0
+	if not run.won:
+		var frac: float = float(Upgrades.flags_for(store.upgrades).get("loss_cash_frac", 0.0))
+		store.carry_cash = int(run.cash * frac)
+		out["carried"] = store.carry_cash
 	if bool(run.opts.get("daily", false)):
 		var date: String = str(run.opts.get("date", Time.get_date_string_from_system()))
 		if store.daily_last != date:

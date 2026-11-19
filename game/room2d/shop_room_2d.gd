@@ -65,7 +65,8 @@ const CANDLES: Array[Vector2] = [Vector2(84.0, 226.0), Vector2(292.0, 226.0), Ve
 const TORCHES: Array[Vector2] = [Vector2(54.0, 150.0), Vector2(508.0, 176.0)]
 const CLOCK_POS := Vector2(34.0, 120.0)
 const PORTRAIT_POSES: Array[Vector2] = [Vector2(34.0, 50.0), Vector2(510.0, 88.0)]
-const EYES_POS := Vector2(180.0, 24.0)
+const EYES_POS := Vector2(204.0, 66.0)  # bigger and lower: in the dark gap between the shelf units, level with the top board
+const EYES_SCALE: float = 4.0
 const BEAT_TICKS: int = 54  ## the wake opens with a blackout and a flicker before the chaos (inside WAKE_SECS)
 const FLASH_FROM: int = 33
 const FLASH_TO: int = 46
@@ -77,6 +78,9 @@ const CHALK_POS := Vector2(COUNTER_OBJ_X, COUNTER_TOP + 8.0)
 const SCRY_SECS: float = 2.4
 const GLAMOUR_SECS: float = 1.6
 const GLIMMER_SECS: float = 1.4
+const COLLECTOR_GUTTER_SECS: float = 3.2  ## the lights gutter and a cold draft blows in when the Collector arrives
+const BANISH_RING_SECS: float = 0.9
+const COLLECTOR_LOOK: String = "@collector"
 const TABLE_TONE := Color(0.02, 0.06, 0.04)
 const LAMP_LIGHT := Color(0.35, 1.0, 0.55)
 const FLAMES: Array = [
@@ -139,6 +143,10 @@ var _fx_sys := RoomFx.new()
 var _scry_t: float = 0.0
 var _hexed: bool = false
 var _glam_t: float = 0.0
+var _coll_t: float = 0.0  ## seconds left of the Collector's gutter and draft
+var _coll_pending: bool = false  ## collector_arrives came before his customer event
+var _banish_t: float = 0.0
+var _banish_at := Vector2.ZERO
 var _glim_t: float = 0.0
 var _sigil_on: bool = false
 var _sigil_a: float = 0.0
@@ -195,6 +203,7 @@ var _counter_item: Dictionary = {}  ## {id, category} of the object on the count
 var _tool_sprite: Sprite2D
 var _fx_kind: String = ""
 var _fx_t: float = 0.0
+var _fx_tell: String = ""  ## the last inspected tell; the Pendulum shows "cursed" or "clean"
 var _card: Sprite2D
 var _card_name: String = ""
 var _card_t: float = -1.0
@@ -298,7 +307,10 @@ func setup(run_in: RunState) -> void:
 			cat = str(it.get("category", ""))
 			oname = str(it.get("name", ""))
 		var tid: String = str(run.customer.get("type", ""))
-		_set_customer_look(tid)
+		if bool(run.customer.get("boss", false)) or tid == "collector_boss":
+			_set_collector_look()
+		else:
+			_set_customer_look(tid)
 		_line = ""
 		_seller_here = str(run.customer.get("kind", "")) == RunState.SELLER
 		_cust_start_enter(oname, cat)
@@ -339,7 +351,11 @@ func apply_events(events: Array[Dictionary]) -> void:
 					oname = str(e.get("name", ""))
 					cat = _category_of_name(oname)
 				var tid: String = str(e.get("tid", ""))
-				_set_customer_look(tid)
+				if bool(e.get("boss", false)) or tid == "collector_boss" or _coll_pending:
+					_coll_pending = false
+					_set_collector_look()
+				else:
+					_set_customer_look(tid)
 				_line = str(e.get("line", ""))
 				if _line == "":
 					_line = str(_look_row(tid).get("line", ""))
@@ -363,6 +379,8 @@ func apply_events(events: Array[Dictionary]) -> void:
 				_glam_t = GLAMOUR_SECS
 			"banished":
 				_on_banished(e)
+			"collector_arrives":
+				_on_collector_arrives()
 			"summoned":
 				_sigil_on = true
 				_fx_sys.emit("ash", SIGIL_POS, 14)
@@ -377,8 +395,9 @@ func apply_events(events: Array[Dictionary]) -> void:
 				_hexed = false
 				_hide_card()
 			"inspected":
+				_fx_tell = str(e.get("tell", ""))
 				_start_fx(str(e.get("tool", "")))
-				if str(e.get("tell", "")) != "":
+				if str(e.get("tell", "")) != "" and str(e.get("tell", "")) != "clean":
 					_show_overlay()
 			"wager":
 				_start_card(str(e.get("card", "")))
@@ -407,6 +426,35 @@ func apply_events(events: Array[Dictionary]) -> void:
 				pass
 
 
+## The Collector walks in: the candles gutter nearly out, a cold draft of pale particles runs in from the door, and if a
+## customer is already at the door or counter, he takes their place. Otherwise his customer event dresses him.
+func _on_collector_arrives() -> void:
+	_coll_t = COLLECTOR_GUTTER_SECS
+	_fx_sys.emit("draft", Vector2(DOOR_X + 6.0, STAND_Y - 20.0), 24)
+	if _cust_state == "enter" or _cust_state == "here":
+		_set_collector_look()
+	else:
+		_coll_pending = true
+
+
+## Test hook: true while the Collector's sprite is the customer.
+func collector_here() -> bool:
+	return _look_id == COLLECTOR_LOOK
+
+
+## 0..1, how far the Collector's arrival has guttered the lights (0 when he is not arriving).
+func collector_gutter() -> float:
+	return clampf(_coll_t / COLLECTOR_GUTTER_SECS, 0.0, 1.0)
+
+
+func _set_collector_look() -> void:
+	if _customer == null or _look_id == COLLECTOR_LOOK:
+		return
+	_look_id = COLLECTOR_LOOK
+	_cust_frames = SpriteKit.collector_frames()
+	_apply_customer_frame(0)
+
+
 func _on_banished(e: Dictionary) -> void:
 	var at := Vector2(float(UNIT_XS[1]), float(BOARD_YS[1]) - 14.0)
 	var uid: int = int(e.get("uid", -1))
@@ -415,8 +463,11 @@ func _on_banished(e: Dictionary) -> void:
 		var body: RigidBody2D = rec["body"] as RigidBody2D
 		at = body.position + Vector2(0.0, 6.0)
 		_remove_prop(uid)
-	_fx_sys.emit("inksmoke", at, 24)
-	_fx_sys.emit("ash", at + Vector2(0.0, -8.0), 6)
+	_fx_sys.emit("inksmoke", at, 36)
+	_fx_sys.emit("ash", at + Vector2(0.0, -8.0), 12)
+	_fx_sys.emit("sparkle", at + Vector2(0.0, -4.0), 8)
+	_banish_t = BANISH_RING_SECS
+	_banish_at = at
 
 
 ## A backfire: a red flash and a shake. Gentle scares keep a soft, slow wash and a tiny shake, never a hard flash.
@@ -430,6 +481,9 @@ func _reset_occult() -> void:
 	_hexed = false
 	_glam_t = 0.0
 	_glim_t = 0.0
+	_coll_t = 0.0
+	_coll_pending = false
+	_banish_t = 0.0
 	_sigil_on = false
 	_sigil_a = 0.0
 	_sealed_on = false
@@ -446,19 +500,24 @@ func _update_occult(delta: float) -> void:
 	_sigil_a = move_toward(_sigil_a, 1.0 if _sigil_on else 0.0, delta * 1.5)
 	_seal_a = move_toward(_seal_a, 1.0 if _sealed_on else 0.0, delta * 1.2)
 	_table_k = move_toward(_table_k, 1.0 if _table else 0.0, delta * 1.3)
+	_banish_t = maxf(_banish_t - delta, 0.0)
+	_coll_t = maxf(_coll_t - delta, 0.0)
 	_occ_acc += delta
 	if _occ_acc < 0.08:
 		return
 	_occ_acc = 0.0
 	if _glam_t > 0.0:
 		_glam_t = maxf(_glam_t - 0.08, 0.0)
-		var ui: int = _occ_rng.randi_range(0, UNIT_XS.size() - 1)
-		var gx: float = UNIT_XS[ui] + _occ_rng.randf_range(-UNIT_W * 0.5 + 8.0, UNIT_W * 0.5 - 8.0)
-		var gy: float = BOARD_YS[_occ_rng.randi_range(0, BOARD_YS.size() - 1)] - _occ_rng.randf_range(4.0, 30.0)
-		_fx_sys.emit("gold", Vector2(gx, gy), 4)
+		for _gi: int in range(2):
+			var ui: int = _occ_rng.randi_range(0, UNIT_XS.size() - 1)
+			var gx: float = UNIT_XS[ui] + _occ_rng.randf_range(-UNIT_W * 0.5 + 8.0, UNIT_W * 0.5 - 8.0)
+			var gy: float = BOARD_YS[_occ_rng.randi_range(0, BOARD_YS.size() - 1)] - _occ_rng.randf_range(4.0, 30.0)
+			_fx_sys.emit("gold", Vector2(gx, gy), 5)
+	if _coll_t > 0.0:  # a cold draft along the floor from the door
+		_fx_sys.emit("draft", Vector2(DOOR_X + 6.0, _occ_rng.randf_range(STAND_Y - 70.0, STAND_Y + 40.0)), 6)
 	if _glim_t > 0.0 and _counter_obj != null and _counter_obj.visible:
 		_glim_t = maxf(_glim_t - 0.08, 0.0)
-		_fx_sys.emit("glimmer", _counter_obj.position + Vector2(_occ_rng.randf_range(-12.0, 12.0), _occ_rng.randf_range(-14.0, 12.0)), 2)
+		_fx_sys.emit("glimmer", _counter_obj.position + Vector2(_occ_rng.randf_range(-14.0, 14.0), _occ_rng.randf_range(-16.0, 14.0)), 4)
 	elif _glim_t > 0.0:
 		_glim_t = 0.0
 
@@ -1263,7 +1322,7 @@ func _show_bubble() -> void:
 # ---------------------------------------------------------------- tool effects and card
 
 func _start_fx(tool: String) -> void:
-	if not Catalog.TOOLS.has(tool):
+	if not Catalog.TOOLS.has(tool) and tool != "pendulum":
 		return
 	_fx_kind = tool
 	_fx_t = 0.0
@@ -1459,6 +1518,9 @@ func _apply_ambient() -> void:
 		flick *= 1.0 - 0.6 * gut * _ease((sin(_t * (3.1 + float(i) * 0.7) + float(i) * 2.0) - 0.7) / 0.3)
 		if n > 1.0 and sin(_t * (31.0 + float(i))) > 0.9:
 			flick *= 0.3
+		if _coll_t > 0.0:  # the Collector: flames flutter low and nearly die
+			var ck: float = clampf(minf(collector_gutter() * 5.0, 1.0), 0.0, 1.0)
+			flick *= lerpf(1.0, 0.1 + 0.3 * absf(sin(_t * (13.0 + float(i) * 3.0))), ck)
 		l.color = AMBER_LIGHT.lerp(RED_LIGHT, clampf(_red, 0.0, 1.0))
 		l.energy = lv * 2.0 * flick * (1.0 + 1.6 * _red)
 		i += 1
@@ -1525,8 +1587,9 @@ func _wake_step() -> void:
 		_plan_i += 1
 		match str(step["k"]):
 			"shove":
-				var body: RigidBody2D = step["body"] as RigidBody2D
-				if is_instance_valid(body):
+				# check before the cast: casting a freed body is an error (a shatter can free it mid-plan)
+				var body: RigidBody2D = step["body"] as RigidBody2D if is_instance_valid(step["body"]) else null
+				if body != null:
 					body.collision_mask = LAYER_WORLD | LAYER_COUNTER | LAYER_PROP  # the poltergeist pulls it through the boards
 					body.sleeping = false
 					body.apply_central_impulse(step["v"] as Vector2)
@@ -1542,7 +1605,8 @@ func _wake_step() -> void:
 				_door_target = 0.0
 				_shake = maxf(_shake, 5.0)
 			"shatter":
-				_shatter(step["body"] as RigidBody2D, step["shards"] as Array)
+				if is_instance_valid(step["body"]):
+					_shatter(step["body"] as RigidBody2D, step["shards"] as Array)
 			"end":
 				_end_wake()
 				return
@@ -2009,6 +2073,8 @@ func _draw_fx() -> void:
 			_fx.draw_rect(Rect2(c.x - 2.0, c.y - 9.0, 4.0, 1.0), pal[15])
 			_fx.draw_rect(Rect2(c.x + 1.0, c.y - 8.0, 1.0, 8.0), pal[4])
 			var dip: int = int(gut * _ease((sin(_t * (3.1 + float(i) * 0.7) + float(i) * 2.0) - 0.7) / 0.3) * 3.0)
+			if _coll_t > 0.0:
+				dip = maxi(dip, int(minf(collector_gutter() * 5.0, 1.0) * 3.0))
 			_draw_flame(_fx, Vector2(c.x, c.y - 9.0), int(_t * FLAME_FPS + float(i) * 1.7), 1.0, dip, red)
 		i += 1
 	# wall torches: the same loop at 2x on iron brackets
@@ -2059,7 +2125,7 @@ func _draw_fx() -> void:
 			var rc2: Color = pal[13]
 			rc2.a = 0.55 * _flash
 			_fx.draw_rect(Rect2(Vector2.ZERO, vs), rc2)
-			_draw_silhouette(pal, 1.0)
+			_draw_silhouette(pal, 1.0, 1.5)
 		else:
 			# gentle: one slow swell, never a strobe. A pale cold backlight behind the figure so the black shape
 			# reads, a red wash at the edges, and the figure a little larger than life
@@ -2072,7 +2138,7 @@ func _draw_fx() -> void:
 			var back2: Color = pal[14]
 			back2.a = 0.5 * _flash
 			_fx.draw_texture_rect(_bloom_texture(), Rect2(SILHOUETTE_X - 60.0, COUNTER_TOP - 170.0, 120.0, 190.0), false, back2)
-			_draw_silhouette(pal, 1.0, 1.5)
+			_draw_silhouette(pal, 1.0, 1.25)
 	if _red > 0.05:
 		var rc: Color = pal[12]
 		rc.a = 0.3 * clampf(_red, 0.0, 1.0)
@@ -2101,6 +2167,26 @@ func _ellipse_pts(c: Vector2, rx: float, ry: float, n: int, rot: float) -> Packe
 ## Occult effects drawn above the lit world: the Midnight Table lamp, the summoning sigil, the seal's chalk circle,
 ## the scrying eye and the hex chains. Everything is a few rects or lines, so the cost is tiny.
 func _draw_occult(pal: PackedColorArray) -> void:
+	if _glam_t > 0.0:  # glamour: a warm gold shimmer washes over every shelf unit
+		var gk: float = clampf(_glam_t / GLAMOUR_SECS, 0.0, 1.0)
+		var gw: Color = pal[11]
+		gw.a = 0.3 * minf(gk * 3.0, 1.0) * (0.7 + 0.3 * sin(_t * 14.0))
+		for ux: float in UNIT_XS:
+			_fx.draw_texture_rect(_bloom_texture(), Rect2(ux - UNIT_W * 0.5, BOARD_YS[0] - 60.0, UNIT_W, BOARD_YS[2] - BOARD_YS[0] + 76.0), false, gw)
+	if _glim_t > 0.0 and _counter_obj != null and _counter_obj.visible:  # found_hint: a pale glint on the object
+		var lk: float = clampf(_glim_t / GLIMMER_SECS, 0.0, 1.0)
+		var lw: Color = pal[15]
+		lw.a = 0.3 * minf(lk * 3.0, 1.0) * (0.6 + 0.4 * sin(_t * 17.0))
+		_fx.draw_texture_rect(_bloom_texture(), Rect2(_counter_obj.position.x - 34.0, _counter_obj.position.y - 34.0, 68.0, 68.0), false, lw)
+	if _banish_t > 0.0:  # banish: a violet ring leaps out from the shelf and the ghost glyph rises and fades
+		var bk: float = 1.0 - _banish_t / BANISH_RING_SECS
+		var r1: Color = pal[4]
+		r1.a = 1.0 - bk
+		_fx.draw_polyline(_ellipse_pts(_banish_at, 6.0 + bk * 38.0, 3.0 + bk * 15.0, 28, 0.0), r1, 2.0)
+		var r2: Color = pal[3]
+		r2.a = 0.8 * (1.0 - bk)
+		_fx.draw_polyline(_ellipse_pts(_banish_at, 3.0 + bk * 24.0, 1.5 + bk * 9.0, 24, 0.0), r2, 1.0)
+		_fx.draw_texture_rect(_occ_icon("banish"), Rect2(_banish_at.x - 16.0, _banish_at.y - 16.0 - bk * 22.0, 32.0, 32.0), false, Color(1.0, 1.0, 1.0, 1.0 - bk))
 	if _table_k > 0.02:
 		var lc: Color = pal[7]
 		lc.a = 0.3 * _table_k
@@ -2278,13 +2364,13 @@ func _draw_eyes(pal: PackedColorArray, _n: float) -> void:
 	var pulse: float = 0.75 + 0.25 * sin(_t * 2.1)
 	var halo: Color = pal[12]
 	halo.a = 0.7 * o * pulse
-	_fx.draw_texture_rect(_bloom_texture(), Rect2(ep.x - 60.0, ep.y - 28.0, 120.0, 56.0), false, halo)  # a faint red bloom around them
+	_fx.draw_texture_rect(_bloom_texture(), Rect2(ep.x - 90.0, ep.y - 44.0, 180.0, 88.0), false, halo)  # a faint red bloom around them
 	var core: Color = pal[13]
-	core.a = 0.4 * o
-	_fx.draw_rect(Rect2(ep.x - 34.0, ep.y - 3.0, 68.0, 6.0), core)
+	core.a = 0.3 * o
+	_fx.draw_rect(Rect2(ep.x - 50.0, ep.y - 3.0, 100.0, 6.0), core)
 	if et != null:
-		var ew: float = float(et.get_width()) * 3.0
-		var eh: float = float(et.get_height()) * 3.0 * minf(o * 1.6, 1.0)
+		var ew: float = float(et.get_width()) * EYES_SCALE
+		var eh: float = float(et.get_height()) * EYES_SCALE * minf(o * 1.6, 1.0)
 		var tint := Color(1.0, 1.0, 1.0, minf(o * 1.5, 1.0))
 		_fx.draw_texture_rect(et, Rect2(ep.x - ew * 0.5, ep.y - eh * 0.5, ew, eh), false, tint)
 		return
@@ -2352,6 +2438,30 @@ func _draw_tool_fx(pal: PackedColorArray) -> void:
 			_fx.draw_line(base, Vector2(base.x, COUNTER_TOP - 28.0), pal[14], 2.0)
 			_fx.draw_circle(base - dx + Vector2(0.0, 3.0), 3.0, pal[11])
 			_fx.draw_circle(base + dx + Vector2(0.0, 3.0), 3.0, pal[11])
+		"pendulum":
+			var anchor := Vector2(oc.x, COUNTER_TOP - 74.0)
+			var plen: float = 40.0
+			var verdict: bool = _fx_tell != "" and k > 0.45
+			var bob: Vector2
+			if verdict and _fx_tell == "cursed":  # a cursed thing drags it round in a tight, hungry circle
+				bob = anchor + Vector2(cos(_fx_t * 8.0) * 13.0, plen + sin(_fx_t * 8.0) * 5.0)
+			else:  # a clean one only sways, then hangs still
+				var amp: float = 0.55 * (1.0 - (_ease((k - 0.45) / 0.4) if verdict else 0.0))
+				bob = anchor + Vector2(sin(sin(_fx_t * 5.0) * amp) * plen, cos(sin(_fx_t * 5.0) * amp) * plen)
+			var chain: Color = pal[14]
+			chain.a = fade
+			_fx.draw_line(anchor, bob, chain, 1.0)
+			var glow: Color = pal[11]
+			if verdict:
+				glow = pal[13] if _fx_tell == "cursed" else pal[7]
+			glow.a = 0.45 * fade
+			_fx.draw_texture_rect(_bloom_texture(), Rect2(bob.x - 20.0, bob.y - 20.0, 40.0, 40.0), false, glow)
+			var crystal: Color = pal[4]
+			crystal.a = fade
+			_fx.draw_colored_polygon(PackedVector2Array([bob + Vector2(0.0, -6.0), bob + Vector2(4.0, 0.0), bob + Vector2(0.0, 7.0), bob + Vector2(-4.0, 0.0)]), crystal)
+			var hi: Color = pal[15]
+			hi.a = fade
+			_fx.draw_rect(Rect2(bob.x - 2.0, bob.y - 2.0, 1.0, 2.0), hi)
 		"listen":
 			for r: int in range(4):
 				var rk: float = fposmod(_fx_t * 1.6 + float(r) * 0.25, 1.0)
