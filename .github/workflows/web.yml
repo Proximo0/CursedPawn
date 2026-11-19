@@ -1,5 +1,6 @@
 # Playable web build. Every PR and push exports the Web preset (Compatibility, single-threaded), boots it in headless
-# Chrome (tools/web_smoke.mjs: engine starts, no errors, a full screen draws) and keeps it as a `web` artifact;
+# Chrome (tools/web_smoke.mjs: engine starts, no errors, a full screen draws, the play-bot finishes a run with the
+# same final state as the native build) and keeps it as a `web` artifact;
 # pushes to main also deploy it to GitHub Pages, so the newest main is one tap away on a phone.
 # One-time setup by the repo owner: Settings > Pages > Build and deployment > Source: "GitHub Actions".
 # Until then the deploy job fails and the artifact still works.
@@ -40,7 +41,7 @@ jobs:
             node_modules
             ~/.cache/ms-playwright
           key: playwright-1.63.0-chromium-shell-${{ runner.os }}
-      - name: Boot in headless Chrome
+      - name: Boot and bot run in headless Chrome
         run: |
           # Same Playwright and bundled Chromium as the cloud sessions (the runner's own Chrome hung after engine start).
           # The cache above skips the npm and browser install after the first run.
@@ -48,7 +49,10 @@ jobs:
             npm install --no-save --no-audit --no-fund playwright@1.63.0 >/dev/null
             npx playwright install --only-shell chromium >/dev/null
           fi
-          SMOKE_SHOT_B64=1 SMOKE_TIMEOUT_MS=60000 node tools/web_smoke.mjs build/web
+          # The play-bot plays one whole run natively, then the same run in the browser; their final state hashes must match.
+          H=$(timeout 120 godot --headless --path . -- --scripted --bot=greedy --seed=7 2>&1 | sed -n 's/^BOT .*hash=//p')
+          [ -n "$H" ] || { echo "native bot run printed no BOT line"; exit 1; }
+          SMOKE_BOT=greedy SMOKE_BOT_HASH=$H SMOKE_SHOT_B64=1 SMOKE_TIMEOUT_MS=60000 node tools/web_smoke.mjs build/web
       - uses: actions/upload-artifact@v4
         if: always()
         with:
