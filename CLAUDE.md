@@ -20,7 +20,7 @@ Web export uses the Compatibility renderer, single-threaded, GDScript only.
 - `tools/export_windows.sh`: Windows build zip in `build/`. `tools/export_android.sh`: debug APK in `build/`. Stock
   templates come from `tools/fetch_templates.py`, which range-reads only the ones needed out of the 1.28 GB file.
 - `tools/import.sh`: the shared import step; skipped when no file changed (`FORCE_IMPORT=1` to force). Every tool calls it.
-- CI: `checks` (unit, lint, sims, lab) and `web` (playable build; main deploys to GitHub Pages). Doc-only pushes skip both.
+- CI: `checks` (unit, lint, sims, lab) and `web` (playable build; main deploys to GitHub Pages). Doc-only pushes to main skip both; every PR runs both, because main requires `unit`, `lint`, `sims`, `lab` and `build` to pass and PRs auto-merge when they do.
 - Run the game: `godot --path .` (add `-- --dev` for dev entries, `-- --stamp` to show the frame stamp). In the game
   screen and the debug shop, F12 reloads `game/data/*.json` and restarts the run on the same seed; F1 loads a tuning
   preset.

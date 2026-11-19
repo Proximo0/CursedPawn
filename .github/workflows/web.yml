@@ -9,8 +9,7 @@ on:
   push:
     branches: [main]
     paths-ignore: ["docs/**", "**/*.md"]
-  pull_request:
-    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:  # no path filter: auto-merge needs every required check to report, even on doc-only PRs
   workflow_dispatch:
 
 concurrency:
