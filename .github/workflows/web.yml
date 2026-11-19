@@ -1,4 +1,4 @@
-# Playable web build. Every PR and push exports the Web preset (Compatibility, single-threaded), boots it in headless
+# Playable web build. Runs after merge only (pushes to main), not on PRs, to keep the merge loop short. Exports the Web preset (Compatibility, single-threaded), boots it in headless
 # Chrome (tools/web_smoke.mjs: engine starts, no errors, a full screen draws, the play-bot finishes a run with the
 # same final state as the native build) and keeps it as a `web` artifact;
 # pushes to main also deploy it to GitHub Pages, so the newest main is one tap away on a phone.
@@ -10,7 +10,6 @@ on:
   push:
     branches: [main]
     paths-ignore: ["docs/**", "**/*.md"]
-  pull_request:  # no path filter: auto-merge needs every required check to report, even on doc-only PRs
   workflow_dispatch:
 
 concurrency:
